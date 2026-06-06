@@ -31,6 +31,10 @@ sealed class LocalToolOption {
     data object JavascriptEngine : LocalToolOption()
 
     @Serializable
+    @SerialName("location")
+    data object Location : LocalToolOption()
+
+    @Serializable
     @SerialName("time_info")
     data object TimeInfo : LocalToolOption()
 
@@ -235,6 +239,35 @@ class LocalTools(private val context: Context, private val eventBus: AppEventBus
         )
     }
 
+    val locationTool by lazy {
+        Tool(
+            name = "get_location",
+            description = """
+                Get the current geographic location of the device.
+                Returns latitude, longitude, accuracy, altitude, and address information.
+                Requires location permission. If permission is not granted, returns an error.
+            """.trimIndent().replace("\n", " "),
+            parameters = {
+                InputSchema.Obj(
+                    properties = buildJsonObject { }
+                )
+            },
+            execute = {
+                val result = getCurrentLocation(context)
+                val payload = buildJsonObject {
+                    put("latitude", JsonPrimitive(result.latitude))
+                    put("longitude", JsonPrimitive(result.longitude))
+                    put("accuracy", JsonPrimitive(result.accuracy))
+                    put("altitude", JsonPrimitive(result.altitude))
+                    put("provider", JsonPrimitive(result.provider))
+                    put("timestamp", JsonPrimitive(result.timestamp))
+                    result.address?.let { put("address", JsonPrimitive(it)) }
+                }
+                listOf(UIMessagePart.Text(payload.toString()))
+            }
+        )
+    }
+
     val askUserTool by lazy {
         Tool(
             name = "ask_user",
@@ -320,6 +353,9 @@ class LocalTools(private val context: Context, private val eventBus: AppEventBus
         }
         if (options.contains(LocalToolOption.AskUser)) {
             tools.add(askUserTool)
+        }
+        if (options.contains(LocalToolOption.Location)) {
+            tools.add(locationTool)
         }
         return tools
     }

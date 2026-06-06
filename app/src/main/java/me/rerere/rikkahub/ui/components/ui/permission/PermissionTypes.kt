@@ -60,6 +60,20 @@ val PermissionCamera = PermissionInfo(
     required = true
 )
 
+val PermissionFineLocation = PermissionInfo(
+    permission = Manifest.permission.ACCESS_FINE_LOCATION,
+    displayName = { Text(stringResource(R.string.permission_location)) },
+    usage = { Text(stringResource(R.string.permission_location_desc)) },
+    required = false
+)
+
+val PermissionCoarseLocation = PermissionInfo(
+    permission = Manifest.permission.ACCESS_COARSE_LOCATION,
+    displayName = { Text(stringResource(R.string.permission_location_coarse)) },
+    usage = { Text(stringResource(R.string.permission_location_coarse_desc)) },
+    required = false
+)
+
 val PermissionRecordAudio = PermissionInfo(
     permission = Manifest.permission.RECORD_AUDIO,
     displayName = { Text(stringResource(R.string.permission_microphone)) },
