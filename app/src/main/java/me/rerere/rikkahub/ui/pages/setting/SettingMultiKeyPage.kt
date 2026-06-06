@@ -381,7 +381,7 @@ private fun KeyRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Surface(
-            shape = RoundedCornerShape(999),
+            shape = RoundedCornerShape(999.dp),
             color = statusColor.copy(alpha = 0.12f)
         ) {
             Text(statusLabel, modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
