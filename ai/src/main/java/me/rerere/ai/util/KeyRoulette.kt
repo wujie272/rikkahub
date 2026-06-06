@@ -14,13 +14,11 @@ interface KeyRoulette {
         providerId: String,
     ): ApiKeyConfig
 
-    /** 报告调用结果（用于健康度跟踪） */
-    fun reportResult(providerId: String, keyId: kotlin.uuid.Uuid, success: Boolean, error: String? = null)
-
     /** 旧版兼容：从空格/逗号分隔的 key 字符串中随机选一个 */
     fun next(keys: String, providerId: String = ""): String
 
-    fun reportCallResult(providerId: String, keyId: kotlin.uuid.Uuid, success: Boolean, error: String? = null) {}
+    /** 报告调用结果（用于健康度追踪） */
+    fun reportCallResult(providerId: String, keyId: String, success: Boolean, error: String? = null) {}
 
     companion object {
         fun default(): KeyRoulette = DefaultKeyRoulette()
@@ -46,8 +44,6 @@ private class DefaultKeyRoulette : KeyRoulette {
         return if (active.isNotEmpty()) active.random() else keys.first()
     }
 
-    override fun reportResult(providerId: String, keyId: kotlin.uuid.Uuid, success: Boolean, error: String?) {}
-
     override fun next(keys: String, providerId: String): String {
         val keyList = splitKey(keys)
         return if (keyList.isNotEmpty()) keyList.random() else keys
@@ -67,8 +63,6 @@ private class LruKeyRoulette(private val context: Context) : KeyRoulette {
         // 回退到旧版逻辑
         return active.random()
     }
-
-    override fun reportResult(providerId: String, keyId: kotlin.uuid.Uuid, success: Boolean, error: String?) {}
 
     override fun next(keys: String, providerId: String): String {
         val keyList = splitKey(keys)
@@ -124,6 +118,22 @@ private class StructuredKeyRoulette(private val context: Context) : KeyRoulette 
             return fallback
         }
 
+        // 记录本次选择（用量统计）
+        val selectedKey = when (config.strategy) {
+            LoadBalanceStrategy.RANDOM -> pool.random()
+            LoadBalanceStrategy.ROUND_ROBIN -> roundRobinPick(pool, providerId)
+            LoadBalanceStrategy.LEAST_USED -> {
+                val counts = synchronized(trackerLock) { usageCounts[providerId] ?: emptyMap() }
+                pool.minByOrNull { counts[it.id] ?: 0L } ?: pool.first()
+            }
+            LoadBalanceStrategy.PRIORITY_FIRST -> pool.first()
+        }
+        // 在内存中递增用量（不持久化到 ProviderSetting）
+        synchronized(trackerLock) {
+            val counts = usageCounts.getOrPut(providerId) { mutableMapOf() }
+            counts[selectedKey.id] = (counts[selectedKey.id] ?: 0L) + 1
+        }
+        return selectedKey
         // 跳过连续失败超过 maxFailures 的 Key
         val maxFail = config.maxFailures
         val candidates = synchronized(trackerLock) {
@@ -136,7 +146,10 @@ private class StructuredKeyRoulette(private val context: Context) : KeyRoulette 
         val selected = when (config.strategy) {
             LoadBalanceStrategy.RANDOM -> pool.random()
             LoadBalanceStrategy.ROUND_ROBIN -> roundRobinPick(pool, providerId)
-            LoadBalanceStrategy.LEAST_USED -> pool.minByOrNull { it.usage.totalCalls } ?: pool.first()
+            LoadBalanceStrategy.LEAST_USED -> {
+                val counts = synchronized(trackerLock) { usageCounts[providerId] ?: emptyMap() }
+                pool.minByOrNull { counts[it.id] ?: 0L } ?: pool.first()
+            }
             LoadBalanceStrategy.PRIORITY_FIRST -> pool.first()
         }
 
@@ -160,17 +173,19 @@ private class StructuredKeyRoulette(private val context: Context) : KeyRoulette 
 
     // providerId -> keyId -> consecutiveFailures
     private val failureTracker = mutableMapOf<String, MutableMap<String, Int>>()
+    // providerId -> keyId -> totalCalls (in-memory 用量统计)
+    private val usageCounts = mutableMapOf<String, MutableMap<String, Long>>()
     private val trackerLock = Any()
 
     override fun reportCallResult(
         providerId: String,
-        keyId: kotlin.uuid.Uuid,
+        keyId: String,
         success: Boolean,
         error: String?,
     ) {
         synchronized(trackerLock) {
             val providerTracker = failureTracker.getOrPut(providerId) { mutableMapOf() }
-            val keyStr = keyId.toString()
+            val keyStr = keyId
             if (success) {
                 providerTracker.remove(keyStr)
             } else {
@@ -179,17 +194,10 @@ private class StructuredKeyRoulette(private val context: Context) : KeyRoulette 
         }
     }
 
-    override fun reportResult(
-        providerId: String,
-        keyId: kotlin.uuid.Uuid,
-        success: Boolean,
-        error: String?,
-    ) {
-        reportCallResult(providerId, keyId, success, error)
-    }
+
 
     /** 获取某个 Key 的连续失败次数（用于判断是否需要跳过） */
-    fun getConsecutiveFailures(providerId: String, keyId: kotlin.uuid.Uuid): Int {
+    fun getConsecutiveFailures(providerId: String, keyId: String): Int {
         synchronized(trackerLock) {
             return failureTracker[providerId]?.get(keyId.toString()) ?: 0
         }
@@ -209,8 +217,26 @@ private class StructuredKeyRoulette(private val context: Context) : KeyRoulette 
 fun KeyRoulette.resolveKey(ps: me.rerere.ai.provider.ProviderSetting): ApiKeyConfig {
     val effective = ps.getEffectiveApiKeys()
     if (effective.isEmpty()) {
-        // fallback: 从旧字符串创建一个临时对象
         return ApiKeyConfig(key = ps.getLegacyApiKey(), name = "Default")
     }
     return nextKey(effective, ps.keyManagement, ps.id.toString())
+}
+
+/**
+ * 选取 Key → 执行 API 调用 → 报告结果的完整包装
+ * 自动处理成功/失败的报告
+ */
+suspend fun <T> KeyRoulette.callWithKey(
+    ps: me.rerere.ai.provider.ProviderSetting,
+    block: suspend (apiKey: String, keyConfig: ApiKeyConfig) -> T,
+): T {
+    val keyConfig = resolveKey(ps)
+    try {
+        val result = block(keyConfig.key, keyConfig)
+        reportCallResult(ps.id.toString(), keyConfig.id, true)
+        return result
+    } catch (e: Exception) {
+        reportCallResult(ps.id.toString(), keyConfig.id, false, e.message)
+        throw e
+    }
 }

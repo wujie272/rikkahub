@@ -303,7 +303,7 @@ private fun StrategyRow(strategy: LoadBalanceStrategy, onClick: () -> Unit) {
         LoadBalanceStrategy.PRIORITY_FIRST -> ctx.getString(R.string.multi_key_strategy_label_priority)
     }
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp).clickable { onClick() },
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -332,6 +332,8 @@ private fun StrategySheet(
             val pairs = listOf(
                 LoadBalanceStrategy.ROUND_ROBIN to "轮询 — 依次轮流使用每个 Key",
                 LoadBalanceStrategy.RANDOM to "随机 — 随机选择一个 Key",
+                LoadBalanceStrategy.LEAST_USED to "最少使用 — 优先选调用次数最少的 Key",
+                LoadBalanceStrategy.PRIORITY_FIRST to "优先级优先 — 按列表顺序优先使用前面的 Key",
             )
             pairs.forEach { (strategy, desc) ->
                 Row(
