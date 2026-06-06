@@ -238,14 +238,15 @@ class LocalTools(private val context: Context, private val eventBus: AppEventBus
             }
         )
     }
-
     val locationTool by lazy {
         Tool(
             name = "get_location",
             description = """
                 Get the current geographic location of the device.
-                Returns latitude, longitude, accuracy, altitude, and address information.
-                Requires location permission. If permission is not granted, returns an error.
+                Returns latitude, longitude, accuracy (in meters), altitude, provider, and timestamp.
+                If GPS is disabled or location is unavailable, latitude/longitude will be 0.0
+                and accuracy will be 0. When available, also returns a human-readable address.
+                Requires location permission. If not granted, returns an error.
             """.trimIndent().replace("\n", " "),
             parameters = {
                 InputSchema.Obj(
@@ -253,7 +254,7 @@ class LocalTools(private val context: Context, private val eventBus: AppEventBus
                 )
             },
             execute = {
-                val result = getCurrentLocation(context)
+                val result = getCurrentLocation(context, eventBus)
                 val payload = buildJsonObject {
                     put("latitude", JsonPrimitive(result.latitude))
                     put("longitude", JsonPrimitive(result.longitude))
@@ -261,13 +262,15 @@ class LocalTools(private val context: Context, private val eventBus: AppEventBus
                     put("altitude", JsonPrimitive(result.altitude))
                     put("provider", JsonPrimitive(result.provider))
                     put("timestamp", JsonPrimitive(result.timestamp))
+                    if (result.latitude == 0.0 && result.longitude == 0.0) {
+                        put("error", JsonPrimitive("Location unavailable. GPS may be disabled or no fix."))
+                    }
                     result.address?.let { put("address", JsonPrimitive(it)) }
                 }
                 listOf(UIMessagePart.Text(payload.toString()))
             }
         )
     }
-
     val askUserTool by lazy {
         Tool(
             name = "ask_user",
