@@ -156,6 +156,20 @@ private fun AssistantLocalToolContent(
                     )
                 }
             )
+            item(
+                headlineContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_location_title))
+                },
+                supportingContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_location_desc))
+                },
+                trailingContent = {
+                    Switch(
+                        checked = assistant.localTools.contains(LocalToolOption.Location),
+                        onCheckedChange = { toggleLocalTool(LocalToolOption.Location, it) }
+                    )
+                }
+            )
         }
     }
 }

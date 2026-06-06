@@ -5,6 +5,7 @@ import me.rerere.hugeicons.stroke.Package01
 import me.rerere.hugeicons.stroke.Connect
 import me.rerere.hugeicons.stroke.ArrowDown01
 import me.rerere.hugeicons.stroke.Add01
+import me.rerere.hugeicons.stroke.Key01
 import me.rerere.hugeicons.stroke.Refresh03
 import me.rerere.hugeicons.stroke.Tools
 import me.rerere.hugeicons.stroke.Share01
@@ -42,6 +43,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FloatingToolbarDefaults.ScreenOffset
+import me.rerere.rikkahub.Screen
 import androidx.compose.material3.FloatingToolbarDefaults.floatingToolbarVerticalNestedScroll
 import androidx.compose.material3.HorizontalFloatingToolbar
 import androidx.compose.material3.Icon
@@ -218,6 +220,14 @@ fun SettingProviderDetailPage(id: Uuid, vm: SettingVM = koinViewModel()) {
                         }
                     }
                 )
+                NavigationBarItem(
+                    selected = false,
+                    label = { Text("Keys") },
+                    icon = { Icon(HugeIcons.Key01, null) },
+                    onClick = {
+                        navController.navigate(Screen.SettingMultiKey(provider.id.toString()))
+                    }
+                )
             }
         }
     ) {
@@ -250,6 +260,8 @@ fun SettingProviderDetailPage(id: Uuid, vm: SettingVM = koinViewModel()) {
                         onEdit = onEdit
                     )
                 }
+
+
             }
         }
     }

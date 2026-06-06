@@ -1,4 +1,6 @@
 *.iml
+# Backup files from code assistant tools
+*.bak
 .gradle
 /local.properties
 /.idea
