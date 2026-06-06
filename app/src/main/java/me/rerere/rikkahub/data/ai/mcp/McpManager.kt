@@ -95,8 +95,13 @@ class McpManager(
                             other = newConfigs,
                             eq = { a, b -> a.id == b.id }
                         )
+                        // 检测修改：id 相同但内容不同，需要重连
+                        val toUpdate = currentConfigs.filter { cur ->
+                            newConfigs.any { n -> cur.id == n.id && cur != n }
+                        }
                         Log.i(TAG, "to_add: $toAdd")
                         Log.i(TAG, "to_remove: $toRemove")
+                        Log.i(TAG, "to_update: ${toUpdate.map { it.commonOptions.name }}")
                         toAdd.forEach { cfg ->
                             appScope.launch {
                                 runCatching { addClient(cfg) }
@@ -105,6 +110,15 @@ class McpManager(
                         }
                         toRemove.forEach { cfg ->
                             appScope.launch { removeClient(cfg) }
+                        }
+                        toUpdate.forEach { cfg ->
+                            appScope.launch {
+                                val newCfg = newConfigs.find { it.id == cfg.id } ?: return@launch
+                                runCatching {
+                                    removeClient(cfg)
+                                    addClient(newCfg)
+                                }.onFailure { it.printStackTrace() }
+                            }
                         }
                     }.onFailure {
                         it.printStackTrace()

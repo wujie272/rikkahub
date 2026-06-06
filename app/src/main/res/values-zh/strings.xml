@@ -85,7 +85,7 @@
   <string name="assistant_page_invalid_json">无效的 JSON: %s</string>
   <string name="assistant_page_local_tools_ask_user_desc">允许 AI 向你提问以获得更多信息</string>
   <string name="assistant_page_local_tools_ask_user_title">询问用户</string>
-  <string name="assistant_page_local_tools_location_title">📍 位置</string>
+  <string name="assistant_page_local_tools_location_title">位置信息</string>
   <string name="assistant_page_local_tools_location_desc">获取设备当前地理位置（经纬度、海拔、地址）</string>
   <string name="assistant_page_local_tools_clipboard_desc">读取或写入设备剪贴板中的纯文本</string>
   <string name="assistant_page_local_tools_clipboard_title">剪贴板</string>

@@ -73,6 +73,29 @@ sealed class ProviderSetting {
     /** 同步结构化 keys 到旧的 apiKey 字符串（向后兼容序列化） */
     abstract fun syncApiKeyString()
 
+    /**
+     * 从旧的 apiKey 字符串同步到结构化 apiKeys（反向同步）
+     * 编辑旧字段时自动触发，保持双向兼容
+     */
+    fun syncApiKeysFromSource(): ProviderSetting {
+        val raw = getLegacyApiKey()
+        if (raw.isBlank()) return this
+        val parsedKeys = parseLegacyApiKeys(raw)
+        if (parsedKeys.isEmpty()) return this
+        val existingMap = apiKeys.associateBy { it.key }
+        val mergedKeys = parsedKeys.map { parsedKey ->
+            existingMap[parsedKey.key]?.let { existing ->
+                existing.copy(
+                    key = parsedKey.key,
+                    name = existing.name.ifBlank { parsedKey.name },
+                )
+            } ?: parsedKey
+        }
+        val updated = copyProvider(apiKeys = mergedKeys)
+        updated.syncApiKeyString()
+        return updated
+    }
+
     /** 获取旧格式的 apiKey 字符串 */
     abstract fun getLegacyApiKey(): String
 

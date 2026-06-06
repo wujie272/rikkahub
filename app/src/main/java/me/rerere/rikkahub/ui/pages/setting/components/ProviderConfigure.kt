@@ -217,7 +217,7 @@ private fun ProviderConfigureOpenAI(
     var keyVisible by remember { mutableStateOf(false) }
     OutlinedTextField(
         value = provider.apiKey,
-        onValueChange = { onEdit(provider.copy(apiKey = it.trim())) },
+        onValueChange = { onEdit(provider.copy(apiKey = it.trim()).syncApiKeysFromSource() as ProviderSetting.OpenAI) },
         label = { Text(stringResource(R.string.setting_provider_page_api_key)) },
         modifier = Modifier.fillMaxWidth(),
         maxLines = 3,
@@ -308,7 +308,7 @@ private fun ProviderConfigureClaude(
     var keyVisible by remember { mutableStateOf(false) }
     OutlinedTextField(
         value = provider.apiKey,
-        onValueChange = { onEdit(provider.copy(apiKey = it.trim())) },
+        onValueChange = { onEdit(provider.copy(apiKey = it.trim()).syncApiKeysFromSource() as ProviderSetting.Claude) },
         label = { Text(stringResource(R.string.setting_provider_page_api_key)) },
         modifier = Modifier.fillMaxWidth(),
         maxLines = 3,
@@ -420,7 +420,7 @@ private fun ProviderConfigureGoogle(
         var keyVisible by remember { mutableStateOf(false) }
         OutlinedTextField(
             value = provider.apiKey,
-            onValueChange = { onEdit(provider.copy(apiKey = it.trim())) },
+            onValueChange = { onEdit(provider.copy(apiKey = it.trim()).syncApiKeysFromSource() as ProviderSetting.Google) },
             label = { Text(stringResource(R.string.setting_provider_page_api_key)) },
             modifier = Modifier.fillMaxWidth(),
             maxLines = 3,

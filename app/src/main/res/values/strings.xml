@@ -85,7 +85,7 @@
   <string name="assistant_page_invalid_json">Invalid JSON: %s</string>
   <string name="assistant_page_local_tools_ask_user_desc">Allow the AI to ask you questions for clarification</string>
   <string name="assistant_page_local_tools_ask_user_title">Ask User</string>
-  <string name="assistant_page_local_tools_location_title">📍 Location</string>
+  <string name="assistant_page_local_tools_location_title">Location Info</string>
   <string name="assistant_page_local_tools_location_desc">Get the current geographic location (coordinates, altitude, address)</string>
   <string name="assistant_page_local_tools_clipboard_desc">Read or write plain text from the device clipboard</string>
   <string name="assistant_page_local_tools_clipboard_title">Clipboard</string>

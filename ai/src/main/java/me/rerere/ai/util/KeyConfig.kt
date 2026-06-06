@@ -1,14 +1,14 @@
 package me.rerere.ai.util
 
 import kotlinx.serialization.Serializable
-import kotlin.uuid.Uuid
+import kotlin.random.Random
 
 /**
  * 单个 API Key 的完整配置
  */
 @Serializable
 data class ApiKeyConfig(
-    val id: Uuid = Uuid.random(),
+    val id: String = createKeyId(),
     val key: String = "",
     val name: String = "",
     val status: ApiKeyStatus = ApiKeyStatus.ACTIVE,
@@ -63,8 +63,8 @@ fun createKeyId(): String {
     val c = keyIdCounter.toString(36)
     return "key_${ts}_${r}_$c"
 }
-/**
 
+/**
  * 将旧格式的 apiKey 字符串（空格/逗号分隔）转为结构化列表
  */
 fun parseLegacyApiKeys(raw: String): List<ApiKeyConfig> {

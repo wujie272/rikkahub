@@ -61,7 +61,8 @@ class OpenAIProvider(
 
     override suspend fun listModels(providerSetting: ProviderSetting.OpenAI): List<Model> =
         withContext(Dispatchers.IO) {
-            val key = keyRoulette.resolveKey(providerSetting).key
+            val keyConfig = keyRoulette.resolveKey(providerSetting)
+            val key = keyConfig.key
             val request = Request.Builder()
                 .url("${providerSetting.baseUrl}/models")
                 .addHeader("Authorization", "Bearer $key")
@@ -70,8 +71,10 @@ class OpenAIProvider(
 
             val response = client.newCall(request).await()
             if (!response.isSuccessful) {
+                keyRoulette.reportCallResult(providerSetting.id.toString(), keyConfig.id, false, "HTTP ${response.code}")
                 error("Failed to get models: ${response.code} ${response.body?.string()}")
             }
+            keyRoulette.reportCallResult(providerSetting.id.toString(), keyConfig.id, true)
 
             val bodyStr = response.body?.string() ?: ""
             val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
@@ -89,7 +92,8 @@ class OpenAIProvider(
         }
 
     override suspend fun getBalance(providerSetting: ProviderSetting.OpenAI): String = withContext(Dispatchers.IO) {
-        val key = keyRoulette.resolveKey(providerSetting).key
+        val keyConfig = keyRoulette.resolveKey(providerSetting)
+        val key = keyConfig.key
         val url = if (providerSetting.balanceOption.apiPath.startsWith("http")) {
             providerSetting.balanceOption.apiPath
         } else {
@@ -102,8 +106,10 @@ class OpenAIProvider(
             .build()
         val response = client.newCall(request).await()
         if (!response.isSuccessful) {
+            keyRoulette.reportCallResult(providerSetting.id.toString(), keyConfig.id, false, "HTTP ${response.code}")
             error("Failed to get balance: ${response.code} ${response.body?.string()}")
         }
+        keyRoulette.reportCallResult(providerSetting.id.toString(), keyConfig.id, true)
 
         val bodyStr = response.body.string()
         val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
@@ -158,7 +164,8 @@ class OpenAIProvider(
     ): EmbeddingGenerationResult = withContext(Dispatchers.IO) {
         require(params.input.isNotEmpty()) { "Embedding input cannot be empty" }
 
-        val key = keyRoulette.resolveKey(providerSetting).key
+        val keyConfig = keyRoulette.resolveKey(providerSetting)
+        val key = keyConfig.key
         val requestBody = json.encodeToString(
             buildJsonObject {
                 put("model", params.model.modelId)
@@ -183,8 +190,10 @@ class OpenAIProvider(
 
         val response = client.newCall(request).await()
         if (!response.isSuccessful) {
+            keyRoulette.reportCallResult(providerSetting.id.toString(), keyConfig.id, false, "HTTP ${response.code}")
             error("Failed to generate embedding: ${response.code} ${response.body?.string()}")
         }
+        keyRoulette.reportCallResult(providerSetting.id.toString(), keyConfig.id, true)
 
         val bodyStr = response.body?.string() ?: ""
         val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
@@ -211,7 +220,8 @@ class OpenAIProvider(
             "Expected OpenAI provider setting"
         }
 
-        val key = keyRoulette.resolveKey(providerSetting).key
+        val keyConfig = keyRoulette.resolveKey(providerSetting)
+        val key = keyConfig.key
 
         val requestBody = json.encodeToString(
             buildJsonObject {
