@@ -49,9 +49,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.platform.LocalHapticFeedback
+import me.rerere.rikkahub.ui.haptic.rememberRikkaHaptic
+import me.rerere.rikkahub.ui.haptic.LocalRikkaHaptic
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -152,9 +152,10 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
                     vm.updateSettings(settings.copy(assistants = newAssistants))
                 }
             }
-            val haptic = LocalHapticFeedback.current
+
 
             // 搜索框
+            val rikkaHaptic = rememberRikkaHaptic()
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
@@ -220,13 +221,14 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
                                     if (!isFiltering) {
                                         Modifier.longPressDraggableHandle(
                                             onDragStarted = {
-                                                haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
-                                            },
-                                            onDragStopped = {
-                                                haptic.performHapticFeedback(HapticFeedbackType.GestureEnd)
-                                            }
-                                        )
-                                    } else {
+                                        rikkaHaptic.tick()
+                                        },
+
+                                        onDragStopped = {
+                                            rikkaHaptic.toggle()
+                                        }
+                                    )
+                                } else {
                                         Modifier
                                     }
                                 )
@@ -263,8 +265,8 @@ private fun AssistantTagsFilterRow(
     selectedTagIds: Set<Uuid>,
     onUpdateSelectedTagIds: (Set<Uuid>) -> Unit
 ) {
-    val haptic = LocalHapticFeedback.current
-    if (settings.assistantTags.isNotEmpty()) {
+    val rikkaHaptic = rememberRikkaHaptic()
+
         val tagsListState = rememberLazyListState()
         val tagsReorderableState = rememberReorderableLazyListState(tagsListState) { from, to ->
             val newTags = settings.assistantTags.toMutableList().apply {
@@ -305,18 +307,18 @@ private fun AssistantTagsFilterRow(
                                 .scale(if (isDragging) 0.95f else 1f)
                                 .longPressDraggableHandle(
                                     onDragStarted = {
-                                        haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
+                                        rikkaHaptic.tick()
                                     },
+
                                     onDragStopped = {
-                                        haptic.performHapticFeedback(HapticFeedbackType.GestureEnd)
-                                    },
+                                        rikkaHaptic.toggle()
+                                    }
                                 )
                         )
                     }
                 }
             }
         }
-    }
 }
 
 @Composable

@@ -1148,5 +1148,10 @@
   <string name="setting_provider_page_include_history_reasoning">Include History Reasoning</string>
   <string name="assistant_page_gradient_background">Gradient Background</string>
   <string name="assistant_page_gradient_background_desc">Use a dynamic gradient background on the chat page</string>
+  <string name="widget_description">RikkaHub 使用统计</string>
+  <string name="widget_label_conversations">总对话</string>
+  <string name="widget_label_top_model">最常用模型</string>
+  <string name="widget_label_top_assistant">最常用助手</string>
+>>>>>>> 2ceb66b4 (feat: add MiHaptic-style haptic feedback engine and stats dashboard widget)
 </resources>
 

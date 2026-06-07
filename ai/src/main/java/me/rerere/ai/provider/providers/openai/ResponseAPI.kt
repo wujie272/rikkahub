@@ -69,6 +69,7 @@ class ResponseAPI(
         messages: List<UIMessage>,
         params: TextGenerationParams
     ): MessageChunk {
+        val keyConfig = keyRoulette.resolveKey(providerSetting)
         val requestBody = buildRequestBody(
             providerSetting = providerSetting,
             messages = messages,
@@ -81,7 +82,7 @@ class ResponseAPI(
             .post(json.encodeToString(requestBody).toRequestBody("application/json".toMediaType()))
             .addHeader(
                 "Authorization",
-                "Bearer ${keyRoulette.resolveKey(providerSetting).key}"
+                "Bearer ${keyConfig.key}"
             )
             .addHeader("Content-Type", "application/json")
             .configureReferHeaders(providerSetting.baseUrl)
@@ -89,17 +90,24 @@ class ResponseAPI(
 
         Log.i(TAG, "generateText: ${json.encodeToString(requestBody)}")
 
-        val response = client.newCall(request).await()
-        if (!response.isSuccessful) {
-            throw Exception("Failed to get response: ${response.code} ${response.body.string()}")
+        try {
+            val response = client.newCall(request).await()
+            if (!response.isSuccessful) {
+                keyRoulette.reportCallResult(providerSetting.id.toString(), keyConfig.id, false, "HTTP ${response.code}")
+                throw Exception("Failed to get response: ${response.code} ${response.body.string()}")
+            }
+
+            val bodyStr = response.body?.string() ?: ""
+            Log.i(TAG, "generateText: $bodyStr")
+            val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
+            val output = parseResponseOutput(bodyJson)
+
+            keyRoulette.reportCallResult(providerSetting.id.toString(), keyConfig.id, true)
+            return output
+        } catch (e: Exception) {
+            keyRoulette.reportCallResult(providerSetting.id.toString(), keyConfig.id, false, e.message)
+            throw e
         }
-
-        val bodyStr = response.body?.string() ?: ""
-        Log.i(TAG, "generateText: $bodyStr")
-        val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
-        val output = parseResponseOutput(bodyJson)
-
-        return output
     }
 
     override suspend fun streamText(
@@ -107,6 +115,7 @@ class ResponseAPI(
         messages: List<UIMessage>,
         params: TextGenerationParams
     ): Flow<MessageChunk> = callbackFlow {
+        val keyConfig = keyRoulette.resolveKey(providerSetting)
         val requestBody = buildRequestBody(
             providerSetting = providerSetting,
             messages = messages,
@@ -119,13 +128,14 @@ class ResponseAPI(
             .post(json.encodeToString(requestBody).toRequestBody("application/json".toMediaType()))
             .addHeader(
                 "Authorization",
-                "Bearer ${keyRoulette.resolveKey(providerSetting).key}"
+                "Bearer ${keyConfig.key}"
             )
             .configureReferHeaders(providerSetting.baseUrl)
             .build()
 
         Log.i(TAG, "streamText: ${json.encodeToString(requestBody)}")
 
+        var streamFailed = false
         val listener = object : EventSourceListener() {
             override fun onEvent(
                 eventSource: EventSource,
@@ -149,6 +159,8 @@ class ResponseAPI(
             }
 
             override fun onFailure(eventSource: EventSource, t: Throwable?, response: Response?) {
+                streamFailed = true
+                keyRoulette.reportCallResult(providerSetting.id.toString(), keyConfig.id, false, t?.message ?: response?.message)
                 var exception = t
 
                 t?.printStackTrace()
@@ -171,6 +183,9 @@ class ResponseAPI(
             }
 
             override fun onClosed(eventSource: EventSource) {
+                if (!streamFailed) {
+                    keyRoulette.reportCallResult(providerSetting.id.toString(), keyConfig.id, true)
+                }
                 close()
             }
         }

@@ -68,31 +68,39 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
 
     override suspend fun listModels(providerSetting: ProviderSetting.Claude): List<Model> =
         withContext(Dispatchers.IO) {
+            val keyConfig = keyRoulette.resolveKey(providerSetting)
             val request = Request.Builder()
                 .url("${providerSetting.baseUrl}/models")
-                .addHeader("x-api-key", keyRoulette.resolveKey(providerSetting).key)
+                .addHeader("x-api-key", keyConfig.key)
                 .addHeader("anthropic-version", ANTHROPIC_VERSION)
                 .get()
                 .build()
 
-            val response = client.newCall(request).execute()
-            if (!response.isSuccessful) {
-                error("Failed to get models: ${response.code} ${response.body?.string()}")
-            }
+            try {
+                val response = client.newCall(request).execute()
+                if (!response.isSuccessful) {
+                    keyRoulette.reportCallResult(providerSetting.id.toString(), keyConfig.id, false, "HTTP ${response.code}")
+                    error("Failed to get models: ${response.code} ${response.body?.string()}")
+                }
+                keyRoulette.reportCallResult(providerSetting.id.toString(), keyConfig.id, true)
 
-            val bodyStr = response.body?.string() ?: ""
-            val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
-            val data = bodyJson["data"]?.jsonArray ?: return@withContext emptyList()
+                val bodyStr = response.body?.string() ?: ""
+                val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
+                val data = bodyJson["data"]?.jsonArray ?: return@withContext emptyList()
 
-            data.mapNotNull { modelJson ->
-                val modelObj = modelJson.jsonObject
-                val id = modelObj["id"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
-                val displayName = modelObj["display_name"]?.jsonPrimitive?.contentOrNull ?: id
+                data.mapNotNull { modelJson ->
+                    val modelObj = modelJson.jsonObject
+                    val id = modelObj["id"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+                    val displayName = modelObj["display_name"]?.jsonPrimitive?.contentOrNull ?: id
 
-                Model(
-                    modelId = id,
-                    displayName = displayName,
-                )
+                    Model(
+                        modelId = id,
+                        displayName = displayName,
+                    )
+                }
+            } catch (e: Exception) {
+                keyRoulette.reportCallResult(providerSetting.id.toString(), keyConfig.id, false, e.message)
+                throw e
             }
         }
 
@@ -108,46 +116,54 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
         messages: List<UIMessage>,
         params: TextGenerationParams
     ): MessageChunk = withContext(Dispatchers.IO) {
+        val keyConfig = keyRoulette.resolveKey(providerSetting)
         val requestBody = buildMessageRequest(providerSetting, messages, params)
         val request = Request.Builder()
             .url("${providerSetting.baseUrl}/messages")
             .headers(params.customHeaders.toHeaders())
             .post(json.encodeToString(requestBody).toRequestBody("application/json".toMediaType()))
-            .addHeader("x-api-key", keyRoulette.resolveKey(providerSetting).key)
+            .addHeader("x-api-key", keyConfig.key)
             .addHeader("anthropic-version", ANTHROPIC_VERSION)
             .configureReferHeaders(providerSetting.baseUrl)
             .build()
 
         Log.i(TAG, "generateText: ${json.encodeToString(requestBody)}")
 
-        val response = client.newCall(request).await()
-        if (!response.isSuccessful) {
-            throw Exception("Failed to get response: ${response.code} ${response.body?.string()}")
+        try {
+            val response = client.newCall(request).await()
+            if (!response.isSuccessful) {
+                keyRoulette.reportCallResult(providerSetting.id.toString(), keyConfig.id, false, "HTTP ${response.code}")
+                throw Exception("Failed to get response: ${response.code} ${response.body?.string()}")
+            }
+            keyRoulette.reportCallResult(providerSetting.id.toString(), keyConfig.id, true)
+
+            val bodyStr = response.body?.string() ?: ""
+            val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
+
+            // 从 JsonObject 中提取必要的信息
+            val id = bodyJson["id"]?.jsonPrimitive?.contentOrNull ?: ""
+            val model = bodyJson["model"]?.jsonPrimitive?.contentOrNull ?: ""
+            val content = bodyJson["content"]?.jsonArray ?: JsonArray(emptyList())
+            val stopReason = bodyJson["stop_reason"]?.jsonPrimitive?.contentOrNull ?: "unknown"
+            val usage = parseTokenUsage(bodyJson)
+
+            MessageChunk(
+                id = id,
+                model = model,
+                choices = listOf(
+                    UIMessageChoice(
+                        index = 0,
+                        delta = null,
+                        message = parseMessage(content),
+                        finishReason = stopReason
+                    )
+                ),
+                usage = usage
+            )
+        } catch (e: Exception) {
+            keyRoulette.reportCallResult(providerSetting.id.toString(), keyConfig.id, false, e.message)
+            throw e
         }
-
-        val bodyStr = response.body?.string() ?: ""
-        val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
-
-        // 从 JsonObject 中提取必要的信息
-        val id = bodyJson["id"]?.jsonPrimitive?.contentOrNull ?: ""
-        val model = bodyJson["model"]?.jsonPrimitive?.contentOrNull ?: ""
-        val content = bodyJson["content"]?.jsonArray ?: JsonArray(emptyList())
-        val stopReason = bodyJson["stop_reason"]?.jsonPrimitive?.contentOrNull ?: "unknown"
-        val usage = parseTokenUsage(bodyJson)
-
-        MessageChunk(
-            id = id,
-            model = model,
-            choices = listOf(
-                UIMessageChoice(
-                    index = 0,
-                    delta = null,
-                    message = parseMessage(content),
-                    finishReason = stopReason
-                )
-            ),
-            usage = usage
-        )
     }
 
     override suspend fun streamText(
@@ -155,12 +171,13 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
         messages: List<UIMessage>,
         params: TextGenerationParams
     ): Flow<MessageChunk> = callbackFlow {
+        val keyConfig = keyRoulette.resolveKey(providerSetting)
         val requestBody = buildMessageRequest(providerSetting, messages, params, stream = true)
         val request = Request.Builder()
             .url("${providerSetting.baseUrl}/messages")
             .headers(params.customHeaders.toHeaders())
             .post(json.encodeToString(requestBody).toRequestBody("application/json".toMediaType()))
-            .addHeader("x-api-key", keyRoulette.resolveKey(providerSetting).key)
+            .addHeader("x-api-key", keyConfig.key)
             .addHeader("anthropic-version", ANTHROPIC_VERSION)
             .addHeader("Content-Type", "application/json")
             .configureReferHeaders(providerSetting.baseUrl)
@@ -172,6 +189,7 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
             Log.i(TAG, "streamText: $it")
         }
 
+        var streamFailed = false
         val listener = object : EventSourceListener() {
             override fun onEvent(
                 eventSource: EventSource,
@@ -227,6 +245,8 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
             }
 
             override fun onFailure(eventSource: EventSource, t: Throwable?, response: Response?) {
+                streamFailed = true
+                keyRoulette.reportCallResult(providerSetting.id.toString(), keyConfig.id, false, t?.message ?: response?.message)
                 var exception = t
 
                 t?.printStackTrace()
@@ -248,6 +268,9 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
             }
 
             override fun onClosed(eventSource: EventSource) {
+                if (!streamFailed) {
+                    keyRoulette.reportCallResult(providerSetting.id.toString(), keyConfig.id, true)
+                }
                 close()
             }
         }

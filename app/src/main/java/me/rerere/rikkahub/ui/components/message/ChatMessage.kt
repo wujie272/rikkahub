@@ -35,16 +35,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalHapticFeedback
+import me.rerere.rikkahub.ui.haptic.LocalRikkaHaptic
+import me.rerere.rikkahub.ui.haptic.rememberRikkaHaptic
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.LinkAnnotation
@@ -59,7 +58,6 @@ import androidx.core.content.FileProvider
 import androidx.core.net.toFile
 import androidx.core.net.toUri
 import kotlinx.coroutines.FlowPreview
-import kotlinx.coroutines.flow.debounce
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -271,11 +269,27 @@ private fun MessagePartsBlock(
     val context = LocalContext.current
     val contentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
 
-    // 消息输出HapticFeedback
-    val hapticFeedback = LocalHapticFeedback.current
+    // 消息输出HapticFeedback — 开始/结束各震一次，波形不同
+    val rikkaHaptic = rememberRikkaHaptic()
     val settings = LocalSettings.current
-    val partsState by rememberUpdatedState(parts)
+    val hapticEnabled = settings.displaySetting.enableMessageGenerationHapticEffect
+    val prevLoading = remember { mutableStateOf(loading) }
+    LaunchedEffect(loading, hapticEnabled) {
+        if (!hapticEnabled) return@LaunchedEffect
 
+        val wasLoading = prevLoading.value
+        prevLoading.value = loading
+
+        if (loading && !wasLoading) {
+            // 开始生成 → 重点 "嗒！"
+            rikkaHaptic.heavyClick()
+        } else if (!loading && wasLoading) {
+            // 结束生成 → 双击 "哒哒"
+            rikkaHaptic.doubleTick()
+        }
+    }
+
+    val partsState by rememberUpdatedState(parts)
     val handleClickCitation: (String) -> Unit = remember {
         handler@{ citationId ->
             partsState.forEach { part ->
@@ -295,15 +309,6 @@ private fun MessagePartsBlock(
                 }
             }
         }
-    }
-    LaunchedEffect(settings.displaySetting) {
-        snapshotFlow { partsState }
-            .debounce(50.milliseconds)
-            .collect { parts ->
-                if (parts.isNotEmpty() && loading && settings.displaySetting.enableMessageGenerationHapticEffect) {
-                    hapticFeedback.performHapticFeedback(HapticFeedbackType.KeyboardTap)
-                }
-            }
     }
 
     // Render parts in original order (group thinking/tool as chain-of-thought)

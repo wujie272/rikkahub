@@ -73,6 +73,7 @@ class ChatCompletionsAPI(
         messages: List<UIMessage>,
         params: TextGenerationParams,
     ): MessageChunk = withContext(Dispatchers.IO) {
+        val keyConfig = keyRoulette.resolveKey(providerSetting)
         val requestBody =
             buildChatCompletionRequest(
                 messages = messages,
@@ -84,45 +85,53 @@ class ChatCompletionsAPI(
             .url("${providerSetting.baseUrl}${providerSetting.chatCompletionsPath}")
             .headers(params.customHeaders.toHeaders())
             .post(json.encodeToString(requestBody).toRequestBody("application/json".toMediaType()))
-            .addHeader("Authorization", "Bearer ${keyRoulette.resolveKey(providerSetting).key}")
+            .addHeader("Authorization", "Bearer ${keyConfig.key}")
             .configureReferHeaders(providerSetting.baseUrl)
             .build()
 
         Log.i(TAG, "generateText: ${json.encodeToString(requestBody)}")
 
-        val response = client.newCall(request).await()
-        if (!response.isSuccessful) {
-            throw Exception("Failed to get response: ${response.code} ${response.body?.string()}")
+        try {
+            val response = client.newCall(request).await()
+            if (!response.isSuccessful) {
+                keyRoulette.reportCallResult(providerSetting.id.toString(), keyConfig.id, false, "HTTP ${response.code}")
+                throw Exception("Failed to get response: ${response.code} ${response.body?.string()}")
+            }
+
+            val bodyStr = response.body?.string() ?: ""
+            val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
+
+            // 从 JsonObject 中提取必要的信息
+            val id = bodyJson["id"]?.jsonPrimitive?.contentOrNull ?: ""
+            val model = bodyJson["model"]?.jsonPrimitive?.contentOrNull ?: ""
+            val choice = bodyJson["choices"]?.jsonArray?.get(0)?.jsonObject ?: error("choices is null")
+
+            val message = choice["message"]?.jsonObject ?: throw Exception("message is null")
+            val finishReason = choice["finish_reason"]
+                ?.jsonPrimitive
+                ?.content
+                ?: "unknown"
+            val usage = parseTokenUsage(bodyJson["usage"] as? JsonObject)
+
+            keyRoulette.reportCallResult(providerSetting.id.toString(), keyConfig.id, true)
+
+            MessageChunk(
+                id = id,
+                model = model,
+                choices = listOf(
+                    UIMessageChoice(
+                        index = 0,
+                        delta = null,
+                        message = parseMessage(message),
+                        finishReason = finishReason
+                    )
+                ),
+                usage = usage
+            )
+        } catch (e: Exception) {
+            keyRoulette.reportCallResult(providerSetting.id.toString(), keyConfig.id, false, e.message)
+            throw e
         }
-
-        val bodyStr = response.body?.string() ?: ""
-        val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
-
-        // 从 JsonObject 中提取必要的信息
-        val id = bodyJson["id"]?.jsonPrimitive?.contentOrNull ?: ""
-        val model = bodyJson["model"]?.jsonPrimitive?.contentOrNull ?: ""
-        val choice = bodyJson["choices"]?.jsonArray?.get(0)?.jsonObject ?: error("choices is null")
-
-        val message = choice["message"]?.jsonObject ?: throw Exception("message is null")
-        val finishReason = choice["finish_reason"]
-            ?.jsonPrimitive
-            ?.content
-            ?: "unknown"
-        val usage = parseTokenUsage(bodyJson["usage"] as? JsonObject)
-
-        MessageChunk(
-            id = id,
-            model = model,
-            choices = listOf(
-                UIMessageChoice(
-                    index = 0,
-                    delta = null,
-                    message = parseMessage(message),
-                    finishReason = finishReason
-                )
-            ),
-            usage = usage
-        )
     }
 
     override suspend fun streamText(
@@ -130,6 +139,7 @@ class ChatCompletionsAPI(
         messages: List<UIMessage>,
         params: TextGenerationParams,
     ): Flow<MessageChunk> = callbackFlow {
+        val keyConfig = keyRoulette.resolveKey(providerSetting)
         val requestBody = buildChatCompletionRequest(
             messages = messages,
             params = params,
@@ -141,7 +151,7 @@ class ChatCompletionsAPI(
             .url("${providerSetting.baseUrl}${providerSetting.chatCompletionsPath}")
             .headers(params.customHeaders.toHeaders())
             .post(json.encodeToString(requestBody).toRequestBody("application/json".toMediaType()))
-            .addHeader("Authorization", "Bearer ${keyRoulette.resolveKey(providerSetting).key}")
+            .addHeader("Authorization", "Bearer ${keyConfig.key}")
             .addHeader("Content-Type", "application/json")
             .configureReferHeaders(providerSetting.baseUrl)
             .build()
@@ -151,6 +161,7 @@ class ChatCompletionsAPI(
         // just for debugging response body
         // println(client.newCall(request).await().body?.string())
 
+        var streamFailed = false
         val listener = object : EventSourceListener() {
             override fun onEvent(
                 eventSource: EventSource,
@@ -210,6 +221,8 @@ class ChatCompletionsAPI(
             }
 
             override fun onFailure(eventSource: EventSource, t: Throwable?, response: Response?) {
+                streamFailed = true
+                keyRoulette.reportCallResult(providerSetting.id.toString(), keyConfig.id, false, t?.message ?: response?.message)
                 var exception = t
 
                 t?.printStackTrace()
@@ -233,6 +246,9 @@ class ChatCompletionsAPI(
             }
 
             override fun onClosed(eventSource: EventSource) {
+                if (!streamFailed) {
+                    keyRoulette.reportCallResult(providerSetting.id.toString(), keyConfig.id, true)
+                }
                 close()
             }
         }

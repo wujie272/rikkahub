@@ -82,9 +82,9 @@ sealed class ProviderSetting {
         if (raw.isBlank()) return this
         val parsedKeys = parseLegacyApiKeys(raw)
         if (parsedKeys.isEmpty()) return this
-        val existingMap = apiKeys.associateBy { it.key }
+        val existingMap = apiKeys.associateBy { it.id }
         val mergedKeys = parsedKeys.map { parsedKey ->
-            existingMap[parsedKey.key]?.let { existing ->
+            existingMap[parsedKey.id]?.let { existing ->
                 existing.copy(
                     key = parsedKey.key,
                     name = existing.name.ifBlank { parsedKey.name },

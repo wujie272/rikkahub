@@ -90,7 +90,8 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
 
     private suspend fun transformRequest(
         providerSetting: ProviderSetting.Google,
-        request: Request
+        request: Request,
+        apiKey: String? = null,
     ): Request {
         return if (providerSetting.vertexAI && providerSetting.useServiceAccount) {
             val accessToken = serviceAccountTokenProvider.fetchAccessToken(
@@ -101,7 +102,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                 .addHeader("Authorization", "Bearer $accessToken")
                 .build()
         } else {
-            val key = keyRoulette.resolveKey(providerSetting).key
+            val key = apiKey ?: keyRoulette.resolveKey(providerSetting).key
             if (providerSetting.vertexAI) {
                 request.newBuilder()
                     .url(request.url.newBuilder().addQueryParameter("key", key).build())
@@ -118,40 +119,50 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
 
     override suspend fun listModels(providerSetting: ProviderSetting.Google): List<Model> =
         withContext(Dispatchers.IO) {
+            val keyConfig = keyRoulette.resolveKey(providerSetting)
             val url = buildUrl(providerSetting = providerSetting, path = "models?pageSize=100")
             val request = transformRequest(
                 providerSetting = providerSetting,
                 request = Request.Builder()
                     .url(url)
                     .get()
-                    .build()
+                    .build(),
+                apiKey = keyConfig.key
             )
-            val response = client.newCall(request).await()
-            if (response.isSuccessful) {
-                val body = response.body?.string() ?: error("empty body")
-                Log.d(TAG, "listModels: $body")
-                val bodyObject = json.parseToJsonElement(body).jsonObject
-                val models = bodyObject["models"]?.jsonArray ?: return@withContext emptyList()
+            try {
+                val response = client.newCall(request).await()
+                if (response.isSuccessful) {
+                    val body = response.body?.string() ?: error("empty body")
+                    Log.d(TAG, "listModels: $body")
+                    val bodyObject = json.parseToJsonElement(body).jsonObject
+                    val models = bodyObject["models"]?.jsonArray ?: return@withContext emptyList()
 
-                models.mapNotNull {
-                    val modelObject = it.jsonObject
+                    val result = models.mapNotNull {
+                        val modelObject = it.jsonObject
 
-                    // 忽略非chat/embedding模型
-                    val supportedGenerationMethods =
-                        modelObject["supportedGenerationMethods"]!!.jsonArray
-                            .map { method -> method.jsonPrimitive.content }
-                    if ("generateContent" !in supportedGenerationMethods && "embedContent" !in supportedGenerationMethods) {
-                        return@mapNotNull null
+                        // 忽略非chat/embedding模型
+                        val supportedGenerationMethods =
+                            modelObject["supportedGenerationMethods"]!!.jsonArray
+                                .map { method -> method.jsonPrimitive.content }
+                        if ("generateContent" !in supportedGenerationMethods && "embedContent" !in supportedGenerationMethods) {
+                            return@mapNotNull null
+                        }
+
+                        Model(
+                            modelId = modelObject["name"]!!.jsonPrimitive.content.substringAfter("/"),
+                            displayName = modelObject["displayName"]!!.jsonPrimitive.content,
+                            type = if ("generateContent" in supportedGenerationMethods) ModelType.CHAT else ModelType.EMBEDDING,
+                        )
                     }
-
-                    Model(
-                        modelId = modelObject["name"]!!.jsonPrimitive.content.substringAfter("/"),
-                        displayName = modelObject["displayName"]!!.jsonPrimitive.content,
-                        type = if ("generateContent" in supportedGenerationMethods) ModelType.CHAT else ModelType.EMBEDDING,
-                    )
+                    keyRoulette.reportCallResult(providerSetting.id.toString(), keyConfig.id, true)
+                    return@withContext result
+                } else {
+                    keyRoulette.reportCallResult(providerSetting.id.toString(), keyConfig.id, false, "HTTP ${response.code}")
+                    emptyList()
                 }
-            } else {
-                emptyList()
+            } catch (e: Exception) {
+                keyRoulette.reportCallResult(providerSetting.id.toString(), keyConfig.id, false, e.message)
+                throw e
             }
         }
 
@@ -160,6 +171,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
         messages: List<UIMessage>,
         params: TextGenerationParams,
     ): MessageChunk = withContext(Dispatchers.IO) {
+        val keyConfig = keyRoulette.resolveKey(providerSetting)
         val requestBody = buildCompletionRequestBody(messages, params)
 
         val url = buildUrl(
@@ -180,35 +192,43 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                     json.encodeToString(requestBody).toRequestBody("application/json".toMediaType())
                 )
                 .configureReferHeaders(providerSetting.baseUrl)
-                .build()
+                .build(),
+            apiKey = keyConfig.key
         )
 
-        val response = client.newCall(request).await()
-        if (!response.isSuccessful) {
-            throw Exception("Failed to get response: ${response.code} ${response.body?.string()}")
+        try {
+            val response = client.newCall(request).await()
+            if (!response.isSuccessful) {
+                keyRoulette.reportCallResult(providerSetting.id.toString(), keyConfig.id, false, "HTTP ${response.code}")
+                throw Exception("Failed to get response: ${response.code} ${response.body?.string()}")
+            }
+            keyRoulette.reportCallResult(providerSetting.id.toString(), keyConfig.id, true)
+
+            val bodyStr = response.body?.string() ?: ""
+            val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
+
+            val candidates = bodyJson["candidates"]!!.jsonArray
+            val usage = bodyJson["usageMetadata"]!!.jsonObject
+
+            val messageChunk = MessageChunk(
+                id = Uuid.random().toString(),
+                model = params.model.modelId,
+                choices = candidates.map { candidate ->
+                    UIMessageChoice(
+                        message = parseMessage(candidate.jsonObject),
+                        index = 0,
+                        finishReason = null,
+                        delta = null
+                    )
+                },
+                usage = parseUsageMeta(usage)
+            )
+
+            messageChunk
+        } catch (e: Exception) {
+            keyRoulette.reportCallResult(providerSetting.id.toString(), keyConfig.id, false, e.message)
+            throw e
         }
-
-        val bodyStr = response.body?.string() ?: ""
-        val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
-
-        val candidates = bodyJson["candidates"]!!.jsonArray
-        val usage = bodyJson["usageMetadata"]!!.jsonObject
-
-        val messageChunk = MessageChunk(
-            id = Uuid.random().toString(),
-            model = params.model.modelId,
-            choices = candidates.map { candidate ->
-                UIMessageChoice(
-                    message = parseMessage(candidate.jsonObject),
-                    index = 0,
-                    finishReason = null,
-                    delta = null
-                )
-            },
-            usage = parseUsageMeta(usage)
-        )
-
-        messageChunk
     }
 
     override suspend fun streamText(
@@ -216,6 +236,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
         messages: List<UIMessage>,
         params: TextGenerationParams,
     ): Flow<MessageChunk> = callbackFlow {
+        val keyConfig = keyRoulette.resolveKey(providerSetting)
         val requestBody = buildCompletionRequestBody(messages, params)
 
         val url = buildUrl(
@@ -236,11 +257,13 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                     json.encodeToString(requestBody).toRequestBody("application/json".toMediaType())
                 )
                 .configureReferHeaders(providerSetting.baseUrl)
-                .build()
+                .build(),
+            apiKey = keyConfig.key
         )
 
         Log.i(TAG, "streamText: ${json.encodeToString(requestBody)}")
 
+        var streamFailed = false
         val listener = object : EventSourceListener() {
             override fun onEvent(
                 eventSource: EventSource,
@@ -302,6 +325,8 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                 t: Throwable?,
                 response: Response?
             ) {
+                streamFailed = true
+                keyRoulette.reportCallResult(providerSetting.id.toString(), keyConfig.id, false, t?.message ?: response?.message)
                 var exception = t
 
                 t?.printStackTrace()
@@ -332,6 +357,9 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
             }
 
             override fun onClosed(eventSource: EventSource) {
+                if (!streamFailed) {
+                    keyRoulette.reportCallResult(providerSetting.id.toString(), keyConfig.id, true)
+                }
                 println("[onClosed] 连接已关闭")
                 close()
             }

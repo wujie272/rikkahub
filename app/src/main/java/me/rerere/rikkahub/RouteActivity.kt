@@ -75,6 +75,7 @@ import me.rerere.rikkahub.ui.context.LocalSharedTransitionScope
 import me.rerere.rikkahub.ui.context.LocalTTSState
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.context.Navigator
+import me.rerere.rikkahub.ui.haptic.RikkaHapticWrapper
 import me.rerere.rikkahub.ui.hooks.readBooleanPreference
 import me.rerere.rikkahub.ui.hooks.readStringPreference
 import me.rerere.rikkahub.ui.hooks.rememberCustomAsrState
@@ -185,7 +186,9 @@ class RouteActivity : ComponentActivity() {
                         }
                         .build()
                 }
-                AppRoutes()
+                RikkaHapticWrapper {
+                    AppRoutes()
+                }
             }
         }
     }

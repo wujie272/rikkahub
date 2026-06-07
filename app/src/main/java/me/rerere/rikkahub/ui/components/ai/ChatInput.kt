@@ -67,10 +67,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.platform.LocalHapticFeedback
+import me.rerere.rikkahub.ui.haptic.rememberRikkaHaptic
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
@@ -174,9 +173,10 @@ fun ChatInput(
 
     val context = LocalContext.current
     val filesManager: FilesManager = koinInject()
+    val rikkaHaptic = rememberRikkaHaptic()
     val asr = LocalASRState.current
     val asrState by asr.state.collectAsState()
-    val hapticFeedback = LocalHapticFeedback.current
+
     val soundEffectPlayer: SoundEffectPlayer = koinInject()
     LaunchedEffect(Unit) {
         soundEffectPlayer.preload(R.raw.asr_start, R.raw.asr_stop)
@@ -189,13 +189,15 @@ fun ChatInput(
     LaunchedEffect(asrState.status) {
         when (asrState.status) {
             ASRStatus.Listening -> {
-                hapticFeedback.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
+
                 soundEffectPlayer.play(R.raw.asr_start)
+                rikkaHaptic.tick()
             }
 
             ASRStatus.Stopping -> {
-                hapticFeedback.performHapticFeedback(HapticFeedbackType.GestureEnd)
+
                 soundEffectPlayer.play(R.raw.asr_stop)
+                rikkaHaptic.success()
             }
 
             else -> {}

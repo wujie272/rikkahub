@@ -79,6 +79,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import me.rerere.rikkahub.ui.haptic.rememberRikkaHaptic
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -164,12 +165,14 @@ fun SettingMcpPage(vm: SettingVM = koinViewModel()) {
     ) { innerPadding ->
         val mcpManager = koinInject<McpManager>()
         val status by mcpManager.syncingStatus.collectAsStateWithLifecycle()
+        val rikkaHaptic = rememberRikkaHaptic()
         val scope = rememberCoroutineScope()
         val state = rememberPullToRefreshState()
         val loading = status.values.any { it == McpStatus.Connecting || it is McpStatus.Reconnecting }
         PullToRefreshBox(
             isRefreshing = loading,
             onRefresh = {
+                rikkaHaptic.refresh()
                 scope.launch {
                     mcpManager.syncAll()
                 }

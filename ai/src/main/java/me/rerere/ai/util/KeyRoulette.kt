@@ -167,7 +167,7 @@ private class StructuredKeyRoulette(private val context: Context) : KeyRoulette 
             roundRobinCounters.getOrPut(providerId) { AtomicInteger(0) }
         }
         val raw = counter.getAndIncrement()
-        val index = (if (raw < 0) -(raw % active.size) else raw % active.size)
+        val index = Math.floorMod(raw, active.size)
         return active[index]
     }
 
