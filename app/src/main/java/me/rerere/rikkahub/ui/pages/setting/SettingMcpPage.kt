@@ -13,6 +13,7 @@ import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.Upload02
 import me.rerere.hugeicons.stroke.Cancel01
 import androidx.compose.animation.animateContentSize
+import me.rerere.hugeicons.stroke.DragDropHorizontal
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,6 +25,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
@@ -31,6 +33,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.runtime.mutableStateOf
+import sh.calvin.reorderable.ReorderableItem
+import sh.calvin.reorderable.rememberReorderableLazyListState
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
@@ -109,6 +116,13 @@ import org.koin.compose.koinInject
 fun SettingMcpPage(vm: SettingVM = koinViewModel()) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     val mcpConfigs = settings.mcpServers
+    val lazyListState = rememberLazyListState()
+    val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
+        val newConfigs = mcpConfigs.toMutableList().apply {
+            add(to.index, removeAt(from.index))
+        }
+        vm.updateSettings(settings.copy(mcpServers = newConfigs))
+    }
     val creationState = useEditState<McpServerConfig> {
         vm.updateSettings(
             settings.copy(
@@ -181,23 +195,48 @@ fun SettingMcpPage(vm: SettingVM = koinViewModel()) {
                 modifier = Modifier
                     .fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(16.dp)
+                contentPadding = PaddingValues(16.dp),
+                state = lazyListState,
             ) {
                 items(mcpConfigs, key = { it.id }) { mcpConfig ->
-                    McpServerItem(
-                        item = mcpConfig,
-                        onEdit = {
-                            editState.open(mcpConfig)
-                        },
-                        onDelete = {
-                            vm.updateSettings(
-                                settings.copy(
-                                    mcpServers = mcpConfigs.filter { it.id != mcpConfig.id }
+                    ReorderableItem(
+                        state = reorderableState,
+                        key = mcpConfig.id,
+                    ) { isDragging ->
+                        McpServerItem(
+                            item = mcpConfig,
+                            onEdit = {
+                                editState.open(mcpConfig)
+                            },
+                            onDelete = {
+                                vm.updateSettings(
+                                    settings.copy(
+                                        mcpServers = mcpConfigs.filter { it.id != mcpConfig.id }
+                                    )
                                 )
-                            )
-                        },
-                        modifier = Modifier.animateItem()
-                    )
+                            },
+                            dragHandle = {
+                                val haptic = LocalHapticFeedback.current
+                                IconButton(
+                                    onClick = {},
+                                    modifier = Modifier
+                                        .longPressDraggableHandle(
+                                            onDragStarted = {
+                                                haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
+                                            },
+                                            onDragStopped = {
+                                                haptic.performHapticFeedback(HapticFeedbackType.GestureEnd)
+                                            }
+                                        )
+                                ) {
+                                    Icon(
+                                        imageVector = HugeIcons.DragDropHorizontal,
+                                        contentDescription = null
+                                    )
+                                }
+                            }
+                        )
+                    }
                 }
             }
 
@@ -237,6 +276,7 @@ private fun McpServerItem(
     modifier: Modifier = Modifier,
     onDelete: () -> Unit,
     onEdit: (McpServerConfig) -> Unit,
+    dragHandle: @Composable () -> Unit = {},
 ) {
     val mcpManager = koinInject<McpManager>()
     val status by mcpManager.getStatus(item).collectAsStateWithLifecycle(McpStatus.Idle)
@@ -278,10 +318,11 @@ private fun McpServerItem(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    .padding(start = 4.dp, end = 16.dp, top = 16.dp, bottom = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                dragHandle()
                 when (status) {
                     McpStatus.Idle -> Icon(HugeIcons.MessageBlocked, null)
                     McpStatus.Connecting -> CircularProgressIndicator(
