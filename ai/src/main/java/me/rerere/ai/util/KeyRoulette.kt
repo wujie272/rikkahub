@@ -118,22 +118,6 @@ private class StructuredKeyRoulette(private val context: Context) : KeyRoulette 
             return fallback
         }
 
-        // 记录本次选择（用量统计）
-        val selectedKey = when (config.strategy) {
-            LoadBalanceStrategy.RANDOM -> pool.random()
-            LoadBalanceStrategy.ROUND_ROBIN -> roundRobinPick(pool, providerId)
-            LoadBalanceStrategy.LEAST_USED -> {
-                val counts = synchronized(trackerLock) { usageCounts[providerId] ?: emptyMap() }
-                pool.minByOrNull { counts[it.id] ?: 0L } ?: pool.first()
-            }
-            LoadBalanceStrategy.PRIORITY_FIRST -> pool.first()
-        }
-        // 在内存中递增用量（不持久化到 ProviderSetting）
-        synchronized(trackerLock) {
-            val counts = usageCounts.getOrPut(providerId) { mutableMapOf() }
-            counts[selectedKey.id] = (counts[selectedKey.id] ?: 0L) + 1
-        }
-        return selectedKey
         // 跳过连续失败超过 maxFailures 的 Key
         val maxFail = config.maxFailures
         val candidates = synchronized(trackerLock) {
