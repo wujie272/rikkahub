@@ -5,7 +5,7 @@
     <color name="widget_card_bg">#FF2C2C2E</color>
     <color name="widget_title">#FFFFFFFF</color>
     <color name="widget_text_primary">#FFFFFFFF</color>
-    <color name="widget_text_secondary">#FF8E8E93</color>
+    <color name="widget_text_secondary">#66FFFFFF</color>
     <color name="widget_accent">#FF0A84FF</color>
     <color name="widget_divider">#FF38383A</color>
 </resources>

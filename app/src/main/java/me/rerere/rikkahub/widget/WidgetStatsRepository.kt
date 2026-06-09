@@ -63,6 +63,8 @@ class WidgetStatsRepository(context: Context) {
         val topAssistantName: String = "N/A",
         val topAssistantPercentage: Int = 0,
         val totalMessages: Long = 0,
+        val todayChats: Int = 0,
+        val totalTokens: Long = 0,
         val lastUpdated: String = "",
     )
 
@@ -108,6 +110,8 @@ class WidgetStatsRepository(context: Context) {
                 topAssistantName = topAssistantName,
                 topAssistantPercentage = topAssistantPct,
                 totalMessages = totalMessages,
+                todayChats = queryTodayChats(db),
+                totalTokens = queryTotalTokens(db),
                 lastUpdated = formatTime(),
             )
         } catch (e: Exception) {
@@ -219,6 +223,19 @@ class WidgetStatsRepository(context: Context) {
         db.rawQuery(sql, null).use { cursor ->
             return if (cursor.moveToFirst()) cursor.getInt(0) else 0
         }
+    }
+
+    private fun queryTodayChats(db: SQLiteDatabase): Int {
+        val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+        return queryInt(db, "SELECT COUNT(*) FROM conversationentity WHERE date(create_time) = '$today'")
+    }
+
+    private fun queryTotalTokens(db: SQLiteDatabase): Long {
+        return queryLong(
+            db,
+            "SELECT COALESCE(SUM(json_extract(mn.messages, '$[0].usage.total_tokens')), 0) " +
+                "FROM message_node mn"
+        )
     }
 
     private fun queryLong(db: SQLiteDatabase, sql: String): Long {

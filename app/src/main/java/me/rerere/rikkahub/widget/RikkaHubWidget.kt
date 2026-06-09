@@ -7,6 +7,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.os.Bundle
 import android.widget.RemoteViews
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -18,15 +19,15 @@ import me.rerere.rikkahub.RouteActivity
 /**
  * RikkaHub Widget — 桌面数据看板
  *
- * 4×2 尺寸，展示 RikkaHub 使用统计：
- * - 总对话数
- * - 最常用模型（使用率）
- * - 最常用助手（使用率）
- * - 总消息数
+ * 澎湃OS/Android 小部件，支持 2×2 / 4×2 / 4×4 三种尺寸自适应。
+ * 数据刷新由 WorkManager 接管，替代系统轮询。
  *
- * 标准 AppWidgetProvider API，零门槛适配 HyperOS。
+ * 尺寸说明:
+ * - 2×2 (SMALL):  简约卡片，仅显示总对话数和消息数
+ * - 4×2 (MEDIUM): 标准看板，对话/模型/助手三行统计
+ * - 4×4 (LARGE):  完整仪表盘，6 维度数据 + Token 用量
  */
-class RikkaHubWidget : AppWidgetProvider() {
+open class RikkaHubWidget : AppWidgetProvider() {
 
     override fun onUpdate(
         context: Context,
@@ -38,17 +39,59 @@ class RikkaHubWidget : AppWidgetProvider() {
         }
     }
 
+    override fun onAppWidgetOptionsChanged(
+        context: Context,
+        appWidgetManager: AppWidgetManager,
+        appWidgetId: Int,
+        newOptions: Bundle
+    ) {
+        // 用户调整大小时即时切换布局
+        updateWidgetAsync(context, appWidgetManager, appWidgetId)
+    }
+
     override fun onEnabled(context: Context) {
         super.onEnabled(context)
+        // 启用 WorkManager 智能刷新
+        WidgetRefreshScheduler.schedule(context)
     }
 
     override fun onDisabled(context: Context) {
         super.onDisabled(context)
+        // 最后一个 Widget 移除后停止刷新
+        WidgetRefreshScheduler.cancel(context)
     }
 
     companion object {
         private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         private var repository: WidgetStatsRepository? = null
+
+        /** 尺寸枚举 */
+        enum class WidgetSize {
+            SMALL_2X2,  // 2 格 × 2 格
+            MEDIUM_4X2, // 4 格 × 2 格
+            LARGE_4X4   // 4 格 × 4 格
+        }
+
+        /**
+         * 根据 Widget 尺寸选择布局和数据显示策略
+         */
+        private fun resolveWidgetSize(options: Bundle): WidgetSize {
+            val width = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 250)
+            return when {
+                width < 200 -> WidgetSize.SMALL_2X2
+                else -> {
+                    val height = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 110)
+                    if (height < 200) WidgetSize.MEDIUM_4X2 else WidgetSize.LARGE_4X4
+                }
+            }
+        }
+
+        /** 获取对应尺寸的布局资源 ID */
+        private fun getLayoutForSize(size: WidgetSize): Int = when (size) {
+            WidgetSize.SMALL_2X2 -> R.layout.widget_rikkahub_2x2
+            WidgetSize.MEDIUM_4X2 -> R.layout.widget_rikkahub_4x2
+            WidgetSize.LARGE_4X4 -> R.layout.widget_rikkahub_4x4
+        }
 
         /**
          * 异步更新 Widget
@@ -62,13 +105,16 @@ class RikkaHubWidget : AppWidgetProvider() {
                 repository = WidgetStatsRepository(context)
             }
 
+            val options = appWidgetManager.getAppWidgetOptions(appWidgetId)
+            val size = resolveWidgetSize(options)
+            val layoutId = getLayoutForSize(size)
+
             scope.launch {
                 try {
                     val stats = repository?.getStats() ?: return@launch
+                    val views = createRemoteViews(context, stats, size, layoutId)
 
-                    val views = createRemoteViews(context, stats)
-
-                    // 点击跳转
+                    // 点击跳转主界面
                     val intent = Intent(context, RouteActivity::class.java).apply {
                         flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
                     }
@@ -82,51 +128,98 @@ class RikkaHubWidget : AppWidgetProvider() {
 
                     appWidgetManager.updateAppWidget(appWidgetId, views)
                 } catch (e: Exception) {
-                    // 查询失败时显示占位
-                    val views = RemoteViews(context.packageName, R.layout.widget_rikkahub)
-                    views.setTextViewText(R.id.widget_total_conversations, "?")
+                    val views = RemoteViews(context.packageName, layoutId)
+                    views.setTextViewText(R.id.widget_total_conversations, "--")
+                    views.setTextViewText(R.id.widget_total_messages, "更新失败")
                     appWidgetManager.updateAppWidget(appWidgetId, views)
                 }
             }
         }
 
         /**
-         * 根据统计数据创建 RemoteViews
+         * 根据尺寸创建对应的 RemoteViews
          */
         fun createRemoteViews(
             context: Context,
-            stats: WidgetStatsRepository.WidgetStats
+            stats: WidgetStatsRepository.WidgetStats,
+            size: WidgetSize,
+            layoutId: Int
         ): RemoteViews {
-            return RemoteViews(context.packageName, R.layout.widget_rikkahub).apply {
-                setTextViewText(
-                    R.id.widget_total_conversations,
-                    formatCount(stats.totalConversations)
-                )
+            return RemoteViews(context.packageName, layoutId).apply {
+                val fmtCount = formatCount(stats.totalConversations)
 
-                // 模型使用率
-                val modelText = if (stats.topModelPercentage > 0) {
-                    "${stats.topModelName} ${stats.topModelPercentage}%"
-                } else {
-                    stats.topModelName
-                }
-                setTextViewText(R.id.widget_top_model, modelText)
+                when (size) {
+                    WidgetSize.SMALL_2X2 -> {
+                        // 2×2: 大数字 + 标签
+                        setTextViewText(R.id.widget_total_conversations, fmtCount)
+                        val msgText = if (stats.totalMessages > 0) {
+                            "📝 ${formatCount(stats.totalMessages)} 条消息"
+                        } else {
+                            "更新于 ${stats.lastUpdated}"
+                        }
+                        setTextViewText(R.id.widget_total_messages, msgText)
+                    }
 
-                // 助手使用率
-                val assistantText = if (stats.topAssistantPercentage > 0) {
-                    "${stats.topAssistantName} ${stats.topAssistantPercentage}%"
-                } else {
-                    stats.topAssistantName
-                }
-                setTextViewText(R.id.widget_top_assistant, assistantText)
+                    WidgetSize.MEDIUM_4X2 -> {
+                        // 4×2: 三行数据（现有布局）
+                        setTextViewText(R.id.widget_total_conversations, fmtCount)
 
-                // 总消息数
-                val msgText = if (stats.totalMessages > 0) {
-                    "共 ${formatCount(stats.totalMessages)} 条消息 · ${stats.lastUpdated}"
-                } else {
-                    "更新于 ${stats.lastUpdated}"
+                        val modelText = if (stats.topModelPercentage > 0) {
+                            "${stats.topModelName} ${stats.topModelPercentage}%"
+                        } else {
+                            stats.topModelName
+                        }
+                        setTextViewText(R.id.widget_top_model, modelText)
+
+                        val assistantText = if (stats.topAssistantPercentage > 0) {
+                            "${stats.topAssistantName} ${stats.topAssistantPercentage}%"
+                        } else {
+                            stats.topAssistantName
+                        }
+                        setTextViewText(R.id.widget_top_assistant, assistantText)
+
+                        val msgText = if (stats.totalMessages > 0) {
+                            "共 ${formatCount(stats.totalMessages)} 条消息"
+                        } else {
+                            "暂无消息"
+                        }
+                        setTextViewText(R.id.widget_total_messages, msgText)
+                        setTextViewText(R.id.widget_updated_at, stats.lastUpdated)
+                    }
+
+                    WidgetSize.LARGE_4X4 -> {
+                        // 4×4: 6 维度完整仪表盘
+                        setTextViewText(R.id.widget_total_conversations, fmtCount)
+                        setTextViewText(R.id.widget_total_messages, formatCount(stats.totalMessages))
+
+                        val modelText = if (stats.topModelPercentage > 0) {
+                            "${stats.topModelName} ${stats.topModelPercentage}%"
+                        } else {
+                            stats.topModelName
+                        }
+                        setTextViewText(R.id.widget_top_model, modelText)
+
+                        val assistantText = if (stats.topAssistantPercentage > 0) {
+                            "${stats.topAssistantName} ${stats.topAssistantPercentage}%"
+                        } else {
+                            stats.topAssistantName
+                        }
+                        setTextViewText(R.id.widget_top_assistant, assistantText)
+
+                        // 今日对话
+                        setTextViewText(R.id.widget_today_chats, stats.todayChats.toString())
+
+                        // Token 用量
+                        val tokenText = if (stats.totalTokens > 0) {
+                            formatCount(stats.totalTokens)
+                        } else {
+                            "--"
+                        }
+                        setTextViewText(R.id.widget_token_usage, tokenText)
+
+                        setTextViewText(R.id.widget_updated_at, "更新于 ${stats.lastUpdated}")
+                    }
                 }
-                setTextViewText(R.id.widget_total_messages, msgText)
-                setTextViewText(R.id.widget_updated_at, stats.lastUpdated)
             }
         }
 
@@ -144,7 +237,7 @@ class RikkaHubWidget : AppWidgetProvider() {
         fun formatCount(count: Int): String = formatCount(count.toLong())
 
         /**
-         * 公共刷新方法 — 供后台任务或数据更新时调用
+         * 公共刷新方法 — 供 WorkManager 后台任务调用
          */
         fun refreshWidgets(context: Context) {
             val manager = AppWidgetManager.getInstance(context)
