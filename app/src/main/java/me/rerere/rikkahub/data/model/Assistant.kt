@@ -46,6 +46,13 @@ data class Assistant(
     val enableTimeReminder: Boolean = false,            // 时间间隔提醒注入
     val allowConversationSystemPrompt: Boolean = false, // 允许对话单独重写 system prompt
     val allowConversationPromptInjection: Boolean = false, // 允许对话单独绑定提示词注入
+    // ===== SillyTavern 兼容字段 =====
+    val alternateGreetings: List<UIMessage> = emptyList(),  // 备用开场白
+    val mesExample: String = "",                            // 示例对话
+    val creatorNotes: String = "",                          // 作者备注
+    val creator: String = "",                               // 作者
+    val characterVersion: String = "",                      // 角色版本
+    val postHistoryInstructions: String = "",                // 历史后指令
 )
 
 @Serializable
