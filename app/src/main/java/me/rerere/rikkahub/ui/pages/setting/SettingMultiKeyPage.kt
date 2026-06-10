@@ -1,5 +1,13 @@
 package me.rerere.rikkahub.ui.pages.setting
 
+import me.rerere.hugeicons.stroke.Connect
+import androidx.compose.foundation.lazy.items
+import me.rerere.ai.provider.ModelType
+import me.rerere.ai.provider.ProviderManager
+import me.rerere.ai.provider.TextGenerationParams
+import me.rerere.ai.ui.UIMessage
+import me.rerere.rikkahub.utils.UiState
+
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.PlusSign
@@ -13,11 +21,11 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
@@ -25,9 +33,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import kotlinx.coroutines.withTimeout
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -102,6 +110,7 @@ fun SettingMultiKeyPage(id: Uuid) {
         saveProvider(updated)
     }
 
+    val providerManager = koinInject<ProviderManager>()
     val strUndo = ctx.getString(R.string.multi_key_undo)
 
     Scaffold(
@@ -221,46 +230,90 @@ fun SettingMultiKeyPage(id: Uuid) {
             }
 
             if (apiKeys.isNotEmpty()) {
-                item {
+                items(apiKeys, key = { it.id }) { key ->
                     IosCard {
-                        apiKeys.forEachIndexed { index, key ->
-                            KeyRow(
-                                config = key,
-                                onToggle = { enabled ->
-                                    val newStatus = if (enabled) ApiKeyStatus.ACTIVE else ApiKeyStatus.DISABLED
-                                    val newKeys = apiKeys.toMutableList().apply { set(index, key.copy(status = newStatus)) }
-                                    updateKeys(newKeys)
-                                },
-                                onEdit = { updated ->
-                                    val newKeys = apiKeys.toMutableList().apply { set(index, updated) }
-                                    updateKeys(newKeys)
-                                },
-                                onDelete = {
-                                    val removed = key; val ri = index
-                                    val newKeys = apiKeys.toMutableList().apply { removeAt(ri) }
-                                    updateKeys(newKeys)
-                                    scope.launch {
-                                        val result = snackbarHostState.showSnackbar(
-                                            message = ctx.getString(R.string.multi_key_deleted,
-                                                removed.name.ifBlank { removed.key.take(8) + "..." }),
-                                            actionLabel = strUndo,
-                                            duration = SnackbarDuration.Short
-                                        )
-                                        if (result == SnackbarResult.ActionPerformed) {
-                                            val cur = internalProvider.apiKeys.toMutableList()
-                                            cur.add(if (ri <= cur.size) ri else cur.size, removed)
-                                            updateKeys(cur)
-                                        }
+                        KeyRow(
+                            config = key,
+                            onToggle = { enabled ->
+                                val newStatus = if (enabled) ApiKeyStatus.ACTIVE else ApiKeyStatus.DISABLED
+                                val idx = apiKeys.indexOf(key)
+                                val newKeys = apiKeys.toMutableList().apply { set(idx, key.copy(status = newStatus)) }
+                                updateKeys(newKeys)
+                            },
+                            onEdit = { updated ->
+                                val idx = apiKeys.indexOf(key)
+                                val newKeys = apiKeys.toMutableList().apply { set(idx, updated) }
+                                updateKeys(newKeys)
+                            },
+                            onDelete = {
+                                val removed = key; val ri = apiKeys.indexOf(key)
+                                val newKeys = apiKeys.toMutableList().apply { removeAt(ri) }
+                                updateKeys(newKeys)
+                                scope.launch {
+                                    val result = snackbarHostState.showSnackbar(
+                                        message = ctx.getString(R.string.multi_key_deleted,
+                                            removed.name.ifBlank { removed.key.take(8) + "..." }),
+                                        actionLabel = strUndo,
+                                        duration = SnackbarDuration.Short
+                                    )
+                                    if (result == SnackbarResult.ActionPerformed) {
+                                        val cur = internalProvider.apiKeys.toMutableList()
+                                        cur.add(if (ri <= cur.size) ri else cur.size, removed)
+                                        updateKeys(cur)
                                     }
                                 }
-                            )
-                            if (index < apiKeys.lastIndex) {
-                                HorizontalDivider(
-                                    modifier = Modifier.padding(horizontal = 12.dp),
-                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
-                                )
-                            }
-                        }
+                            },
+                            onTest = { configToTest, onResult ->
+                                scope.launch {
+                                    try {
+                                        val testProvider = internalProvider.copyProvider(
+                                            apiKeys = listOf(configToTest),
+                                            keyManagement = internalProvider.keyManagement
+                                        )
+                                        testProvider.syncApiKeyString()
+                                        withTimeout(15_000L) {
+                                            val model = internalProvider.models
+                                                .firstOrNull { it.type == ModelType.CHAT }
+                                            if (model != null) {
+                                                providerManager.getProviderByType(testProvider)
+                                                    .generateText(
+                                                        providerSetting = testProvider,
+                                                        messages = listOf(
+                                                            UIMessage.system("You are a helpful assistant. Reply only with the word 'ok', nothing else."),
+                                                            UIMessage.user("Say ok")
+                                                        ),
+                                                        params = TextGenerationParams(model = model)
+                                                    )
+                                            } else {
+                                                providerManager.getProviderByType(testProvider)
+                                                    .listModels(testProvider)
+                                            }
+                                        }
+                                        val idx = apiKeys.indexOf(configToTest)
+                                        val newKeys = apiKeys.toMutableList().apply {
+                                            set(idx, configToTest.copy(
+                                                status = ApiKeyStatus.ACTIVE,
+                                                lastError = null,
+                                                lastErrorAt = null
+                                            ))
+                                        }
+                                        updateKeys(newKeys)
+                                        onResult(null)
+                                    } catch (e: Exception) {
+                                        val idx = apiKeys.indexOf(configToTest)
+                                        val newKeys = apiKeys.toMutableList().apply {
+                                            set(idx, configToTest.copy(
+                                                status = ApiKeyStatus.ERROR,
+                                                lastError = e.message?.take(200),
+                                                lastErrorAt = System.currentTimeMillis()
+                                            ))
+                                        }
+                                        updateKeys(newKeys)
+                                        onResult(e)
+                                    }
+                                }
+                            },
+                        )
                     }
                 }
             }
@@ -358,8 +411,10 @@ private fun KeyRow(
     onToggle: (Boolean) -> Unit,
     onEdit: (ApiKeyConfig) -> Unit,
     onDelete: () -> Unit,
+    onTest: ((ApiKeyConfig, (Exception?) -> Unit) -> Unit)? = null,
 ) {
     val ctx = LocalContext.current
+    var testingState by remember { mutableStateOf<UiState<Unit>>(UiState.Idle) }
     val statusColor = when (config.status) {
         ApiKeyStatus.ACTIVE -> Color(0xFF4CAF50)
         ApiKeyStatus.DISABLED -> Color(0xFF9E9E9E)
@@ -382,6 +437,7 @@ private fun KeyRow(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+
         Surface(
             shape = RoundedCornerShape(999.dp),
             color = statusColor.copy(alpha = 0.12f)
@@ -392,9 +448,44 @@ private fun KeyRow(
         Spacer(Modifier.width(8.dp))
         Text(displayName, style = MaterialTheme.typography.bodyMedium, maxLines = 1,
             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-        Spacer(Modifier.width(8.dp))
-        Switch(checked = config.status == ApiKeyStatus.ACTIVE, onCheckedChange = onToggle)
         Spacer(Modifier.width(4.dp))
+        Switch(checked = config.status == ApiKeyStatus.ACTIVE, onCheckedChange = onToggle)
+        Spacer(Modifier.width(2.dp))
+        // 检测按钮
+        IconButton(
+            onClick = {
+                testingState = UiState.Loading
+                onTest?.invoke(config) { error ->
+                    testingState = if (error == null) UiState.Success(Unit) else UiState.Error(error)
+                }
+            },
+            enabled = config.key.isNotBlank() && testingState !is UiState.Loading,
+            modifier = Modifier.size(36.dp)
+        ) {
+            when (testingState) {
+                is UiState.Loading -> {
+                    androidx.compose.material3.CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp
+                    )
+                }
+                is UiState.Success -> {
+                    Icon(HugeIcons.Connect, "验证成功",
+                        modifier = Modifier.size(18.dp),
+                        tint = Color(0xFF4CAF50))
+                }
+                is UiState.Error -> {
+                    Icon(HugeIcons.Connect, "验证失败",
+                        modifier = Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.error)
+                }
+                is UiState.Idle -> {
+                    Icon(HugeIcons.Connect, ctx.getString(R.string.multi_key_test),
+                        modifier = Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
         IconButton(onClick = { showEdit = true }, modifier = Modifier.size(36.dp)) {
             Icon(HugeIcons.PencilEdit01, ctx.getString(R.string.multi_key_edit_btn), modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
         }

@@ -287,6 +287,9 @@ dependencies {
     // sqlite-android (requery SQLite for Android)
     implementation(libs.sqlite.android)
 
+    // security (encrypted storage)
+    implementation(libs.androidx.security.crypto)
+
     // modules
     implementation(project(":ai"))
     implementation(project(":web"))

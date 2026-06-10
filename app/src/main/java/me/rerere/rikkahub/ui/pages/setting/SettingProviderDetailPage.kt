@@ -121,6 +121,9 @@ import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.hooks.useEditState
 import me.rerere.rikkahub.ui.pages.assistant.detail.CustomBodies
 import me.rerere.rikkahub.ui.pages.assistant.detail.CustomHeaders
+import me.rerere.rikkahub.data.key.ApiKeyEntry
+import me.rerere.rikkahub.data.key.KeyManager
+import me.rerere.rikkahub.ui.pages.setting.components.KeyManagementTab
 import me.rerere.rikkahub.ui.pages.setting.components.ProviderConfigure
 import me.rerere.rikkahub.ui.pages.setting.components.ProviderConnectionTester
 import me.rerere.rikkahub.ui.pages.setting.components.SettingProviderBalanceOption
@@ -141,10 +144,12 @@ fun SettingProviderDetailPage(id: Uuid, vm: SettingVM = koinViewModel()) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     val navController = LocalNavController.current
     val provider = settings.providers.find { it.id == id } ?: return
-    val pager = rememberPagerState { 2 }
+    val pager = rememberPagerState { 3 }
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
     val context = LocalContext.current
+    val keyManager = koinInject<KeyManager>()
+    var testingKeyValue by remember { mutableStateOf<String?>(null) }
 
     val onEdit = { newProvider: ProviderSetting ->
         val newSettings = settings.copy(
@@ -212,8 +217,8 @@ fun SettingProviderDetailPage(id: Uuid, vm: SettingVM = koinViewModel()) {
                 )
                 NavigationBarItem(
                     selected = pager.currentPage == 1,
-                    label = { Text(stringResource(id = R.string.setting_provider_page_models)) },
-                    icon = { Icon(HugeIcons.Package01, null) },
+                    label = { Text(stringResource(R.string.setting_provider_page_keys)) },
+                    icon = { Icon(HugeIcons.Key01, null) },
                     onClick = {
                         scope.launch {
                             pager.animateScrollToPage(1)
@@ -221,11 +226,13 @@ fun SettingProviderDetailPage(id: Uuid, vm: SettingVM = koinViewModel()) {
                     }
                 )
                 NavigationBarItem(
-                    selected = false,
-                    label = { Text("Keys") },
-                    icon = { Icon(HugeIcons.Key01, null) },
+                    selected = pager.currentPage == 2,
+                    label = { Text(stringResource(id = R.string.setting_provider_page_models)) },
+                    icon = { Icon(HugeIcons.Package01, null) },
                     onClick = {
-                        navController.navigate(Screen.SettingMultiKey(provider.id.toString()))
+                        scope.launch {
+                            pager.animateScrollToPage(2)
+                        }
                     }
                 )
             }
@@ -255,6 +262,17 @@ fun SettingProviderDetailPage(id: Uuid, vm: SettingVM = koinViewModel()) {
                 }
 
                 1 -> {
+                    KeyManagementTab(
+                        providerId = provider.id,
+                        keyManager = keyManager,
+                        modifier = Modifier.fillMaxSize(),
+                        onTestKey = { entry ->
+                            testingKeyValue = entry.keyValue
+                        },
+                    )
+                }
+
+                2 -> {
                     SettingProviderModelPage(
                         provider = provider,
                         onEdit = onEdit
@@ -264,6 +282,20 @@ fun SettingProviderDetailPage(id: Uuid, vm: SettingVM = koinViewModel()) {
 
             }
         }
+    }
+
+    // 当在密钥 Tab 点击测试按钮时，弹出连接测试
+    testingKeyValue?.let { keyValue ->
+        val testProvider = when (provider) {
+            is ProviderSetting.OpenAI -> provider.copy(apiKey = keyValue)
+            is ProviderSetting.Google -> provider.copy(apiKey = keyValue)
+            is ProviderSetting.Claude -> provider.copy(apiKey = keyValue)
+            else -> return@let
+        }
+        ProviderConnectionTester(
+            internalProvider = testProvider,
+            onDismiss = { testingKeyValue = null },
+        )
     }
 }
 

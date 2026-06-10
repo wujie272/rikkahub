@@ -51,8 +51,9 @@ import org.koin.compose.koinInject
 @Composable
 fun ProviderConnectionTester(
     internalProvider: ProviderSetting,
+    onDismiss: (() -> Unit)? = null,
 ) {
-    var showTestDialog by remember { mutableStateOf(false) }
+    var showTestDialog by remember(internalProvider, onDismiss) { mutableStateOf(onDismiss != null) }
     val providerManager = koinInject<ProviderManager>()
     val scope = rememberCoroutineScope()
 
@@ -77,7 +78,10 @@ fun ProviderConnectionTester(
         }
 
         AlertDialog(
-            onDismissRequest = { showTestDialog = false },
+            onDismissRequest = {
+                showTestDialog = false
+                onDismiss?.invoke()
+            },
             title = {
                 Text(stringResource(R.string.setting_provider_page_test_connection))
             },
@@ -112,7 +116,10 @@ fun ProviderConnectionTester(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showTestDialog = false }) {
+                TextButton(onClick = {
+                    showTestDialog = false
+                    onDismiss?.invoke()
+                }) {
                     Text(stringResource(R.string.cancel))
                 }
             },
