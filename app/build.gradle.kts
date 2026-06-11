@@ -193,6 +193,10 @@ dependencies {
     implementation(libs.haze.blur)
     implementation(libs.haze.blur.materials)
 
+
+    // jsoup (HTML parser for browser tool)
+    implementation(libs.jsoup)
+
     // koin
     implementation(platform(libs.koin.bom))
     implementation(libs.koin.android)

@@ -1142,9 +1142,6 @@
   <string name="setting_model_page_tab_model">Model</string>
   <string name="setting_model_page_tab_prompt">Prompts</string>
   <string name="setting_model_page_prompt_translation">Translation</string>
-  <string name="widget_label_total_messages">总消息</string>
-  <string name="widget_label_today_chats">今日对话</string>
-  <string name="widget_label_token_usage">Token 用量</string>
   <string name="setting_model_page_prompt_title">Title Generation</string>
   <string name="setting_model_page_prompt_suggestion">Chat Reply Suggestions</string>
   <string name="setting_model_page_prompt_ocr">OCR Recognition</string>

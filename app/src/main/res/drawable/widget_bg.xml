@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<shape xmlns:android="http://schemas.android.com/apk/res/android"
-    android:shape="rectangle">
-    <corners android:radius="18dp" />
-    <!-- 澎湃OS规范: 1080p→55px(≈18.3dp), 2K→73px(≈18.25dp), 取18dp兼容 -->
-    <solid android:color="@color/widget_bg" />
-</shape>

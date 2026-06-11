@@ -125,45 +125,6 @@
         android:value="androidx.startup"
         tools:node="remove" />
     </provider>
-    <!-- RikkaHub Widgets — 三种尺寸独立注册，澎湃OS小部件中心可分别选择 -->
-    <receiver
-      android:name=".widget.RikkaHubWidget"
-      android:exported="true"
-      android:label="@string/app_name"
-      android:description="@string/widget_description">
-      <intent-filter>
-        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-      </intent-filter>
-      <meta-data
-        android:name="android.appwidget.provider"
-        android:resource="@xml/rikkahub_widget_info_4x2" />
-    </receiver>
-
-    <receiver
-      android:name=".widget.RikkaHubWidgetSmall"
-      android:exported="true"
-      android:label="@string/app_name"
-      android:description="@string/widget_description">
-      <intent-filter>
-        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-      </intent-filter>
-      <meta-data
-        android:name="android.appwidget.provider"
-        android:resource="@xml/rikkahub_widget_info_2x2" />
-    </receiver>
-
-    <receiver
-      android:name=".widget.RikkaHubWidgetLarge"
-      android:exported="true"
-      android:label="@string/app_name"
-      android:description="@string/widget_description">
-      <intent-filter>
-        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-      </intent-filter>
-      <meta-data
-        android:name="android.appwidget.provider"
-        android:resource="@xml/rikkahub_widget_info_4x4" />
-    </receiver>
   </application>
 
 </manifest>
