@@ -70,6 +70,8 @@ class SubAgentEngine(
             parentAssistantId = parentAssistantId,
             label = request.label?.takeIf { it.isNotBlank() } ?: request.task.take(60),
             task = request.task,
+            runInBackground = request.runInBackground,
+            timeoutSeconds = request.timeoutSeconds,
             status = SubAgentStatus.PENDING,
             startedAtMs = now,
         )
