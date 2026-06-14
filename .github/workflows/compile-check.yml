@@ -45,7 +45,41 @@ jobs:
         run: |
           echo '{"project_info":{"project_number":"000000000000","project_id":"rikkahub-ci-dummy","storage_bucket":"rikkahub-ci-dummy.appspot.com"},"client":[{"client_info":{"mobilesdk_app_id":"1:000000000000:android:0000000000000000","android_client_info":{"package_name":"me.jaye.rikkahub"}},"oauth_client":[],"api_key":[{"current_key":"AIzaSyDummy0000000000000000000000000000"}],"services":{"analytics_service":{"status":1},"appinvite_service":{"status":1},"google_cast_service":{"status":1}}}],"configuration_version":"1"}' > app/google-services.json
 
-      - name: Compile check
+      - name: Compile check (all modules)
         run: |
           chmod +x gradlew
-          ./gradlew assembleRelease --continue
+          
+          # 跑全量编译，保留完整输出
+          ./gradlew compileReleaseKotlin --continue 2>&1 | tee /tmp/gradle_full.log
+          EXIT_CODE=${PIPESTATUS[0]}
+          
+          echo ""
+          echo "========================================"
+          echo "📦 编译结果分段报告（按模块）"
+          echo "========================================"
+          
+          # 提取各模块的 compileReleaseKotlin 任务输出，按模块分组
+          for MODULE in app ai common document highlight material3 search speech web workspace; do
+            MODULE_OUTPUT=$(grep -A 9999 "> Task :$MODULE:compileReleaseKotlin" /tmp/gradle_full.log \
+              | grep -B 1 -E "^[[:space:]]*e:" \
+              | head -100)
+            if [ -n "$MODULE_OUTPUT" ]; then
+              echo "::group::❌ :$MODULE 编译失败"
+              echo "$MODULE_OUTPUT"
+              echo "::endgroup::"
+            fi
+          done
+          
+          echo ""
+          # 提取 BUILD FAILED / BUILD SUCCESSFUL
+          RESULT_LINE=$(grep -E "^(BUILD|FAILURE)" /tmp/gradle_full.log | tail -1)
+          echo "📊 结果: $RESULT_LINE"
+          
+          # 统计错误数
+          ERROR_COUNT=$(grep -c "^e:" /tmp/gradle_full.log 2>/dev/null || echo 0)
+          if [ "$ERROR_COUNT" -gt 0 ]; then
+            echo "⚠️  共 $ERROR_COUNT 个编译错误"
+          fi
+          
+          # 按原始 exit code 退出
+          exit $EXIT_CODE
