@@ -483,6 +483,9 @@
   <string name="multi_key_save">保存</string>
   <string name="multi_key_restored">已恢复</string>
   <string name="multi_key_test">检测</string>
+  <string name="multi_key_manage">管理密钥</string>
+  <string name="multi_key_summary">%d 个活跃 / 共 %d 个</string>
+  
   <string name="permission_camera">相机</string>
   <string name="permission_camera_desc">需要相机权限以拍摄照片</string>
   <string name="permission_desc_goto_setting">某些权限已被永久拒绝，请前往应用设置手动开启：</string>

@@ -96,11 +96,20 @@ private class LruKeyRoulette(private val context: Context) : KeyRoulette {
     }
 }
 
+/** 持久化文件名：失败追踪 + 用量统计 */
+private const val STRUCTURED_TRACKER_FILE = "structured_key_tracker.json"
+
 /**
  * 结构化 Key 轮换引擎
  * 支持 RANDOM / ROUND_ROBIN / LEAST_USED / PRIORITY_FIRST 四种策略
  * 自动跟踪健康度，标记 ERROR / RATE_LIMITED 状态
+ * 失败追踪和用量统计持久化到磁盘，app 重启不丢
  */
+private data class TrackerData(
+    val failureTracker: Map<String, Map<String, Int>> = emptyMap(),
+    val usageCounts: Map<String, Map<String, Long>> = emptyMap(),
+)
+
 private class StructuredKeyRoulette(private val context: Context) : KeyRoulette {
     // providerId -> AtomicInteger (ROUND_ROBIN 计数器)
     private val roundRobinCounters = mutableMapOf<String, AtomicInteger>()
@@ -137,10 +146,11 @@ private class StructuredKeyRoulette(private val context: Context) : KeyRoulette 
             LoadBalanceStrategy.PRIORITY_FIRST -> pool.first()
         }
 
-        // 在内存中递增用量
+        // 递增用量并持久化
         synchronized(trackerLock) {
             val counts = usageCounts.getOrPut(providerId) { mutableMapOf() }
             counts[selected.id] = (counts[selected.id] ?: 0L) + 1
+            saveToDisk()
         }
 
         return selected
@@ -155,11 +165,43 @@ private class StructuredKeyRoulette(private val context: Context) : KeyRoulette 
         return active[index]
     }
 
-    // providerId -> keyId -> consecutiveFailures
+    // providerId -> keyId -> consecutiveFailures (持久化)
     private val failureTracker = mutableMapOf<String, MutableMap<String, Int>>()
-    // providerId -> keyId -> totalCalls (in-memory 用量统计)
+    // providerId -> keyId -> totalCalls (持久化)
     private val usageCounts = mutableMapOf<String, MutableMap<String, Long>>()
     private val trackerLock = Any()
+
+    init {
+        loadFromDisk()
+    }
+
+    private fun trackerFile(): File = File(context.cacheDir, STRUCTURED_TRACKER_FILE)
+
+    private fun loadFromDisk() {
+        try {
+            val file = trackerFile()
+            if (!file.exists()) return
+            val data = Json.decodeFromString<TrackerData>(file.readText())
+            synchronized(trackerLock) {
+                failureTracker.clear()
+                failureTracker.putAll(data.failureTracker.mapValues { it.value.toMutableMap() })
+                usageCounts.clear()
+                usageCounts.putAll(data.usageCounts.mapValues { it.value.toMutableMap() })
+            }
+        } catch (_: Exception) { /* 文件损坏忽略 */ }
+    }
+
+    private fun saveToDisk() {
+        try {
+            val snapshot = synchronized(trackerLock) {
+                TrackerData(
+                    failureTracker = failureTracker.mapValues { it.value.toMap() },
+                    usageCounts = usageCounts.mapValues { it.value.toMap() },
+                )
+            }
+            trackerFile().writeText(Json.encodeToString(snapshot))
+        } catch (_: Exception) { /* 写入失败忽略 */ }
+    }
 
     override fun reportCallResult(
         providerId: String,
@@ -175,6 +217,7 @@ private class StructuredKeyRoulette(private val context: Context) : KeyRoulette 
             } else {
                 providerTracker[keyStr] = (providerTracker[keyStr] ?: 0) + 1
             }
+            saveToDisk()
         }
     }
 
