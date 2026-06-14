@@ -328,7 +328,6 @@ internal fun SettingMultiKeyContent(
                                     },
                             )
                         }
-                    }
                 }
             }
         }
