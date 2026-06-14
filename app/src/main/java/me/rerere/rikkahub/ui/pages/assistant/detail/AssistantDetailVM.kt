@@ -15,7 +15,6 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
-import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.files.SkillManager
 import me.rerere.rikkahub.data.files.SkillMetadata
@@ -24,7 +23,6 @@ import me.rerere.rikkahub.data.model.AssistantMemory
 import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.data.model.Tag
 import me.rerere.rikkahub.data.repository.MemoryRepository
-import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import kotlin.uuid.Uuid
 
 private const val TAG = "AssistantDetailVM"
@@ -35,7 +33,6 @@ class AssistantDetailVM(
     private val memoryRepository: MemoryRepository,
     private val filesManager: FilesManager,
     private val skillManager: SkillManager,
-    private val workspaceRepository: WorkspaceRepository,
 ) : ViewModel() {
     private val assistantId = Uuid.parse(id)
 
@@ -92,14 +89,6 @@ class AssistantDetailVM(
             settings.assistantTags
         }.stateIn(
             scope = viewModelScope, started = SharingStarted.Eagerly, initialValue = emptyList()
-        )
-
-    val workspaces: StateFlow<List<WorkspaceEntity>> = workspaceRepository
-        .listFlow()
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.Eagerly,
-            initialValue = emptyList(),
         )
 
     fun updateTags(tagIds: List<Uuid>, tags: List<Tag>) {
@@ -178,6 +167,33 @@ class AssistantDetailVM(
         }
     }
 
+    /**
+     * Atomic transform-based update for the active assistant. Use this for any rapid
+     * mutator (per-tool toggles, per-skill toggles, per-MCP toggles) where two taps in
+     * quick succession would otherwise both snapshot the SAME stale Assistant from
+     * `assistant.value` — last writer winning would silently drop the earlier toggle.
+     *
+     * The transform runs INSIDE [SettingsStore.update]'s mutex so concurrent calls
+     * serialise; each transform sees the result of the previous one. Avatar / background
+     * cleanup runs against the genuinely-prior assistant (read inside the lock).
+     */
+    fun updateAssistant(transform: (Assistant) -> Assistant) {
+        viewModelScope.launch {
+            settingsStore.update { current ->
+                val prior = current.assistants.firstOrNull { it.id == assistantId }
+                    ?: return@update current
+                val next = transform(prior)
+                checkAvatarDelete(old = prior, new = next)
+                checkBackgroundDelete(old = prior, new = next)
+                current.copy(
+                    assistants = current.assistants.map {
+                        if (it.id == assistantId) next else it
+                    }
+                )
+            }
+        }
+    }
+
     fun addMemory(memory: AssistantMemory) {
         viewModelScope.launch {
             val memoryAssistantId = if (assistant.value.useGlobalMemory) {
@@ -194,7 +210,13 @@ class AssistantDetailVM(
 
     fun updateMemory(memory: AssistantMemory) {
         viewModelScope.launch {
-            memoryRepository.updateContent(id = memory.id, content = memory.content)
+            runCatching {
+                memoryRepository.updateContent(id = memory.id, content = memory.content)
+            }.onFailure {
+                // The record may have been deleted (e.g. by the memory tool) between opening
+                // the editor and saving; don't crash the VM scope, the update is moot.
+                Log.e(TAG, "Failed to update memory #${memory.id}", it)
+            }
         }
     }
 

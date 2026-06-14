@@ -35,15 +35,16 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
-import me.rerere.rikkahub.ui.haptic.LocalRikkaHaptic
-import me.rerere.rikkahub.ui.haptic.rememberRikkaHaptic
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.LinkAnnotation
@@ -58,11 +59,13 @@ import androidx.core.content.FileProvider
 import androidx.core.net.toFile
 import androidx.core.net.toUri
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.flow.debounce
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.provider.Model
+import me.rerere.ai.ui.ToolApprovalState
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessageAnnotation
 import me.rerere.ai.ui.UIMessagePart
@@ -113,7 +116,7 @@ fun ChatMessage(
     onToggleFavorite: (() -> Unit)? = null,
     onTranslate: ((UIMessage, Locale) -> Unit)? = null,
     onClearTranslation: (UIMessage) -> Unit = {},
-    onToolApproval: ((toolCallId: String, approved: Boolean, reason: String) -> Unit)? = null,
+    onToolApproval: ((toolCallId: String, approved: Boolean, reason: String, scope: me.rerere.rikkahub.service.ChatService.ApprovalScope, toolName: String) -> Unit)? = null,
     onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
 ) {
     val message = node.messages[node.selectIndex]
@@ -262,34 +265,18 @@ private fun MessagePartsBlock(
     parts: List<UIMessagePart>,
     annotations: List<UIMessageAnnotation>,
     loading: Boolean,
-    onToolApproval: ((toolCallId: String, approved: Boolean, reason: String) -> Unit)? = null,
+    onToolApproval: ((toolCallId: String, approved: Boolean, reason: String, scope: me.rerere.rikkahub.service.ChatService.ApprovalScope, toolName: String) -> Unit)? = null,
     onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
     onUserMessageClick: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val contentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
 
-    // 消息输出HapticFeedback — 开始/结束各震一次，波形不同
-    val rikkaHaptic = rememberRikkaHaptic()
+    // 消息输出HapticFeedback
+    val hapticFeedback = LocalHapticFeedback.current
     val settings = LocalSettings.current
-    val hapticEnabled = settings.displaySetting.enableMessageGenerationHapticEffect
-    val prevLoading = remember { mutableStateOf(loading) }
-    LaunchedEffect(loading, hapticEnabled) {
-        if (!hapticEnabled) return@LaunchedEffect
-
-        val wasLoading = prevLoading.value
-        prevLoading.value = loading
-
-        if (loading && !wasLoading) {
-            // 开始生成 → 重点 "嗒！"
-            rikkaHaptic.heavyClick()
-        } else if (!loading && wasLoading) {
-            // 结束生成 → 双击 "哒哒"
-            rikkaHaptic.doubleTick()
-        }
-    }
-
     val partsState by rememberUpdatedState(parts)
+
     val handleClickCitation: (String) -> Unit = remember {
         handler@{ citationId ->
             partsState.forEach { part ->
@@ -310,18 +297,41 @@ private fun MessagePartsBlock(
             }
         }
     }
+    LaunchedEffect(settings.displaySetting) {
+        snapshotFlow { partsState }
+            .debounce(50.milliseconds)
+            .collect { parts ->
+                if (parts.isNotEmpty() && loading && settings.displaySetting.enableMessageGenerationHapticEffect) {
+                    hapticFeedback.performHapticFeedback(HapticFeedbackType.KeyboardTap)
+                }
+            }
+    }
 
     // Render parts in original order (group thinking/tool as chain-of-thought)
-    val groupedParts = remember(parts) { parts.groupMessageParts() }
+    // Key by size + last-part identity to avoid Compose's O(N) list-comparison on every
+    // recomposition. During streaming the list grows one element at a time so size alone is
+    // sufficient to detect a meaningful change; the lastOrNull() hash catches in-place edits
+    // on the tail part (e.g. streaming text appended to the final Text part).
+    val partsKey = parts.size.toString() + (parts.lastOrNull()?.hashCode()?.toString() ?: "")
+    val groupedParts = remember(partsKey) { parts.groupMessageParts() }
     groupedParts.fastForEach { block ->
         when (block) {
             is MessagePartBlock.ThinkingBlock -> {
                 if (block.steps.isNotEmpty()) {
                     val isReasoningOnlyBlock = block.steps.fastAll { it is ThinkingStep.ReasoningStep }
+                    // Force-expand whenever any tool step is awaiting approval. Without
+                    // this, on 3+ pending tool calls only the last 2 rows are visible
+                    // and the first sits hidden behind the "show more" arrow — easy to
+                    // miss when the agent is asking for the user's go-ahead.
+                    val hasPendingApproval = block.steps.any {
+                        it is ThinkingStep.ToolStep &&
+                            it.tool.approvalState is ToolApprovalState.Pending
+                    }
                     ChainOfThought(
                         modifier = Modifier.animateContentSize(),
                         steps = block.steps,
                         collapsedAdaptiveWidth = isReasoningOnlyBlock,
+                        forceExpanded = hasPendingApproval,
                         cardColors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = settings.displaySetting.bubbleOpacity),
                         ),
@@ -356,7 +366,16 @@ private fun MessagePartsBlock(
             is MessagePartBlock.ContentBlock -> key(block.index) {
                 when (val part = block.part) {
                     is UIMessagePart.Text -> {
-                        SelectionContainer {
+                        // Pass 3: a Text part may carry a `rikkahub.webview` metadata
+                        // block emitted by a JS skill (Phase 20-audit). When present we
+                        // render a tap-to-open card that routes into BrowserActivity
+                        // instead of the standard markdown — "browser as the viewer."
+                        // The card returns true on render so we skip the markdown branch.
+                        // Only consider for non-user messages — user messages don't carry
+                        // this metadata.
+                        val renderedAsWebviewCard =
+                            role != MessageRole.USER && SkillWebviewCardOrNull(part)
+                        if (!renderedAsWebviewCard) SelectionContainer {
                             if (role == MessageRole.USER) {
                                 Surface(
                                     modifier = Modifier.animateContentSize(),

@@ -13,7 +13,6 @@ import kotlinx.coroutines.flow.map
 import me.rerere.ai.ui.UIMessage
 import me.rerere.rikkahub.data.db.AppDatabase
 import me.rerere.rikkahub.data.db.fts.MessageFtsManager
-import me.rerere.rikkahub.data.db.fts.MessageSearchSort
 import me.rerere.rikkahub.data.db.dao.ConversationDAO
 import me.rerere.rikkahub.data.db.dao.FavoriteDAO
 import me.rerere.rikkahub.data.db.dao.MessageNodeDAO
@@ -242,10 +241,7 @@ class ConversationRepository(
         filesManager.deleteChatFiles(fullConversation.files)
     }
 
-    suspend fun searchMessages(
-        keyword: String,
-        sort: MessageSearchSort = MessageSearchSort.RELEVANCE,
-    ) = messageFtsManager.search(keyword, sort)
+    suspend fun searchMessages(keyword: String) = messageFtsManager.search(keyword)
 
     suspend fun rebuildAllIndexes(onProgress: (current: Int, total: Int) -> Unit = { _, _ -> }) {
         messageFtsManager.deleteAll()
@@ -258,6 +254,26 @@ class ConversationRepository(
             messageFtsManager.indexConversation(conversation)
             onProgress(index + 1, total)
         }
+    }
+
+    /**
+     * Repair the FTS5 search index when SQLite reports a malformed inverted index. Drops
+     * the message_fts virtual table (frees the corrupted index pages — DELETE alone won't),
+     * recreates it via the shared schema, then re-indexes every conversation. Returns the
+     * number of conversations re-indexed so the Doctor can report progress.
+     */
+    suspend fun repairAndRebuildIndexes(onProgress: (current: Int, total: Int) -> Unit = { _, _ -> }): Int {
+        messageFtsManager.dropAndRecreate()
+        val allIds = conversationDAO.getAllIds()
+        val total = allIds.size
+        allIds.forEachIndexed { index, id ->
+            val entity = conversationDAO.getConversationById(id) ?: return@forEachIndexed
+            val nodes = loadMessageNodes(entity.id)
+            val conversation = conversationEntityToConversation(entity, nodes)
+            messageFtsManager.indexConversation(conversation)
+            onProgress(index + 1, total)
+        }
+        return total
     }
 
     suspend fun deleteConversationOfAssistant(assistantId: Uuid) {
@@ -280,7 +296,6 @@ class ConversationRepository(
             customSystemPrompt = conversation.customSystemPrompt ?: "",
             modeInjectionIds = JsonInstant.encodeToString(conversation.modeInjectionIds),
             lorebookIds = JsonInstant.encodeToString(conversation.lorebookIds),
-            workspaceCwd = conversation.workspaceCwd ?: "",
         )
     }
 
@@ -300,7 +315,6 @@ class ConversationRepository(
             customSystemPrompt = conversationEntity.customSystemPrompt.ifEmpty { null },
             modeInjectionIds = JsonInstant.decodeFromString(conversationEntity.modeInjectionIds),
             lorebookIds = JsonInstant.decodeFromString(conversationEntity.lorebookIds),
-            workspaceCwd = conversationEntity.workspaceCwd.ifEmpty { null },
         )
     }
 
@@ -315,10 +329,9 @@ class ConversationRepository(
     }
 
     suspend fun togglePinStatus(conversationId: Uuid) {
-        conversationDAO.updatePinStatus(
-            id = conversationId.toString(),
-            isPinned = !(getConversationById(conversationId)?.isPinned ?: false)
-        )
+        // Single atomic UPDATE — avoids the read→write TOCTOU that existed when
+        // we read isPinned with getConversationById() and then flipped it.
+        conversationDAO.togglePinStatus(conversationId.toString())
     }
 
     private fun conversationSummaryToConversation(entity: LightConversationEntity): Conversation {

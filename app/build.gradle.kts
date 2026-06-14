@@ -9,8 +9,6 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
-    alias(libs.plugins.google.services)
-    alias(libs.plugins.firebase.crashlytics)
 }
 
 android {
@@ -18,7 +16,7 @@ android {
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "me.jaye.rikkahub"
+        applicationId = "excp.rikkahub"
         minSdk = 26
         targetSdk = 37
         versionCode = 162
@@ -79,11 +77,13 @@ android {
             )
             buildConfigField("String", "VERSION_NAME", "\"${android.defaultConfig.versionName}\"")
             buildConfigField("String", "VERSION_CODE", "\"${android.defaultConfig.versionCode}\"")
+            buildConfigField("String", "UPDATE_API_URL", "\"\"")
         }
         debug {
             applicationIdSuffix = ".debug"
             buildConfigField("String", "VERSION_NAME", "\"${android.defaultConfig.versionName}\"")
             buildConfigField("String", "VERSION_CODE", "\"${android.defaultConfig.versionCode}\"")
+            buildConfigField("String", "UPDATE_API_URL", "\"\"")
         }
         create("baseline") {
             initWith(getByName("release"))
@@ -103,9 +103,11 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+        // agent-keyboard IPC: IKeyboardApi.aidl + EditorInfoBundle.aidl in src/main/aidl.
+        aidl = true
     }
     sourceSets {
-        getByName("androidTest").assets.srcDirs("$projectDir/schemas")
+        getByName("androidTest").assets.directories.add("$projectDir/schemas")
     }
     androidResources {
         generateLocaleConfig = true
@@ -113,8 +115,19 @@ android {
     packaging {
         jniLibs {
             useLegacyPackaging = true
-            pickFirsts += "lib/*/libtermux.so"
         }
+    }
+    lint {
+        // FullBackupContent insists every <exclude> path lives under a previously
+        // <include>'d root. Our backup_rules.xml + data_extraction_rules.xml use
+        // include="upload/" + explicit excludes for databases / sharedpref /
+        // datastore/ / known_hosts / browser-profile/ / local-models/ as
+        // belt-and-suspenders defence: if anyone later adds a broader <include>
+        // (e.g. domain="root"), the excludes still keep credentials and
+        // multi-GB local LLM weights off the cloud-backup path. Lint reads that
+        // pattern as redundant; the runtime accepts it. Keep the rules; mute
+        // the check.
+        disable.add("FullBackupContent")
     }
     tasks.withType<KotlinCompile>().configureEach {
         compilerOptions.optIn.add("androidx.compose.material3.ExperimentalMaterial3Api")
@@ -127,7 +140,8 @@ android {
         compilerOptions.optIn.add("kotlin.uuid.ExperimentalUuidApi")
         compilerOptions.optIn.add("kotlin.time.ExperimentalTime")
         compilerOptions.optIn.add("kotlinx.coroutines.ExperimentalCoroutinesApi")
-        compilerOptions.optIn.add("androidx.navigation3.runtime.ExperimentalNavigation3Api")
+        // ExperimentalNavigation3Api was renamed/removed in newer navigation3 — opt-in is
+        // no longer required and the marker class no longer exists in the runtime artifact.
     }
 }
 
@@ -159,8 +173,6 @@ dependencies {
     implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.androidx.browser)
     implementation(libs.androidx.profileinstaller)
-    implementation(libs.termux.terminal.view)
-    implementation(libs.guava.listenablefuture)
 
     // Compose
     implementation(libs.androidx.activity.compose)
@@ -178,11 +190,6 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.navigation3)
     implementation(libs.androidx.material3.adaptive.navigation3)
 
-    // Firebase
-    implementation(platform(libs.firebase.bom))
-    implementation(libs.firebase.analytics)
-    implementation(libs.firebase.crashlytics)
-    implementation(libs.firebase.config)
 
     // DataStore
     implementation(libs.androidx.datastore.preferences)
@@ -195,10 +202,6 @@ dependencies {
     implementation(libs.haze)
     implementation(libs.haze.blur)
     implementation(libs.haze.blur.materials)
-
-
-    // jsoup (HTML parser for browser tool)
-    implementation(libs.jsoup)
 
     // koin
     implementation(platform(libs.koin.bom))
@@ -226,9 +229,6 @@ dependencies {
 
     // pebble (template engine)
     implementation(libs.pebble)
-
-    // java-diff-utils (unified diff)
-    implementation(libs.diffutils)
 
     // coil
     implementation(libs.coil.compose)
@@ -293,11 +293,24 @@ dependencies {
     // sqlite-android (requery SQLite for Android)
     implementation(libs.sqlite.android)
 
-    // security (encrypted storage)
-    implementation(libs.androidx.security.crypto)
+    // Google Play Services Location (FusedLocationProvider)
+    implementation("com.google.android.gms:play-services-location:21.3.0")
+    // kotlinx.coroutines.tasks.await for Task<*> (was previously transitive via Firebase)
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.11.0")
+
+    // AndroidX Biometric (BiometricPrompt)
+    implementation("androidx.biometric:biometric:1.2.0-alpha05")
+
+    // AndroidX Media — MediaSessionCompat, MediaButtonReceiver, NotificationCompat.MediaStyle
+    implementation("androidx.media:media:1.7.0")
+
+    // AndroidX DocumentFile — Phase 25 SAF tree traversal for the ExternalStorage tools
+    // (USB / SD / Downloads / cloud DocumentsProvider access via persisted tree grants).
+    implementation("androidx.documentfile:documentfile:1.0.1")
 
     // modules
     implementation(project(":ai"))
+    implementation(project(":local-llm"))
     implementation(project(":web"))
     implementation(project(":document"))
     implementation(project(":highlight"))
@@ -305,9 +318,14 @@ dependencies {
     implementation(project(":speech"))
     implementation(project(":common"))
     implementation(project(":material3"))
-    implementation(project(":workspace"))
     implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.jar", "*.aar"))))
     implementation(kotlin("reflect"))
+
+    // SSH client (Mwiede fork — maintained, Android-friendly)
+    implementation("com.github.mwiede:jsch:0.2.21")
+
+    // Cron utilities (expression parsing & validation)
+    implementation("com.cronutils:cron-utils:9.2.1")
 
     // Leak Canary
     // debugImplementation(libs.leakcanary.android)

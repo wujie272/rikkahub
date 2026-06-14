@@ -36,13 +36,11 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.ai.provider.ModelType
 import me.rerere.rikkahub.R
-import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.ui.components.ai.ModelSelector
 import me.rerere.rikkahub.ui.components.ai.ReasoningButton
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.FormItem
-import me.rerere.rikkahub.ui.components.ui.Select
 import me.rerere.rikkahub.ui.components.ui.TagsInput
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
 import me.rerere.rikkahub.ui.hooks.heroAnimation
@@ -51,7 +49,6 @@ import me.rerere.rikkahub.utils.toFixed
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 import kotlin.math.roundToInt
-import kotlin.uuid.Uuid
 import me.rerere.rikkahub.data.model.Tag as DataTag
 
 @Composable
@@ -64,7 +61,6 @@ fun AssistantBasicPage(id: String) {
     val assistant by vm.assistant.collectAsStateWithLifecycle()
     val providers by vm.providers.collectAsStateWithLifecycle()
     val tags by vm.tags.collectAsStateWithLifecycle()
-    val workspaces by vm.workspaces.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     Scaffold(
@@ -88,7 +84,6 @@ fun AssistantBasicPage(id: String) {
             assistant = assistant,
             providers = providers,
             tags = tags,
-            workspaces = workspaces,
             onUpdate = { vm.update(it) },
             vm = vm
         )
@@ -101,7 +96,6 @@ internal fun AssistantBasicContent(
     assistant: Assistant,
     providers: List<me.rerere.ai.provider.ProviderSetting>,
     tags: List<DataTag>,
-    workspaces: List<WorkspaceEntity>,
     onUpdate: (Assistant) -> Unit,
     vm: AssistantDetailVM
 ) {
@@ -172,35 +166,6 @@ internal fun AssistantBasicContent(
                     tags = tags,
                     onValueChange = { tagIds, tagList ->
                         vm.updateTags(tagIds, tagList)
-                    },
-                )
-            }
-
-            HorizontalDivider()
-
-            FormItem(
-                label = {
-                    Text(stringResource(R.string.assistant_page_workspace))
-                },
-                description = {
-                    Text(stringResource(R.string.assistant_page_workspace_desc))
-                },
-                modifier = Modifier.padding(8.dp),
-            ) {
-                val selectedWorkspace = workspaces.find { it.id == assistant.workspaceId?.toString() }
-                Select(
-                    options = listOf<WorkspaceEntity?>(null) + workspaces,
-                    selectedOption = selectedWorkspace,
-                    onOptionSelected = { workspace ->
-                        onUpdate(
-                            assistant.copy(
-                                workspaceId = workspace?.id?.let { Uuid.parse(it) }
-                            )
-                        )
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    optionToString = { workspace ->
-                        workspace?.name ?: stringResource(R.string.workspace_no_binding)
                     },
                 )
             }
@@ -423,6 +388,24 @@ internal fun AssistantBasicContent(
             FormItem(
                 modifier = Modifier.padding(8.dp),
                 label = {
+                    Text(stringResource(R.string.assistant_page_fast_path_router))
+                },
+                description = {
+                    Text(stringResource(R.string.assistant_page_fast_path_router_desc))
+                },
+                tail = {
+                    Switch(
+                        checked = assistant.fastPathRouterEnabled,
+                        onCheckedChange = {
+                            onUpdate(assistant.copy(fastPathRouterEnabled = it))
+                        }
+                    )
+                }
+            )
+            HorizontalDivider()
+            FormItem(
+                modifier = Modifier.padding(8.dp),
+                label = {
                     Text(stringResource(R.string.assistant_page_thinking_budget))
                 },
             ) {
@@ -475,46 +458,20 @@ internal fun AssistantBasicContent(
         Card(
             colors = CustomColors.cardColorsOnSurfaceContainer
         ) {
-            FormItem(
+            BackgroundPicker(
                 modifier = Modifier.padding(8.dp),
-                label = {
-                    Text(stringResource(R.string.assistant_page_gradient_background))
-                },
-                description = {
-                    Text(stringResource(R.string.assistant_page_gradient_background_desc))
-                },
-                tail = {
-                    Switch(
-                        checked = assistant.useGradientBackground,
-                        onCheckedChange = {
-                            onUpdate(
-                                assistant.copy(
-                                    useGradientBackground = it
-                                )
-                            )
-                        }
+                background = assistant.background,
+                backgroundOpacity = assistant.backgroundOpacity,
+                onUpdate = { background ->
+                    onUpdate(
+                        assistant.copy(
+                            background = background
+                        )
                     )
                 }
             )
 
-            if (!assistant.useGradientBackground) {
-                HorizontalDivider()
-
-                BackgroundPicker(
-                    modifier = Modifier.padding(8.dp),
-                    background = assistant.background,
-                    backgroundOpacity = assistant.backgroundOpacity,
-                    onUpdate = { background ->
-                        onUpdate(
-                            assistant.copy(
-                                background = background
-                            )
-                        )
-                    }
-                )
-            }
-
-            if (!assistant.useGradientBackground && assistant.background != null) {
+            if (assistant.background != null) {
                 val backgroundOpacity = assistant.backgroundOpacity.coerceIn(0f, 1f)
                 HorizontalDivider()
                 FormItem(

@@ -15,9 +15,13 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.Transient
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.decodeFromJsonElement
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.provider.Model
@@ -54,6 +58,37 @@ import org.koin.core.component.get
 import kotlin.uuid.Uuid
 
 private const val TAG = "PreferencesStore"
+
+/**
+ * Per-entry tolerant decode for the persisted `providers` list.
+ *
+ * Why this exists: the providers list is stored in DataStore as a single JSON array of
+ * polymorphic [ProviderSetting] entries. A single-shot `decodeFromString<List<ProviderSetting>>`
+ * throws on the entire list as soon as one element has an unknown polymorphic discriminator.
+ *
+ * Concrete trigger that motivated this: the never-shipped Phase-22A scaffolding seeded a
+ * `"type":"local_llamacpp"` entry into DEFAULT_PROVIDERS for early test installs. Deleting
+ * the `LlamaCppLocal` subclass would otherwise make decode-of-list throw on those entries
+ * → user loses ALL their saved providers (API keys, custom models, the lot).
+ *
+ * Per-entry decode lets surviving entries land while the unknown one is logged and skipped.
+ * Keep this even after `local_llamacpp` is fully gone — it's good hygiene for any future
+ * polymorphic schema change (renamed types, removed types, etc).
+ */
+private fun decodeProvidersTolerant(raw: String): List<ProviderSetting> {
+    if (raw.isBlank()) return emptyList()
+    val array = runCatching {
+        JsonInstant.parseToJsonElement(raw) as? JsonArray
+    }.getOrNull() ?: return emptyList()
+    return array.mapNotNull { element ->
+        try {
+            JsonInstant.decodeFromJsonElement<ProviderSetting>(element)
+        } catch (e: SerializationException) {
+            Log.w(TAG, "Skipping unrecognised provider entry during decode: ${e.message}")
+            null
+        }
+    }
+}
 
 private val Context.settingsStore by preferencesDataStore(
     name = "settings",
@@ -102,6 +137,9 @@ class SettingsStore(
 
         // 提供商
         val PROVIDERS = stringPreferencesKey("providers")
+        // IDs of built-in providers the user explicitly deleted; the re-seed pass
+        // skips these so deletions are sticky across app restarts.
+        val DELETED_BUILTIN_PROVIDER_IDS = stringPreferencesKey("deleted_builtin_provider_ids")
 
         // 助手
         val SELECT_ASSISTANT = stringPreferencesKey("select_assistant")
@@ -136,6 +174,9 @@ class SettingsStore(
         val WEB_SERVER_JWT_ENABLED = booleanPreferencesKey("web_server_jwt_enabled")
         val WEB_SERVER_ACCESS_PASSWORD = stringPreferencesKey("web_server_access_password")
         val WEB_SERVER_LOCALHOST_ONLY = booleanPreferencesKey("web_server_localhost_only")
+
+        // AI logging
+        val AI_LOG_LEVEL = stringPreferencesKey("ai_log_level")
 
         // 提示词注入
         val MODE_INJECTIONS = stringPreferencesKey("mode_injections")
@@ -190,7 +231,15 @@ class SettingsStore(
                 assistantTags = preferences[ASSISTANT_TAGS]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: emptyList(),
-                providers = JsonInstant.decodeFromString(preferences[PROVIDERS] ?: "[]"),
+                providers = decodeProvidersTolerant(preferences[PROVIDERS] ?: "[]"),
+                deletedBuiltInProviderIds = preferences[DELETED_BUILTIN_PROVIDER_IDS]
+                    ?.let { raw ->
+                        runCatching {
+                            JsonInstant.decodeFromString<Set<String>>(raw)
+                                .mapNotNull { runCatching { Uuid.parse(it) }.getOrNull() }
+                                .toSet()
+                        }.getOrNull()
+                    } ?: emptySet(),
                 assistants = JsonInstant.decodeFromString(preferences[ASSISTANTS] ?: "[]"),
                 dynamicColor = preferences[DYNAMIC_COLOR] != false,
                 themeId = preferences[THEME_ID] ?: PresetThemes[0].id,
@@ -238,6 +287,7 @@ class SettingsStore(
                 webServerJwtEnabled = preferences[WEB_SERVER_JWT_ENABLED] == true,
                 webServerAccessPassword = preferences[WEB_SERVER_ACCESS_PASSWORD] ?: "",
                 webServerLocalhostOnly = preferences[WEB_SERVER_LOCALHOST_ONLY] == true,
+                aiLogLevel = AiLogLevel.fromPreference(preferences[AI_LOG_LEVEL]),
                 backupReminderConfig = preferences[BACKUP_REMINDER_CONFIG]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: BackupReminderConfig(),
@@ -246,10 +296,35 @@ class SettingsStore(
             )
         }
         .map {
-            var providers = it.providers.ifEmpty { DEFAULT_PROVIDERS }.toMutableList()
+            val deletedDefaultIds = it.deletedBuiltInProviderIds
+            var providers = it.providers.ifEmpty {
+                DEFAULT_PROVIDERS.filter { p -> p.id !in deletedDefaultIds }
+            }.toMutableList()
+            // For existing installs that pre-date the on-device AICore provider being
+            // promoted to first-place, hoist it to the top so the user does not have to
+            // scroll past every legacy aggregator to find it.
+            val aicoreIndex = providers.indexOfFirst { it is ProviderSetting.AICore }
+            if (aicoreIndex > 0) {
+                val aicoreRow = providers.removeAt(aicoreIndex)
+                providers.add(0, aicoreRow)
+            }
             DEFAULT_PROVIDERS.forEach { defaultProvider ->
+                if (defaultProvider.id in deletedDefaultIds) return@forEach
                 if (providers.none { it.id == defaultProvider.id }) {
-                    providers.add(defaultProvider.copyProvider())
+                    // On-device built-in providers (AICore, LiteRT) are pinned to the top of
+                    // the list in the order they appear in DEFAULT_PROVIDERS. Remote provider
+                    // defaults continue to append at the end so existing users see no
+                    // reordering of their configured remote providers.
+                    when (defaultProvider) {
+                        is ProviderSetting.AICore -> providers.add(0, defaultProvider.copyProvider())
+                        is ProviderSetting.LiteRtLocal -> {
+                            // Insert right after AICore, or at 0 if AICore is absent.
+                            // indexOfFirst returns -1 when absent; -1 + 1 = 0, so insert at 0.
+                            val insertAt = providers.indexOfFirst { it is ProviderSetting.AICore } + 1
+                            providers.add(insertAt, defaultProvider.copyProvider())
+                        }
+                        else -> providers.add(defaultProvider.copyProvider())
+                    }
                 }
             }
             providers = providers.map { provider ->
@@ -262,12 +337,35 @@ class SettingsStore(
                     )
                 } else provider
             }.toMutableList()
-            val assistants = it.assistants.ifEmpty { DEFAULT_ASSISTANTS }.toMutableList()
+            var assistants = it.assistants.ifEmpty { DEFAULT_ASSISTANTS }.toMutableList()
             DEFAULT_ASSISTANTS.forEach { defaultAssistant ->
                 if (assistants.none { it.id == defaultAssistant.id }) {
                     assistants.add(defaultAssistant.copy())
                 }
             }
+            // One-shot upgrade for existing installs that pre-date the agent-core auto-load:
+            // if a default-IDed assistant has an empty enabledSkills, treat it as fresh and
+            // pin agent-core. Users who deliberately added other skills are untouched.
+            assistants = assistants.map { assistant ->
+                val isDefault = DEFAULT_ASSISTANTS.any { it.id == assistant.id }
+                if (isDefault && assistant.enabledSkills.isEmpty()) {
+                    assistant.copy(enabledSkills = setOf("agent-core"))
+                } else assistant
+            }.toMutableList()
+            // One-shot additive enable for newly-bundled default-on skills. Each name is added
+            // to every default assistant exactly once, tracked in autoEnabledDefaultSkills, so a
+            // user who later disables one is not re-opted-in on the next launch. A brand-new
+            // skill cannot have been deliberately disabled before it shipped, so the first add is
+            // always safe.
+            val skillsToSeed = DEFAULT_AUTO_ENABLED_SKILLS - it.autoEnabledDefaultSkills
+            if (skillsToSeed.isNotEmpty()) {
+                assistants = assistants.map { assistant ->
+                    if (DEFAULT_ASSISTANTS.any { d -> d.id == assistant.id }) {
+                        assistant.copy(enabledSkills = assistant.enabledSkills + skillsToSeed)
+                    } else assistant
+                }.toMutableList()
+            }
+            val newAutoEnabled = it.autoEnabledDefaultSkills + DEFAULT_AUTO_ENABLED_SKILLS
             val ttsProviders = it.ttsProviders.ifEmpty { DEFAULT_TTS_PROVIDERS }.toMutableList()
             DEFAULT_TTS_PROVIDERS.forEach { defaultTTSProvider ->
                 if (ttsProviders.none { provider -> provider.id == defaultTTSProvider.id }) {
@@ -277,6 +375,7 @@ class SettingsStore(
             it.copy(
                 providers = providers,
                 assistants = assistants,
+                autoEnabledDefaultSkills = newAutoEnabled,
                 ttsProviders = ttsProviders,
             )
         }
@@ -299,6 +398,14 @@ class SettingsStore(
                         )
 
                         is ProviderSetting.Claude -> provider.copy(
+                            models = provider.models.distinctBy { model -> model.id }
+                        )
+
+                        is ProviderSetting.AICore -> provider.copy(
+                            models = provider.models.distinctBy { model -> model.id }
+                        )
+
+                        is ProviderSetting.LiteRtLocal -> provider.copy(
                             models = provider.models.distinctBy { model -> model.id }
                         )
                     }
@@ -380,6 +487,9 @@ class SettingsStore(
             preferences[COMPRESS_PROMPT] = settings.compressPrompt
 
             preferences[PROVIDERS] = JsonInstant.encodeToString(settings.providers)
+            preferences[DELETED_BUILTIN_PROVIDER_IDS] = JsonInstant.encodeToString(
+                settings.deletedBuiltInProviderIds.map { it.toString() }.toSet()
+            )
 
             preferences[ASSISTANTS] = JsonInstant.encodeToString(settings.assistants)
             preferences[SELECT_ASSISTANT] = settings.assistantId.toString()
@@ -387,15 +497,18 @@ class SettingsStore(
 
             preferences[SEARCH_SERVICES] = JsonInstant.encodeToString(settings.searchServices)
             preferences[SEARCH_COMMON] = JsonInstant.encodeToString(settings.searchCommonOptions)
-            preferences[SEARCH_SELECTED] = settings.searchServiceSelected.coerceIn(0, settings.searchServices.size - 1)
+            // maxOf(0, size - 1) guards the empty-list case: a persisted "[]" for
+            // search_services leaves searchServices empty (the ?: default only fires on a
+            // missing key, not on an empty array), and coerceIn(0, -1) throws
+            // IllegalArgumentException because min > max — crashing every settings write.
+            preferences[SEARCH_SELECTED] =
+                settings.searchServiceSelected.coerceIn(0, maxOf(0, settings.searchServices.size - 1))
 
             preferences[MCP_SERVERS] = JsonInstant.encodeToString(settings.mcpServers)
             preferences[WEBDAV_CONFIG] = JsonInstant.encodeToString(settings.webDavConfig)
             preferences[S3_CONFIG] = JsonInstant.encodeToString(settings.s3Config)
             preferences[TTS_PROVIDERS] = JsonInstant.encodeToString(settings.ttsProviders)
-            settings.selectedTTSProviderId?.let {
-                preferences[SELECTED_TTS_PROVIDER] = it.toString()
-            } ?: preferences.remove(SELECTED_TTS_PROVIDER)
+            preferences[SELECTED_TTS_PROVIDER] = settings.selectedTTSProviderId.toString()
             preferences[ASR_PROVIDERS] = JsonInstant.encodeToString(settings.asrProviders)
             settings.selectedASRProviderId?.let {
                 preferences[SELECTED_ASR_PROVIDER] = it.toString()
@@ -408,14 +521,25 @@ class SettingsStore(
             preferences[WEB_SERVER_JWT_ENABLED] = settings.webServerJwtEnabled
             preferences[WEB_SERVER_ACCESS_PASSWORD] = settings.webServerAccessPassword
             preferences[WEB_SERVER_LOCALHOST_ONLY] = settings.webServerLocalhostOnly
+            preferences[AI_LOG_LEVEL] = settings.aiLogLevel.preferenceName
             preferences[BACKUP_REMINDER_CONFIG] = JsonInstant.encodeToString(settings.backupReminderConfig)
             preferences[LAUNCH_COUNT] = settings.launchCount
             preferences[SPONSOR_ALERT_DISMISSED_AT] = settings.sponsorAlertDismissedAt
         }
     }
 
+    /** Serialises rapid-fire transform-based updates so concurrent callers don't race
+     *  each other. Without this lock, two `update {fn}` calls dispatched in quick
+     *  succession both snapshot `settingsFlow.value` BEFORE either has written, then
+     *  each writes its own delta off the same stale base — last writer wins, the
+     *  earlier change is silently dropped. The most-visible repro: rapid-fire taps on
+     *  per-assistant tool toggles where every other tap appeared to revert. */
+    private val transformLock = kotlinx.coroutines.sync.Mutex()
+
     suspend fun update(fn: (Settings) -> Settings) {
-        update(fn(settingsFlow.value))
+        transformLock.withLock {
+            update(fn(settingsFlow.value))
+        }
     }
 
     suspend fun updateAssistant(assistantId: Uuid) {
@@ -518,7 +642,21 @@ data class Settings(
     val compressPrompt: String = DEFAULT_COMPRESS_PROMPT,
     val assistantId: Uuid = DEFAULT_ASSISTANT_ID,
     val providers: List<ProviderSetting> = DEFAULT_PROVIDERS,
+    /**
+     * IDs of built-in providers the user explicitly removed via long-press. The re-seed
+     * pass on settings load skips these so deletions stick across app restarts. Without
+     * this gate, deleting a default provider would just re-add it on next read.
+     */
+    val deletedBuiltInProviderIds: Set<Uuid> = emptySet(),
     val assistants: List<Assistant> = DEFAULT_ASSISTANTS,
+    /**
+     * Names of bundled default-on skills (see [DEFAULT_AUTO_ENABLED_SKILLS]) that have already
+     * been seeded into the default assistants' enabledSkills exactly once. Mirrors
+     * [deletedBuiltInProviderIds]: it lets a newly-shipped skill auto-enable on upgrade while
+     * still respecting a later deliberate user-disable - once a name is recorded here it is
+     * never re-added, so toggling it off sticks across launches.
+     */
+    val autoEnabledDefaultSkills: Set<String> = emptySet(),
     val assistantTags: List<Tag> = emptyList(),
     val searchServices: List<SearchServiceOptions> = listOf(SearchServiceOptions.DEFAULT),
     val searchCommonOptions: SearchCommonOptions = SearchCommonOptions(),
@@ -538,6 +676,7 @@ data class Settings(
     val webServerJwtEnabled: Boolean = false,
     val webServerAccessPassword: String = "",
     val webServerLocalhostOnly: Boolean = false,
+    val aiLogLevel: AiLogLevel = AiLogLevel.INFO,
     val backupReminderConfig: BackupReminderConfig = BackupReminderConfig(),
     val launchCount: Int = 0,
     val sponsorAlertDismissedAt: Int = 0,
@@ -545,6 +684,20 @@ data class Settings(
     companion object {
         // 构造一个用于初始化的settings, 但它不能用于保存，防止使用初始值存储
         fun dummy() = Settings(init = true)
+    }
+}
+
+@Serializable
+enum class AiLogLevel(val preferenceName: String) {
+    @SerialName("off")
+    OFF("off"),
+    @SerialName("info")
+    INFO("info"),
+    @SerialName("debug")
+    DEBUG("debug");
+
+    companion object {
+        fun fromPreference(value: String?): AiLogLevel = entries.firstOrNull { it.preferenceName == value } ?: INFO
     }
 }
 
@@ -657,13 +810,15 @@ fun Settings.getAssistantById(id: Uuid): Assistant? {
     return this.assistants.find { it.id == id }
 }
 
+fun Settings.findAssistantById(id: Uuid): Assistant? {
+    return this.assistants.firstOrNull { it.id == id }
+}
+
 fun Settings.getQuickMessagesOfAssistant(assistant: Assistant) =
     quickMessages.filter { it.id in assistant.quickMessageIds }
 
 fun Settings.getSelectedTTSProvider(): TTSProviderSetting? {
-    return selectedTTSProviderId?.let { id ->
-        ttsProviders.find { it.id == id }
-    } ?: ttsProviders.firstOrNull()
+    return ttsProviders.find { it.id == selectedTTSProviderId } ?: ttsProviders.firstOrNull()
 }
 
 fun Settings.getSelectedASRProvider(): ASRProviderSetting? {
@@ -693,11 +848,25 @@ private fun Model.findModelProviderFromList(providers: List<ProviderSetting>): P
 }
 
 internal val DEFAULT_ASSISTANT_ID = Uuid.parse("0950e2dc-9bd5-4801-afa3-aa887aa36b4e")
+
+/**
+ * Bundled skills shipped enabled-by-default on top of agent-core. The behavioral
+ * `autonomous-agent` skill is auto_load (injected every turn); `openclaw-converter` is lazy
+ * (loaded on demand). Both are seeded to disk by [SkillManager.seedDefaultSkillsIfNeeded] and
+ * added to the default assistants' enabledSkills once via [Settings.autoEnabledDefaultSkills].
+ */
+internal val DEFAULT_AUTO_ENABLED_SKILLS = setOf("autonomous-agent", "openclaw-converter")
+
 internal val DEFAULT_ASSISTANTS = listOf(
     Assistant(
         id = DEFAULT_ASSISTANT_ID,
         name = "",
-        systemPrompt = ""
+        systemPrompt = "",
+        // The agent-core skill bundle (SOUL/HEARTBEAT/TOOLS) ships with the app and is what
+        // teaches every model "you are running on RikkaHub, here are the tools, here is how
+        // to avoid loops". Auto-enabling it on default assistants means new users get an
+        // agent-aware model out of the box without having to discover the skill toggle.
+        enabledSkills = setOf("agent-core") + DEFAULT_AUTO_ENABLED_SKILLS,
     ),
     Assistant(
         id = Uuid.parse("3d47790c-c415-4b90-9388-751128adb0a0"),
@@ -716,7 +885,8 @@ internal val DEFAULT_ASSISTANTS = listOf(
             ## Hint
             - If the user does not specify a language, reply in the user's primary language.
             - Remember to use Markdown syntax for formatting, and use latex for mathematical expressions.
-        """.trimIndent()
+        """.trimIndent(),
+        enabledSkills = setOf("agent-core") + DEFAULT_AUTO_ENABLED_SKILLS,
     ),
 )
 
