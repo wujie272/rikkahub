@@ -48,4 +48,4 @@ jobs:
       - name: Compile check
         run: |
           chmod +x gradlew
-          ./gradlew :app:compileReleaseKotlin :ai:compileReleaseKotlin
+          ./gradlew :app:compileReleaseKotlin :ai:compileReleaseKotlin --continue
