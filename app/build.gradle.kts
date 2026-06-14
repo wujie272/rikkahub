@@ -310,7 +310,6 @@ dependencies {
 
     // modules
     implementation(project(":ai"))
-    implementation(project(":local-llm"))
     implementation(project(":web"))
     implementation(project(":document"))
     implementation(project(":highlight"))

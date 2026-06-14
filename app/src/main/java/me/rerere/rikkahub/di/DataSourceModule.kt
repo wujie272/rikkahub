@@ -208,19 +208,7 @@ val dataSourceModule = module {
 
     single {
         val settingsStore: me.rerere.rikkahub.data.datastore.SettingsStore = get()
-        ProviderManager(client = get(), context = get()).also { pm ->
-            pm.registerProvider(
-                "local_litert",
-                me.rerere.locallm.litert.LiteRtProvider(
-                    context = get(),
-                    runtime = get(),
-                    prefs = get(),
-                    settingsUpdater = { transform ->
-                        settingsStore.update { old -> old.copy(providers = transform(old.providers)) }
-                    },
-                ),
-            )
-        }
+        ProviderManager(client = get(), context = get())
     }
 
     single {

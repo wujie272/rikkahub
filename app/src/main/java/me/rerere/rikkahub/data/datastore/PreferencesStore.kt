@@ -317,12 +317,6 @@ class SettingsStore(
                     // reordering of their configured remote providers.
                     when (defaultProvider) {
                         is ProviderSetting.AICore -> providers.add(0, defaultProvider.copyProvider())
-                        is ProviderSetting.LiteRtLocal -> {
-                            // Insert right after AICore, or at 0 if AICore is absent.
-                            // indexOfFirst returns -1 when absent; -1 + 1 = 0, so insert at 0.
-                            val insertAt = providers.indexOfFirst { it is ProviderSetting.AICore } + 1
-                            providers.add(insertAt, defaultProvider.copyProvider())
-                        }
                         else -> providers.add(defaultProvider.copyProvider())
                     }
                 }
@@ -402,10 +396,6 @@ class SettingsStore(
                         )
 
                         is ProviderSetting.AICore -> provider.copy(
-                            models = provider.models.distinctBy { model -> model.id }
-                        )
-
-                        is ProviderSetting.LiteRtLocal -> provider.copy(
                             models = provider.models.distinctBy { model -> model.id }
                         )
                     }
