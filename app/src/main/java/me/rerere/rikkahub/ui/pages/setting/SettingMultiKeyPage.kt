@@ -141,6 +141,7 @@ fun SettingMultiKeyPage(id: Uuid) {
         reorderableState = reorderableState,
         strUndo = strUndo,
         showTopBar = true,
+        scope = scope,
     )
 }
 
@@ -163,6 +164,7 @@ internal fun SettingMultiKeyContent(
     reorderableState: sh.calvin.reorderable.ReorderableLazyListState,
     strUndo: String,
     showTopBar: Boolean = false,
+    scope: kotlinx.coroutines.CoroutineScope,
 ) {
     val ctx = LocalContext.current
 

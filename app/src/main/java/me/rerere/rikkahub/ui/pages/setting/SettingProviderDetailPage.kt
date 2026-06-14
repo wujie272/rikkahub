@@ -14,6 +14,7 @@ import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.ArrowRight01
 import me.rerere.ai.util.ApiKeyStatus
 import me.rerere.ai.util.LoadBalanceStrategy
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.animation.AnimatedVisibility
@@ -317,6 +318,7 @@ fun SettingProviderDetailPage(id: Uuid, vm: SettingVM = koinViewModel()) {
                         lazyListState = lazyListState,
                         reorderableState = reorderableState,
                         strUndo = strUndo,
+                        scope = scope,
                     )
                 }
 
