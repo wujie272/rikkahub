@@ -520,7 +520,7 @@ class GenerationHandler(
                             ))
                         }
                         // Tool needs approval and state is Auto:
-                        toolDef?.needsApproval == true && tool.approvalState is ToolApprovalState.Auto -> {
+                        toolDef?.needsApproval?.invoke(tool.arguments) == true && tool.approvalState is ToolApprovalState.Auto -> {
                             // Fresh per-tool auto-approval check (was a frozen pre-
                             // resolved set). Costs a DataStore.first() per tool but tools
                             // are typically <5 per turn so the latency is negligible, and

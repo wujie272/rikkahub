@@ -950,7 +950,7 @@ class LocalTools(
         // whether their op is destructive — ToolApprovalDefaults is the single source of
         // truth, and the GenerationHandler / Telegram/in-app prompt path keys off needsApproval.
         return tools.map { t ->
-            val withApproval = if (!t.needsApproval && ToolApprovalDefaults.requiresApproval(t.name)) {
+            val withApproval = if (t.needsApproval?.invoke(t.arguments) != true && ToolApprovalDefaults.requiresApproval(t.name)) {
                 t.copy(needsApproval = { true })
             } else {
                 t
