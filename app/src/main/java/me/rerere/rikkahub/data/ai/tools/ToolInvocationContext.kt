@@ -1,22 +1,41 @@
 package me.rerere.rikkahub.data.ai.tools
 
 /**
- * 工具调用上下文 — 在 [LocalTools.getTools] 构建时传入，
- * 供各 Tool factory 读取调用者信息。
+ * Phase 17 stability — context every tool factory in [LocalTools.getTools] sees about WHO
+ * is invoking it. Until this layer existed, tools that needed to know the calling
+ * conversation / assistant id (sub-agent recursion guard, workflow_create authoring-id
+ * persistence) had no way to read it — both shipped with placeholder defaults and silent
+ * gaps the audit caught.
  *
- * 替代原来散装传参（conversationId, assistantId）的方式，
- * 统一管理和扩展。
+ * Convention: every getTools() caller MUST construct a ToolInvocationContext with the most
+ * specific data it has. The default ([EMPTY]) is a no-op safe fallback used when the
+ * caller doesn't track the data (legacy / one-off paths) — but factories should treat the
+ * empty context as "I don't know" not "no constraints", and apply conservative defaults.
+ *
+ * Fields:
+ *  - [callerAssistantId]: the assistant whose toggles are being dispatched. ChatService
+ *    knows this from `settings.getCurrentAssistant().id`. Cron / workflow / sub-agent
+ *    paths know it from their respective entity's assistant id.
+ *  - [callerConversationId]: the conversation-uuid of the user-facing chat (interactive)
+ *    or the headless conversation (cron / workflow / sub-agent / external-automation).
+ *  - [isHeadless]: true when the dispatch is happening from a system flow rather than the
+ *    user typing in a chat. Sub-agents, cron jobs, workflows, and external-automation
+ *    runs all set this to true so the recursion guard fires.
+ *  - [modelCanSeeImages]: true iff the model handling this turn has image input in its
+ *    modalities. `show_image` reads this so a text-only model is told plainly it cannot
+ *    see the picture (and must OCR / file-process it) instead of being handed dimensions
+ *    that read like "I looked at it" — the root cause of confabulated image descriptions.
+ *    Defaults to `true`: the no-knowledge fallback preserves the pre-fix behaviour, and
+ *    ChatService (the only LLM-driven dispatch path) always sets it explicitly.
  */
 data class ToolInvocationContext(
-    /** 发起调用的助手 ID */
     val callerAssistantId: String? = null,
-    /** 发起调用的会话 ID */
     val callerConversationId: String? = null,
-    /** 是否在 headless（无 UI）环境下运行 */
     val isHeadless: Boolean = false,
+    val modelCanSeeImages: Boolean = true,
 ) {
     companion object {
-        /** 无上下文时的回退值 */
+        /** No-knowledge fallback. Factories that depend on context MUST handle this. */
         val EMPTY = ToolInvocationContext()
     }
 }

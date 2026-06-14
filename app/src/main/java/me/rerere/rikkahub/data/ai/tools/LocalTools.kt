@@ -586,7 +586,7 @@ class LocalTools(
                     required = listOf("questions")
                 )
             },
-            needsApproval = true,
+            needsApproval = { true },
             execute = {
                 // Reached only when no human-in-the-loop surface intercepted this call. The
                 // in-app question card and the Telegram clarify flow both handle ask_user before
@@ -951,7 +951,7 @@ class LocalTools(
         // truth, and the GenerationHandler / Telegram/in-app prompt path keys off needsApproval.
         return tools.map { t ->
             val withApproval = if (!t.needsApproval && ToolApprovalDefaults.requiresApproval(t.name)) {
-                t.copy(needsApproval = true)
+                t.copy(needsApproval = { true })
             } else {
                 t
             }
