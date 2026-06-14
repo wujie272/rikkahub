@@ -521,6 +521,8 @@ class RouteActivity : ComponentActivity() {
                             }
 
                             entry<Screen.Skills> {
+                                SkillsPage()
+                            }
 
                             entry<Screen.Workspaces> {
                                 WorkspacePage()
@@ -532,8 +534,6 @@ class RouteActivity : ComponentActivity() {
 
                             entry<Screen.WorkspaceTerminal> { key ->
                                 WorkspaceTerminalPage(key.id)
-                            }
-                                SkillsPage()
                             }
 
                             entry<Screen.SkillDetail> { key ->
