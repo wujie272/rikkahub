@@ -8,6 +8,12 @@ import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.ui.UIMessage
 import me.rerere.rikkahub.utils.UiState
 
+import sh.calvin.reorderable.ReorderableItem
+import sh.calvin.reorderable.rememberReorderableLazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.ui.graphics.graphicsLayer
+
+
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.PlusSign
@@ -113,6 +119,14 @@ fun SettingMultiKeyPage(id: Uuid) {
     val providerManager = koinInject<ProviderManager>()
     val strUndo = ctx.getString(R.string.multi_key_undo)
 
+    val lazyListState = rememberLazyListState()
+    val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
+        val mutableKeys = apiKeys.toMutableList()
+        val item = mutableKeys.removeAt(from.index)
+        mutableKeys.add(to.index, item)
+        updateKeys(mutableKeys)
+    }
+
     Scaffold(
         containerColor = CustomColors.topBarColors.containerColor,
         topBar = {
@@ -174,6 +188,7 @@ fun SettingMultiKeyPage(id: Uuid) {
                 .padding(padding)
                 .padding(start = 16.dp, end = 16.dp)
                 .imePadding(),
+            state = lazyListState,
             contentPadding = PaddingValues(vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -230,90 +245,106 @@ fun SettingMultiKeyPage(id: Uuid) {
             }
 
             if (apiKeys.isNotEmpty()) {
-                items(apiKeys, key = { it.id }) { key ->
-                    IosCard {
-                        KeyRow(
-                            config = key,
-                            onToggle = { enabled ->
-                                val newStatus = if (enabled) ApiKeyStatus.ACTIVE else ApiKeyStatus.DISABLED
-                                val idx = apiKeys.indexOf(key)
-                                val newKeys = apiKeys.toMutableList().apply { set(idx, key.copy(status = newStatus)) }
-                                updateKeys(newKeys)
-                            },
-                            onEdit = { updated ->
-                                val idx = apiKeys.indexOf(key)
-                                val newKeys = apiKeys.toMutableList().apply { set(idx, updated) }
-                                updateKeys(newKeys)
-                            },
-                            onDelete = {
-                                val removed = key; val ri = apiKeys.indexOf(key)
-                                val newKeys = apiKeys.toMutableList().apply { removeAt(ri) }
-                                updateKeys(newKeys)
-                                scope.launch {
-                                    val result = snackbarHostState.showSnackbar(
-                                        message = ctx.getString(R.string.multi_key_deleted,
-                                            removed.name.ifBlank { removed.key.take(8) + "..." }),
-                                        actionLabel = strUndo,
-                                        duration = SnackbarDuration.Short
-                                    )
-                                    if (result == SnackbarResult.ActionPerformed) {
-                                        val cur = internalProvider.apiKeys.toMutableList()
-                                        cur.add(if (ri <= cur.size) ri else cur.size, removed)
-                                        updateKeys(cur)
-                                    }
-                                }
-                            },
-                            onTest = { configToTest, onResult ->
-                                scope.launch {
-                                    try {
-                                        val testProvider = internalProvider.copyProvider(
-                                            apiKeys = listOf(configToTest),
-                                            keyManagement = internalProvider.keyManagement
+                items(apiKeys.size, key = { apiKeys[it].id }) { index ->
+                    val key = apiKeys[index]
+                    ReorderableItem(
+                        state = reorderableState,
+                        key = key.id
+                    ) { isDragging ->
+                        IosCard {
+                            KeyRow(
+                                config = key,
+                                onToggle = { enabled ->
+                                    val newStatus = if (enabled) ApiKeyStatus.ACTIVE else ApiKeyStatus.DISABLED
+                                    val idx = apiKeys.indexOf(key)
+                                    val newKeys = apiKeys.toMutableList().apply { set(idx, key.copy(status = newStatus)) }
+                                    updateKeys(newKeys)
+                                },
+                                onEdit = { updated ->
+                                    val idx = apiKeys.indexOf(key)
+                                    val newKeys = apiKeys.toMutableList().apply { set(idx, updated) }
+                                    updateKeys(newKeys)
+                                },
+                                onDelete = {
+                                    val removed = key; val ri = apiKeys.indexOf(key)
+                                    val newKeys = apiKeys.toMutableList().apply { removeAt(ri) }
+                                    updateKeys(newKeys)
+                                    scope.launch {
+                                        val result = snackbarHostState.showSnackbar(
+                                            message = ctx.getString(R.string.multi_key_deleted,
+                                                removed.name.ifBlank { removed.key.take(8) + "..." }),
+                                            actionLabel = strUndo,
+                                            duration = SnackbarDuration.Short
                                         )
-                                        testProvider.syncApiKeyString()
-                                        withTimeout(15_000L) {
-                                            val model = internalProvider.models
-                                                .firstOrNull { it.type == ModelType.CHAT }
-                                            if (model != null) {
-                                                providerManager.getProviderByType(testProvider)
-                                                    .generateText(
-                                                        providerSetting = testProvider,
-                                                        messages = listOf(
-                                                            UIMessage.system("You are a helpful assistant. Reply only with the word 'ok', nothing else."),
-                                                            UIMessage.user("Say ok")
-                                                        ),
-                                                        params = TextGenerationParams(model = model)
-                                                    )
-                                            } else {
-                                                providerManager.getProviderByType(testProvider)
-                                                    .listModels(testProvider)
-                                            }
+                                        if (result == SnackbarResult.ActionPerformed) {
+                                            val cur = internalProvider.apiKeys.toMutableList()
+                                            cur.add(if (ri <= cur.size) ri else cur.size, removed)
+                                            updateKeys(cur)
                                         }
-                                        val idx = apiKeys.indexOf(configToTest)
-                                        val newKeys = apiKeys.toMutableList().apply {
-                                            set(idx, configToTest.copy(
-                                                status = ApiKeyStatus.ACTIVE,
-                                                lastError = null,
-                                                lastErrorAt = null
-                                            ))
-                                        }
-                                        updateKeys(newKeys)
-                                        onResult(null)
-                                    } catch (e: Exception) {
-                                        val idx = apiKeys.indexOf(configToTest)
-                                        val newKeys = apiKeys.toMutableList().apply {
-                                            set(idx, configToTest.copy(
-                                                status = ApiKeyStatus.ERROR,
-                                                lastError = e.message?.take(200),
-                                                lastErrorAt = System.currentTimeMillis()
-                                            ))
-                                        }
-                                        updateKeys(newKeys)
-                                        onResult(e)
                                     }
-                                }
-                            },
-                        )
+                                },
+                                onTest = { configToTest, onResult ->
+                                    scope.launch {
+                                        try {
+                                            val testProvider = internalProvider.copyProvider(
+                                                apiKeys = listOf(configToTest),
+                                                keyManagement = internalProvider.keyManagement
+                                            )
+                                            testProvider.syncApiKeyString()
+                                            withTimeout(15_000L) {
+                                                val model = internalProvider.models
+                                                    .firstOrNull { it.type == ModelType.CHAT }
+                                                if (model != null) {
+                                                    providerManager.getProviderByType(testProvider)
+                                                        .generateText(
+                                                            providerSetting = testProvider,
+                                                            messages = listOf(
+                                                                UIMessage.system("You are a helpful assistant. Reply only with the word 'ok', nothing else."),
+                                                                UIMessage.user("Say ok")
+                                                            ),
+                                                            params = TextGenerationParams(model = model)
+                                                        )
+                                                } else {
+                                                    providerManager.getProviderByType(testProvider)
+                                                        .listModels(testProvider)
+                                                }
+                                            }
+                                            val idx = apiKeys.indexOf(configToTest)
+                                            val newKeys = apiKeys.toMutableList().apply {
+                                                set(idx, configToTest.copy(
+                                                    status = ApiKeyStatus.ACTIVE,
+                                                    lastError = null,
+                                                    lastErrorAt = null
+                                                ))
+                                            }
+                                            updateKeys(newKeys)
+                                            onResult(null)
+                                        } catch (e: Exception) {
+                                            val idx = apiKeys.indexOf(configToTest)
+                                            val newKeys = apiKeys.toMutableList().apply {
+                                                set(idx, configToTest.copy(
+                                                    status = ApiKeyStatus.ERROR,
+                                                    lastError = e.message?.take(200),
+                                                    lastErrorAt = System.currentTimeMillis()
+                                                ))
+                                            }
+                                            updateKeys(newKeys)
+                                            onResult(e)
+                                        }
+                                    }
+                                },
+                                isDragHandle = true,
+                                modifier = Modifier
+                                    .longPressDraggableHandle()
+                                    .graphicsLayer {
+                                        if (isDragging) {
+                                            scaleX = 1.03f
+                                            scaleY = 1.03f
+                                            alpha = 0.9f
+                                        }
+                                    },
+                            )
+                        }
                     }
                 }
             }
@@ -412,6 +443,8 @@ private fun KeyRow(
     onEdit: (ApiKeyConfig) -> Unit,
     onDelete: () -> Unit,
     onTest: ((ApiKeyConfig, (Exception?) -> Unit) -> Unit)? = null,
+    isDragHandle: Boolean = false,
+    modifier: Modifier = Modifier,
 ) {
     val ctx = LocalContext.current
     var testingState by remember { mutableStateOf<UiState<Unit>>(UiState.Idle) }
@@ -434,7 +467,7 @@ private fun KeyRow(
     var showEdit by remember { mutableStateOf(false) }
 
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+        modifier = modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
 

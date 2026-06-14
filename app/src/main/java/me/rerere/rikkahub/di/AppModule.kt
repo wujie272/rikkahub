@@ -7,7 +7,6 @@ import com.google.firebase.remoteconfig.remoteConfig
 import kotlinx.serialization.json.Json
 import me.rerere.highlight.Highlighter
 import me.rerere.rikkahub.AppScope
-import me.rerere.rikkahub.data.key.KeyManager
 import me.rerere.rikkahub.data.ai.AILoggingManager
 import me.rerere.rikkahub.data.ai.tools.LocalTools
 import me.rerere.rikkahub.data.event.AppEventBus
@@ -50,10 +49,6 @@ val appModule = module {
 
     single<EmojiData> {
         EmojiUtils.loadEmoji(get())
-    }
-
-    single {
-        KeyManager(get())
     }
 
     single {
