@@ -56,28 +56,6 @@ import me.rerere.rikkahub.workflow.db.WorkflowRunEntity
         AgentRun::class,
     ],
     version = 25,
-    autoMigrations = [
-        AutoMigration(from = 1, to = 2),
-        AutoMigration(from = 2, to = 3),
-        AutoMigration(from = 3, to = 4),
-        AutoMigration(from = 4, to = 5),
-        AutoMigration(from = 5, to = 6),
-        AutoMigration(from = 7, to = 8),
-        AutoMigration(from = 8, to = 9, spec = Migration_8_9::class),
-        AutoMigration(from = 9, to = 10),
-        AutoMigration(from = 10, to = 11),
-        AutoMigration(from = 12, to = 13),
-        AutoMigration(from = 16, to = 17, spec = Migration_16_17::class),
-        AutoMigration(from = 17, to = 18),
-        AutoMigration(from = 18, to = 19),
-        AutoMigration(from = 19, to = 20),
-        AutoMigration(from = 20, to = 21, spec = Migration_20_21::class),
-        AutoMigration(from = 21, to = 22, spec = Migration_21_22::class),
-        AutoMigration(from = 22, to = 23, spec = Migration_22_23::class),
-        // v25: upstream 2.2.6 added conversation-level custom_system_prompt / mode_injection_ids
-        // / lorebook_ids columns (all carry defaultValue, so a plain auto-migration suffices).
-        AutoMigration(from = 24, to = 25),
-    ]
 )
 @TypeConverters(TokenUsageConverter::class)
 abstract class AppDatabase : RoomDatabase() {
