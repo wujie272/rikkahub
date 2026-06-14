@@ -242,6 +242,9 @@ class RouteActivity : ComponentActivity() {
             eventBus.events.collect { event ->
                 when (event) {
                     is AppEvent.Speak -> tts.speak(event.text)
+                    is AppEvent.RequestLocationPermission -> {
+                        // handled by LocationObserver in ChatPage
+                    }
                 }
             }
         }
