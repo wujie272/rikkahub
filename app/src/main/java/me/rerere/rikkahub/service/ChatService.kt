@@ -556,7 +556,11 @@ class ChatService(
                     if (settings.enableWebSearch) {
                         addAll(createSearchTools(settings))
                     }
-                    addAll(localTools.getTools(assistant.localTools, conversationId.toString(), assistant.id.toString()))
+                    val ctx = me.rerere.rikkahub.data.ai.tools.ToolInvocationContext(
+                        callerAssistantId = assistant.id.toString(),
+                        callerConversationId = conversationId.toString(),
+                    )
+                    addAll(localTools.getTools(assistant.localTools, ctx))
                     addAll(createWorkspaceToolsIfReady(assistant.workspaceId?.toString(), conversation.workspaceCwd))
                     if (assistant.enabledSkills.isNotEmpty()) {
                         addAll(

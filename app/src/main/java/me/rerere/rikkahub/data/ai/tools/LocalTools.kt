@@ -19,6 +19,10 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.automation.ExternalAutomationConfig
 import me.rerere.rikkahub.subagent.SubAgentEngine
 import me.rerere.rikkahub.subagent.SubAgentRegistry
+import me.rerere.rikkahub.subagent.subagentDispatchTool
+import me.rerere.rikkahub.subagent.subagentListTool
+import me.rerere.rikkahub.subagent.subagentGetTool
+import me.rerere.rikkahub.subagent.subagentCancelTool
 import kotlinx.coroutines.flow.first
 import me.rerere.rikkahub.data.event.AppEvent
 import me.rerere.rikkahub.data.event.AppEventBus
@@ -458,8 +462,7 @@ class LocalTools(private val context: Context, private val eventBus: AppEventBus
 
     fun getTools(
         options: List<LocalToolOption>,
-        conversationId: String? = null,
-        assistantId: String? = null,
+        context: ToolInvocationContext = ToolInvocationContext.EMPTY,
     ): List<Tool> {
         val tools = mutableListOf<Tool>()
         if (options.contains(LocalToolOption.JavascriptEngine)) {
@@ -487,7 +490,7 @@ class LocalTools(private val context: Context, private val eventBus: AppEventBus
             tools.add(externalAutomationRemoveTrustedPackageTool)
         }
         if (options.contains(LocalToolOption.SubAgents)) {
-            tools.add(me.rerere.rikkahub.subagent.subagentDispatchTool(subAgentEngine, conversationId, assistantId))
+            tools.add(subagentDispatchTool(subAgentEngine, context))
             tools.add(me.rerere.rikkahub.subagent.subagentListTool(subAgentRegistry))
             tools.add(me.rerere.rikkahub.subagent.subagentGetTool(subAgentRegistry))
             tools.add(me.rerere.rikkahub.subagent.subagentCancelTool(subAgentRegistry))

@@ -12,6 +12,7 @@ import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
+import me.rerere.rikkahub.data.ai.tools.ToolInvocationContext
 import me.rerere.ai.ui.UIMessagePart
 
 private fun errEnv(error: String, detail: String) = listOf(
@@ -33,8 +34,7 @@ private fun encodeRun(run: SubAgentRun) = buildJsonObject {
 /** 派发一个子代理 */
 fun subagentDispatchTool(
     engine: SubAgentEngine,
-    conversationId: String? = null,
-    assistantId: String? = null,
+    context: ToolInvocationContext = ToolInvocationContext.EMPTY,
 ): Tool = Tool(
     name = "subagent_dispatch",
     description = """
@@ -66,7 +66,9 @@ fun subagentDispatchTool(
             runInBackground = params["run_in_background"]?.jsonPrimitive?.booleanOrNull ?: false,
             timeoutSeconds = params["timeout_seconds"]?.jsonPrimitive?.longOrNull ?: 300L,
         )
-        when (val res = engine.dispatch(assistantId ?: "", conversationId, request)) {
+        val parentAssistantId = context.callerAssistantId.orEmpty()
+        val parentChatId = context.callerConversationId
+        when (val res = engine.dispatch(parentAssistantId, parentChatId, request)) {
             is SubAgentEngine.DispatchResult.Reject -> errEnv(res.error, res.detail)
             is SubAgentEngine.DispatchResult.Ok -> listOf(UIMessagePart.Text(encodeRun(res.run).toString()))
         }
