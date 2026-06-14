@@ -153,6 +153,13 @@ kotlin {
 }
 
 dependencies {
+    implementation("com.github.mwiede:jsch:0.2.21")
+    implementation("com.cronutils:cron-utils:9.2.1")
+    implementation("androidx.media:media:1.7.0")
+    implementation("androidx.biometric:biometric:1.2.0-alpha05")
+    implementation("androidx.documentfile:documentfile:1.0.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.11.0")
+    implementation("com.google.android.gms:play-services-location:21.3.0")
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.process)
@@ -305,6 +312,7 @@ dependencies {
     implementation(project(":speech"))
     implementation(project(":common"))
     implementation(project(":material3"))
+    implementation(project(":workspace"))
     implementation(project(":workspace"))
     implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.jar", "*.aar"))))
     implementation(kotlin("reflect"))
