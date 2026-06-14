@@ -90,3 +90,21 @@ private fun isMonthFirstLocale(locale: Locale): Boolean {
     )
     return monthFirstCountries.contains(locale.country)
 }
+
+data class RelativeTimeStrings(
+    val justNow: String,
+    val secondsAgo: String,
+    val minutesAgo: String,
+    val hoursAgo: String,
+    val daysAgo: String,
+)
+
+fun formatRelativeAgo(thenMs: Long, nowMs: Long, strings: RelativeTimeStrings): String {
+    val deltaSec = ((nowMs - thenMs) / 1000L).coerceAtLeast(0)
+    return when {
+        deltaSec < 60 -> if (deltaSec < 5) strings.justNow else String.format(strings.secondsAgo, deltaSec)
+        deltaSec < 60 * 60 -> String.format(strings.minutesAgo, deltaSec / 60)
+        deltaSec < 24 * 60 * 60 -> String.format(strings.hoursAgo, deltaSec / 3600)
+        else -> String.format(strings.daysAgo, deltaSec / 86400)
+    }
+}
