@@ -30,10 +30,7 @@ import me.rerere.rikkahub.data.db.migrations.Migration_11_12
 import me.rerere.rikkahub.data.db.migrations.Migration_13_14
 import me.rerere.rikkahub.data.db.migrations.Migration_14_15
 import me.rerere.rikkahub.data.db.migrations.Migration_15_16
-import me.rerere.rikkahub.data.db.migrations.Migration_23_24
 import me.rerere.rikkahub.data.ai.mcp.McpManager
-import me.rerere.rikkahub.data.agentrun.AgentRunBootRecovery
-import me.rerere.rikkahub.data.agentrun.AgentRunRepository
 import me.rerere.rikkahub.data.sync.webdav.WebDavSync
 import me.rerere.search.SearchService
 import me.rerere.rikkahub.data.sync.S3Sync
@@ -55,8 +52,7 @@ val dataSourceModule = module {
         val context: Context = get()
         Room.databaseBuilder(context, AppDatabase::class.java, "rikka_hub")
             .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
-            .addMigrations(Migration_6_7, Migration_11_12, Migration_13_14, Migration_14_15, Migration_15_16, Migration_23_24)
-            .fallbackToDestructiveMigration()
+            .addMigrations(Migration_6_7, Migration_11_12, Migration_13_14, Migration_14_15, Migration_15_16)
             .addCallback(object : RoomDatabase.Callback() {
                 override fun onOpen(db: SupportSQLiteDatabase) {
                     val dictDir = SimpleDictManager.extractDict(context)
@@ -73,7 +69,19 @@ val dataSourceModule = module {
                             }
                         }
                     }
-                    db.execSQL(me.rerere.rikkahub.data.db.fts.MESSAGE_FTS_CREATE_SQL.trimIndent())
+                    db.execSQL(
+                        """
+                        CREATE VIRTUAL TABLE IF NOT EXISTS message_fts USING fts5(
+                            text,
+                            node_id UNINDEXED,
+                            message_id UNINDEXED,
+                            conversation_id UNINDEXED,
+                            title UNINDEXED,
+                            update_at UNINDEXED,
+                            tokenize = 'simple'
+                        )
+                        """.trimIndent()
+                    )
                 }
             })
             .openHelperFactory(
@@ -131,17 +139,14 @@ val dataSourceModule = module {
     }
 
     single {
+        get<AppDatabase>().workspaceDao()
+    }
+
+    single {
         MessageFtsManager(get())
     }
 
-    // Phase 24 — unified AgentRun ledger. DAO + the single shared writer/reader + the
-    // boot-recovery sweep. AgentRunRepository has no cross-dependencies (only the DAO), so
-    // there is no DI-cycle risk here.
-    single { get<AppDatabase>().agentRunDao() }
-    single { AgentRunRepository(get()) }
-    single { AgentRunBootRecovery(context = get(), repository = get()) }
-
-    single { McpManager(context = get(), settingsStore = get(), appScope = get(), filesManager = get()) }
+    single { McpManager(settingsStore = get(), appScope = get(), filesManager = get()) }
 
     single {
         GenerationHandler(
@@ -150,12 +155,9 @@ val dataSourceModule = module {
             json = get(),
             memoryRepo = get(),
             conversationRepo = get(),
-            aiLoggingManager = get(),
-            systemPromptBuilder = get(),
+            aiLoggingManager = get()
         )
     }
-
-    single { me.rerere.rikkahub.data.ai.SystemPromptBuilder() }
 
     single<OkHttpClient> {
         val acceptLang = AcceptLanguageBuilder.fromAndroid(get())
@@ -196,7 +198,7 @@ val dataSourceModule = module {
                 }
             }
             .addNetworkInterceptor(RequestLoggingInterceptor())
-            .addInterceptor(AIRequestInterceptor())
+            .addInterceptor(AIRequestInterceptor(remoteConfig = get()))
             .addInterceptor(HttpLoggingInterceptor().apply {
                 level = HttpLoggingInterceptor.Level.HEADERS
             })
@@ -208,7 +210,6 @@ val dataSourceModule = module {
     }
 
     single {
-        val settingsStore: me.rerere.rikkahub.data.datastore.SettingsStore = get()
         ProviderManager(client = get(), context = get())
     }
 

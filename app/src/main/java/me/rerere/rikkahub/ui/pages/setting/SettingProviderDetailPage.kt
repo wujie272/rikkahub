@@ -5,11 +5,18 @@ import me.rerere.hugeicons.stroke.Package01
 import me.rerere.hugeicons.stroke.Connect
 import me.rerere.hugeicons.stroke.ArrowDown01
 import me.rerere.hugeicons.stroke.Add01
+import me.rerere.hugeicons.stroke.Key01
 import me.rerere.hugeicons.stroke.Refresh03
 import me.rerere.hugeicons.stroke.Tools
 import me.rerere.hugeicons.stroke.Share01
 import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.Cancel01
+import me.rerere.hugeicons.stroke.ArrowRight01
+import me.rerere.ai.util.ApiKeyStatus
+import me.rerere.ai.util.LoadBalanceStrategy
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -27,6 +34,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -42,6 +50,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FloatingToolbarDefaults.ScreenOffset
+import me.rerere.rikkahub.Screen
 import androidx.compose.material3.FloatingToolbarDefaults.floatingToolbarVerticalNestedScroll
 import androidx.compose.material3.HorizontalFloatingToolbar
 import androidx.compose.material3.Icon
@@ -68,6 +77,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.rememberBottomSheetState
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -119,6 +129,7 @@ import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.hooks.useEditState
 import me.rerere.rikkahub.ui.pages.assistant.detail.CustomBodies
 import me.rerere.rikkahub.ui.pages.assistant.detail.CustomHeaders
+
 import me.rerere.rikkahub.ui.pages.setting.components.ProviderConfigure
 import me.rerere.rikkahub.ui.pages.setting.components.ProviderConnectionTester
 import me.rerere.rikkahub.ui.pages.setting.components.SettingProviderBalanceOption
@@ -139,10 +150,11 @@ fun SettingProviderDetailPage(id: Uuid, vm: SettingVM = koinViewModel()) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     val navController = LocalNavController.current
     val provider = settings.providers.find { it.id == id } ?: return
-    val pager = rememberPagerState { 2 }
+    val pager = rememberPagerState { 3 }
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
     val context = LocalContext.current
+
 
     val onEdit = { newProvider: ProviderSetting ->
         val newSettings = settings.copy(
@@ -210,11 +222,21 @@ fun SettingProviderDetailPage(id: Uuid, vm: SettingVM = koinViewModel()) {
                 )
                 NavigationBarItem(
                     selected = pager.currentPage == 1,
+                    label = { Text(stringResource(R.string.setting_provider_page_keys)) },
+                    icon = { Icon(HugeIcons.Key01, null) },
+                    onClick = {
+                        scope.launch {
+                            pager.animateScrollToPage(1)
+                        }
+                    }
+                )
+                NavigationBarItem(
+                    selected = pager.currentPage == 2,
                     label = { Text(stringResource(id = R.string.setting_provider_page_models)) },
                     icon = { Icon(HugeIcons.Package01, null) },
                     onClick = {
                         scope.launch {
-                            pager.animateScrollToPage(1)
+                            pager.animateScrollToPage(2)
                         }
                     }
                 )
@@ -245,14 +267,74 @@ fun SettingProviderDetailPage(id: Uuid, vm: SettingVM = koinViewModel()) {
                 }
 
                 1 -> {
+                    val apiKeysCount = provider.apiKeys.size
+                    val normalKeys = provider.apiKeys.count { it.status == ApiKeyStatus.ACTIVE }
+                    val errorKeys = provider.apiKeys.count { it.status == ApiKeyStatus.ERROR }
+                    val totalKeys = apiKeysCount
+
+                    var internalProvider by remember(provider) { mutableStateOf(provider) }
+                    val snackbarHostState = remember { SnackbarHostState() }
+                    val lazyListState = rememberLazyListState()
+                    val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
+                        val mutableKeys = internalProvider.apiKeys.toMutableList()
+                        val item = mutableKeys.removeAt(from.index)
+                        mutableKeys.add(to.index, item)
+                        val updated = internalProvider.copyProvider(apiKeys = mutableKeys)
+                        updated.syncApiKeyString()
+                        val newSettings = settings.copy(
+                            providers = settings.providers.map { if (it.id == updated.id) updated else it }
+                        )
+                        scope.launch { vm.updateSettings(newSettings) }
+                        internalProvider = updated
+                    }
+
+                    fun saveProvider(p: ProviderSetting) {
+                        val newSettings = settings.copy(
+                            providers = settings.providers.map { if (it.id == p.id) p else it }
+                        )
+                        scope.launch { vm.updateSettings(newSettings) }
+                        internalProvider = p
+                    }
+
+                    fun updateKeys(newKeys: List<me.rerere.ai.util.ApiKeyConfig>) {
+                        val updated = internalProvider.copyProvider(apiKeys = newKeys)
+                        updated.syncApiKeyString()
+                        saveProvider(updated)
+                    }
+
+                    val providerManager = koinInject<ProviderManager>()
+                    val strUndo = context.getString(R.string.multi_key_undo)
+
+                    SettingMultiKeyContent(
+                        internalProvider = internalProvider,
+                        saveProvider = ::saveProvider,
+                        updateKeys = ::updateKeys,
+                        apiKeys = internalProvider.apiKeys,
+                        errorKeys = errorKeys,
+                        normalKeys = normalKeys,
+                        totalKeys = totalKeys,
+                        providerManager = providerManager,
+                        snackbarHostState = snackbarHostState,
+                        lazyListState = lazyListState,
+                        reorderableState = reorderableState,
+                        strUndo = strUndo,
+                        scope = scope,
+                    )
+                }
+
+                2 -> {
                     SettingProviderModelPage(
                         provider = provider,
                         onEdit = onEdit
                     )
                 }
+
+
             }
         }
     }
+
+
 }
 
 @Composable
@@ -386,26 +468,15 @@ private fun ModelList(
     onUpdateProvider: (ProviderSetting) -> Unit
 ) {
     val providerManager = koinInject<ProviderManager>()
-    val toaster = LocalToaster.current
     val modelList by produceState(emptyList(), providerSetting) {
         runCatching {
+            println("loading models...")
             value = providerManager.getProviderByType(providerSetting)
                 .listModels(providerSetting)
                 .sortedBy { it.modelId }
                 .toList()
-        }.onFailure { error ->
-            // runCatching catches Throwable, which includes CancellationException
-            // (e.g. when the user navigates away from the Models tab mid-fetch
-            // and Compose cancels this produceState's coroutine). Re-throw so
-            // we don't print a stack trace + show a toast for normal teardown.
-            if (error is kotlinx.coroutines.CancellationException) throw error
-            error.printStackTrace()
-            // Surface real failures (missing/invalid API key, providers like
-            // Minimax that return an HTTP 200 error envelope instead of a 4xx).
-            toaster.show(
-                error.message ?: "Failed to load models",
-                type = ToastType.Error
-            )
+        }.onFailure {
+            it.printStackTrace()
         }
     }
     var expanded by rememberSaveable { mutableStateOf(true) }
@@ -706,7 +777,16 @@ private fun AddModelButton(
             models = models,
             selectedModels = selectedModels,
             onModelSelected = { model ->
-                onAddModel(model.enrichCapabilities())
+                val inputModalities = ModelRegistry.MODEL_INPUT_MODALITIES.getData(model.modelId)
+                val outputModalities = ModelRegistry.MODEL_OUTPUT_MODALITIES.getData(model.modelId)
+                val abilities = ModelRegistry.MODEL_ABILITIES.getData(model.modelId)
+                onAddModel(
+                    model.copy(
+                        inputModalities = inputModalities,
+                        outputModalities = outputModalities,
+                        abilities = abilities
+                    )
+                )
             },
             onModelDeselected = { model ->
                 onRemoveModel(model)
@@ -716,7 +796,13 @@ private fun AddModelButton(
                     parentProvider.copyProvider(
                         models = parentProvider.models + it.filter { model ->
                             parentProvider.models.none { existing -> existing.modelId == model.modelId }
-                        }.map { model -> model.enrichCapabilities() }
+                        }.map { model ->
+                            model.copy(
+                                inputModalities = ModelRegistry.MODEL_INPUT_MODALITIES.getData(model.modelId),
+                                outputModalities = ModelRegistry.MODEL_OUTPUT_MODALITIES.getData(model.modelId),
+                                abilities = ModelRegistry.MODEL_ABILITIES.getData(model.modelId)
+                            )
+                        }
                     )
                 )
             },
@@ -908,7 +994,7 @@ private fun ModelPicker(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     contentPadding = PaddingValues(8.dp),
                 ) {
-                    items(filteredModels, key = { it.id }) {
+                    items(filteredModels) {
                         Card {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
@@ -938,7 +1024,13 @@ private fun ModelPicker(
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.spacedBy(2.dp)
                                     ) {
-                                        val modelMeta = remember(it) { it.enrichCapabilities() }
+                                        val modelMeta = remember(it) {
+                                            it.copy(
+                                                inputModalities = ModelRegistry.MODEL_INPUT_MODALITIES.getData(it.modelId),
+                                                outputModalities = ModelRegistry.MODEL_OUTPUT_MODALITIES.getData(it.modelId),
+                                                abilities = ModelRegistry.MODEL_ABILITIES.getData(it.modelId),
+                                            )
+                                        }
                                         ModelModalityTag(
                                             model = modelMeta,
                                         )
@@ -1560,20 +1652,3 @@ private fun ProviderOverrideSettings(
         }
     }
 }
-
-/**
- * Prefer capabilities auto-detected at fetch time (OpenRouter's /models populates
- * supportedParameters, modalities, abilities and the IMAGE model type); only fall back to
- * the static ModelRegistry lookup for providers that return bare model ids. Without this,
- * the registry lookup clobbered OpenRouter's detected image/tool/reasoning capabilities.
- */
-private fun Model.enrichCapabilities(): Model =
-    if (supportedParameters.isNotEmpty()) {
-        this
-    } else {
-        copy(
-            inputModalities = ModelRegistry.MODEL_INPUT_MODALITIES.getData(modelId),
-            outputModalities = ModelRegistry.MODEL_OUTPUT_MODALITIES.getData(modelId),
-            abilities = ModelRegistry.MODEL_ABILITIES.getData(modelId),
-        )
-    }

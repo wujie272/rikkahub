@@ -1,6 +1,5 @@
 package me.rerere.rikkahub.data.ai.mcp
 
-import android.content.Context
 import android.util.Log
 import androidx.core.net.toUri
 import io.ktor.client.HttpClient
@@ -37,7 +36,6 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
-import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.files.saveUploadFromBytes
 import me.rerere.rikkahub.utils.JsonInstant
@@ -54,7 +52,6 @@ private const val BASE_RECONNECT_DELAY_MS = 1000L
 private const val MAX_RECONNECT_DELAY_MS = 30000L
 
 class McpManager(
-    private val context: Context,
     private val settingsStore: SettingsStore,
     private val appScope: AppScope,
     private val filesManager: FilesManager,
@@ -66,7 +63,6 @@ class McpManager(
         .followSslRedirects(true)
         .followRedirects(true)
         .build()
-        .also { me.rerere.rikkahub.utils.NetworkChangeMonitor.register(it) }
 
     private val client = HttpClient(OkHttp) {
         engine {
@@ -92,26 +88,40 @@ class McpManager(
                 .map { settings -> settings.mcpServers }
                 .collect { mcpServerConfigs ->
                     runCatching {
-                        Log.i(TAG, "update configs: ${mcpServerConfigs.joinToString { redactConfigForLog(it) }}")
-                        val newConfigs = mcpServerConfigs.filter { it.commonOptions.enable }
+                        Log.i(TAG, "update configs: $mcpServerConfigs")
+                        val newConfigs = mcpServerConfigs.filter { it.commonOptions.enable && it.commonOptions.name.isNotBlank() }
                         val currentConfigs = clients.keys.toList()
                         val (toAdd, toRemove) = currentConfigs.checkDifferent(
                             other = newConfigs,
                             eq = { a, b -> a.id == b.id }
                         )
+                        // 检测修改：id 相同但内容不同，需要重连
+                        val toUpdate = currentConfigs.filter { cur ->
+                            newConfigs.any { n -> cur.id == n.id && cur != n }
+                        }
                         Log.i(TAG, "to_add: $toAdd")
                         Log.i(TAG, "to_remove: $toRemove")
+                        Log.i(TAG, "to_update: ${toUpdate.map { it.commonOptions.name }}")
                         toAdd.forEach { cfg ->
                             appScope.launch {
                                 runCatching { addClient(cfg) }
-                                    .onFailure { Log.w(TAG, "addClient failed for ${cfg.commonOptions.name}", it) }
+                                    .onFailure { it.printStackTrace() }
                             }
                         }
                         toRemove.forEach { cfg ->
                             appScope.launch { removeClient(cfg) }
                         }
+                        toUpdate.forEach { cfg ->
+                            appScope.launch {
+                                val newCfg = newConfigs.find { it.id == cfg.id } ?: return@launch
+                                runCatching {
+                                    removeClient(cfg)
+                                    addClient(newCfg)
+                                }.onFailure { it.printStackTrace() }
+                            }
+                        }
                     }.onFailure {
-                        Log.w(TAG, "settings collector reconcile failed", it)
+                        it.printStackTrace()
                     }
                 }
         }
@@ -246,7 +256,7 @@ class McpManager(
             reconnectAttempts[config.id] = 0 // 重置重连计数
             Log.i(TAG, "addClient: connected ${config.commonOptions.name}")
         }.onFailure {
-            Log.w(TAG, "addClient: connect failed for ${config.commonOptions.name}", it)
+            it.printStackTrace()
             setStatus(config = config, status = McpStatus.Error(it.message ?: it.javaClass.name))
         }
     }
@@ -321,31 +331,10 @@ class McpManager(
             runCatching {
                 sync(config)
             }.onFailure {
-                Log.w(TAG, "syncAll: sync failed for ${config.commonOptions.name}", it)
+                it.printStackTrace()
                 setStatus(config, McpStatus.Error(it.message ?: it.javaClass.name))
             }
         }
-    }
-
-    /**
-     * Force a re-connect + tool re-sync for a single server identified by its id. Used by
-     * the LLM-callable `mcp_test` tool: tearing down the existing client and re-`addClient`ing
-     * gives us the same code path the initial connect uses, so a "test now" reflects exactly
-     * what the next reconnect would do. Also resets the per-server backoff counter — a
-     * successful manual test means the next genuine failure starts at the lowest delay
-     * instead of inheriting whatever the auto-reconnect ladder had wound up to.
-     *
-     * Returns the in-memory config the manager ended up with (so callers can read the
-     * fresh tool list), or null if no server with that id is currently registered.
-     */
-    suspend fun forceResync(serverId: Uuid): McpServerConfig? = withContext(Dispatchers.IO) {
-        val current = clients.keys.firstOrNull { it.id == serverId }
-            ?: settingsStore.settingsFlow.value.mcpServers.firstOrNull { it.id == serverId }
-            ?: return@withContext null
-        cancelReconnect(serverId)
-        reconnectAttempts[serverId] = 0
-        addClient(current)
-        clients.keys.firstOrNull { it.id == serverId }
     }
 
     suspend fun removeClient(config: McpServerConfig) = withContext(Dispatchers.IO) {
@@ -355,7 +344,7 @@ class McpManager(
             runCatching {
                 entry.value.close()
             }.onFailure {
-                Log.w(TAG, "removeClient: close failed for ${entry.key.commonOptions.name}", it)
+                it.printStackTrace()
             }
             clients.remove(entry.key)
             syncingStatus.emit(syncingStatus.value.toMutableMap().apply { remove(entry.key.id) })
@@ -371,7 +360,7 @@ class McpManager(
         if (currentAttempt > MAX_RECONNECT_ATTEMPTS) {
             Log.w(TAG, "Max reconnect attempts reached for ${config.commonOptions.name}")
             appScope.launch {
-                setStatus(config, McpStatus.Error(context.getString(R.string.mcp_error_reconnect_exhausted)))
+                setStatus(config, McpStatus.Error("连接断开，已达最大重连次数"))
             }
             return
         }
@@ -427,8 +416,7 @@ class McpManager(
         // 先关闭旧客户端
         val oldEntry = clients.entries.find { it.key.id == config.id }
         if (oldEntry != null) {
-            runCatching { oldEntry.value.close() }
-                .onFailure { Log.w(TAG, "reconnectClient: old client close failed for ${config.commonOptions.name}", it) }
+            runCatching { oldEntry.value.close() }.onFailure { it.printStackTrace() }
             clients.remove(oldEntry.key)
         }
 
@@ -477,37 +465,7 @@ class McpManager(
     }
 }
 
-/**
- * Build a one-line summary of an MCP config that's safe to log. Uses the shared header
- * redactor so secret values never reach logcat. Logging the full data class via toString
- * (which is what `$mcpServerConfigs` would do) leaks every Authorization / X-Api-Key
- * value verbatim — addressed in the Phase 10 audit pass.
- */
-private fun redactConfigForLog(config: McpServerConfig): String {
-    val transport = when (config) {
-        is McpServerConfig.SseTransportServer -> "sse"
-        is McpServerConfig.StreamableHTTPServer -> "streamable_http"
-    }
-    val url = when (config) {
-        is McpServerConfig.SseTransportServer -> config.url
-        is McpServerConfig.StreamableHTTPServer -> config.url
-    }
-    val redactedHeaders = me.rerere.rikkahub.data.ai.mcp.control.McpHeaderRedactor
-        .redactHeaders(config.commonOptions.headers)
-    return buildString {
-        append("McpServer(id=").append(config.id)
-        append(", name='").append(config.commonOptions.name).append('\'')
-        append(", transport=").append(transport)
-        append(", url=").append(url)
-        append(", enabled=").append(config.commonOptions.enable)
-        append(", tools=").append(config.commonOptions.tools.size)
-        append(", headers=[").append(redactedHeaders.joinToString { "${it.first}=${it.second}" }).append("]")
-        append(")")
-    }
-}
-
 internal val McpJson: Json by lazy {
-    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
     Json {
         ignoreUnknownKeys = true
         encodeDefaults = true

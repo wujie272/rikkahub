@@ -6,7 +6,10 @@ import android.os.Build
 import android.os.Bundle
 import android.view.KeyEvent
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.mutableStateOf
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.SharedTransitionLayout
@@ -31,6 +34,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -64,17 +68,18 @@ import me.rerere.rikkahub.data.event.AppEvent
 import me.rerere.rikkahub.data.event.AppEventBus
 import me.rerere.rikkahub.ui.activity.SafeModeActivity
 import me.rerere.rikkahub.ui.components.ui.TTSController
-import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalASRState
+import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.context.LocalSharedTransitionScope
 import me.rerere.rikkahub.ui.context.LocalTTSState
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.context.Navigator
+import me.rerere.rikkahub.ui.haptic.RikkaHapticWrapper
 import me.rerere.rikkahub.ui.hooks.readBooleanPreference
 import me.rerere.rikkahub.ui.hooks.readStringPreference
-import me.rerere.rikkahub.ui.hooks.rememberCustomTtsState
 import me.rerere.rikkahub.ui.hooks.rememberCustomAsrState
+import me.rerere.rikkahub.ui.hooks.rememberCustomTtsState
 import me.rerere.rikkahub.ui.pages.assistant.AssistantPage
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantBasicPage
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantDetailPage
@@ -91,17 +96,17 @@ import me.rerere.rikkahub.ui.pages.developer.DeveloperPage
 import me.rerere.rikkahub.ui.pages.extensions.ExtensionsPage
 import me.rerere.rikkahub.ui.pages.extensions.PromptPage
 import me.rerere.rikkahub.ui.pages.extensions.QuickMessagesPage
-import me.rerere.rikkahub.ui.pages.extensions.SkillDetailPage
-import me.rerere.rikkahub.ui.pages.extensions.SkillsPage
+import me.rerere.rikkahub.ui.pages.extensions.skills.SkillDetailPage
+import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspacePage
+import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspaceDetailPage
+import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspaceTerminalPage
+import me.rerere.rikkahub.ui.pages.extensions.skills.SkillsPage
 import me.rerere.rikkahub.ui.pages.favorite.FavoritePage
 import me.rerere.rikkahub.ui.pages.history.HistoryPage
 import me.rerere.rikkahub.ui.pages.imggen.ImageGenPage
 import me.rerere.rikkahub.ui.pages.log.LogPage
 import me.rerere.rikkahub.ui.pages.search.SearchPage
 import me.rerere.rikkahub.ui.pages.setting.SettingAboutPage
-import me.rerere.rikkahub.ui.pages.setting.SettingAccessibilityPage
-import me.rerere.rikkahub.ui.pages.setting.SettingNotificationsPage
-import me.rerere.rikkahub.ui.pages.setting.SettingPermissionsPage
 import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesPage
 import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesThemePage
 import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesNotificationPage
@@ -117,10 +122,10 @@ import me.rerere.rikkahub.ui.pages.setting.SettingProviderDetailPage
 import me.rerere.rikkahub.ui.pages.setting.SettingProviderPage
 import me.rerere.rikkahub.ui.pages.setting.SettingSearchDetailPage
 import me.rerere.rikkahub.ui.pages.setting.SettingSearchPage
-import me.rerere.rikkahub.ui.pages.setting.SettingTTSPage
 import me.rerere.rikkahub.ui.pages.setting.SettingSpeechPage
-import me.rerere.rikkahub.ui.pages.setting.SettingTelegramPage
+import me.rerere.rikkahub.ui.pages.setting.SettingMultiKeyPage
 import me.rerere.rikkahub.ui.pages.setting.SettingWebPage
+import me.rerere.rikkahub.ui.pages.setting.SettingExternalAutomationPage
 import me.rerere.rikkahub.ui.pages.share.handler.ShareHandlerPage
 import me.rerere.rikkahub.ui.pages.stats.StatsPage
 import me.rerere.rikkahub.ui.pages.translator.TranslatorPage
@@ -168,7 +173,6 @@ class RouteActivity : ComponentActivity() {
         }
         setContent {
             RikkahubTheme {
-                @OptIn(coil3.annotation.ExperimentalCoilApi::class)
                 setSingletonImageLoaderFactory { context ->
                     ImageLoader.Builder(context)
                         .crossfade(true)
@@ -186,7 +190,9 @@ class RouteActivity : ComponentActivity() {
                         }
                         .build()
                 }
-                AppRoutes()
+                RikkaHapticWrapper {
+                    AppRoutes()
+                }
             }
         }
     }
@@ -238,12 +244,29 @@ class RouteActivity : ComponentActivity() {
         val tts = rememberCustomTtsState()
         val asr = rememberCustomAsrState()
         val eventBus = koinInject<AppEventBus>()
+        // 位置权限请求状态
+        var pendingLocationPermission by remember { mutableStateOf<kotlinx.coroutines.CompletableDeferred<Boolean>?>(null) }
+        val locationPermissionLauncher = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.RequestMultiplePermissions()
+        ) { results ->
+            val fineGranted = results[android.Manifest.permission.ACCESS_FINE_LOCATION] == true
+            val coarseGranted = results[android.Manifest.permission.ACCESS_COARSE_LOCATION] == true
+            pendingLocationPermission?.complete(fineGranted || coarseGranted)
+            pendingLocationPermission = null
+        }
+
         LaunchedEffect(tts) {
             eventBus.events.collect { event ->
                 when (event) {
                     is AppEvent.Speak -> tts.speak(event.text)
                     is AppEvent.RequestLocationPermission -> {
-                        // handled by LocationObserver in ChatPage
+                        pendingLocationPermission = event.callback
+                        locationPermissionLauncher.launch(
+                            arrayOf(
+                                android.Manifest.permission.ACCESS_FINE_LOCATION,
+                                android.Manifest.permission.ACCESS_COARSE_LOCATION,
+                            )
+                        )
                     }
                 }
             }
@@ -441,9 +464,6 @@ class RouteActivity : ComponentActivity() {
                                 SettingSearchPage()
                             }
 
-                            entry<Screen.SettingTTS> {
-                                SettingTTSPage()
-                            }
                             entry<Screen.SettingSearchDetail> { key ->
                                 val id = Uuid.parse(key.serviceId)
                                 SettingSearchDetailPage(id)
@@ -465,56 +485,15 @@ class RouteActivity : ComponentActivity() {
                                 SettingFilesPage()
                             }
 
+                            entry<Screen.SettingMultiKey> { key ->
+                                SettingMultiKeyPage(id = kotlin.uuid.Uuid.parse(key.providerId))
+                            }
+                            entry<Screen.SettingExternalAutomation> {
+                                SettingExternalAutomationPage()
+                            }
+
                             entry<Screen.SettingWeb> {
                                 SettingWebPage()
-                            }
-
-                            entry<Screen.SettingTelegram> {
-                                SettingTelegramPage()
-                            }
-
-                            entry<Screen.SettingWorkflows> {
-                                me.rerere.rikkahub.workflow.ui.WorkflowsScreen()
-                            }
-
-                            entry<Screen.WorkflowDetail> { key ->
-                                me.rerere.rikkahub.workflow.ui.WorkflowDetailScreen(workflowId = key.id)
-                            }
-
-                            entry<Screen.SettingScheduledJobs> {
-                                me.rerere.rikkahub.ui.pages.setting.scheduledjobs.ScheduledJobsScreen()
-                            }
-
-                            entry<Screen.SettingBrowser> {
-                                me.rerere.rikkahub.ui.pages.setting.browser.SettingBrowserPage()
-                            }
-
-                            entry<Screen.SettingTermux> {
-                                me.rerere.rikkahub.ui.pages.setting.termux.SettingTermuxPage()
-                            }
-
-                            entry<Screen.ScheduledJobDetail> { key ->
-                                me.rerere.rikkahub.ui.pages.setting.scheduledjobs.ScheduledJobDetailScreen(jobId = key.id)
-                            }
-
-                            entry<Screen.SettingDoctor> {
-                                me.rerere.rikkahub.ui.pages.setting.doctor.DoctorScreen()
-                            }
-
-                            entry<Screen.SettingToolApprovals> {
-                                me.rerere.rikkahub.ui.pages.setting.SettingToolApprovalsPage()
-                            }
-
-                            entry<Screen.SettingAccessibility> {
-                                SettingAccessibilityPage()
-                            }
-
-                            entry<Screen.SettingNotifications> {
-                                SettingNotificationsPage()
-                            }
-
-                            entry<Screen.SettingPermissions> {
-                                SettingPermissionsPage()
                             }
 
                             entry<Screen.Developer> {
@@ -545,6 +524,18 @@ class RouteActivity : ComponentActivity() {
                                 SkillsPage()
                             }
 
+                            entry<Screen.Workspaces> {
+                                WorkspacePage()
+                            }
+
+                            entry<Screen.WorkspaceDetail> { key ->
+                                WorkspaceDetailPage(key.id)
+                            }
+
+                            entry<Screen.WorkspaceTerminal> { key ->
+                                WorkspaceTerminalPage(key.id)
+                            }
+
                             entry<Screen.SkillDetail> { key ->
                                 SkillDetailPage(skillName = key.skillName)
                             }
@@ -556,7 +547,6 @@ class RouteActivity : ComponentActivity() {
                             entry<Screen.Stats> {
                                 StatsPage()
                             }
-
                         }
                     )
                     if (BuildConfig.DEBUG) {
@@ -701,9 +691,6 @@ sealed interface Screen : NavKey {
     data object SettingSearch : Screen
 
     @Serializable
-    data object SettingTTS : Screen
-
-    @Serializable
     data class SettingSearchDetail(val serviceId: String) : Screen
 
     @Serializable
@@ -719,43 +706,13 @@ sealed interface Screen : NavKey {
     data object SettingFiles : Screen
 
     @Serializable
+    data class SettingMultiKey(val providerId: String) : Screen
+
+    @Serializable
     data object SettingWeb : Screen
 
     @Serializable
-    data object SettingTelegram : Screen
-
-    @Serializable
-    data object SettingWorkflows : Screen
-
-    @Serializable
-    data class WorkflowDetail(val id: String) : Screen
-
-    @Serializable
-    data object SettingScheduledJobs : Screen
-
-    @Serializable
-    data object SettingBrowser : Screen
-
-    @Serializable
-    data object SettingTermux : Screen
-
-    @Serializable
-    data class ScheduledJobDetail(val id: String) : Screen
-
-    @Serializable
-    data object SettingDoctor : Screen
-
-    @Serializable
-    data object SettingToolApprovals : Screen
-
-    @Serializable
-    data object SettingAccessibility : Screen
-
-    @Serializable
-    data object SettingNotifications : Screen
-
-    @Serializable
-    data object SettingPermissions : Screen
+    data object SettingExternalAutomation : Screen
 
     @Serializable
     data object Developer : Screen
@@ -779,6 +736,15 @@ sealed interface Screen : NavKey {
     data object Skills : Screen
 
     @Serializable
+    data object Workspaces : Screen
+
+    @Serializable
+    data class WorkspaceDetail(val id: String) : Screen
+
+    @Serializable
+    data class WorkspaceTerminal(val id: String) : Screen
+
+    @Serializable
     data class SkillDetail(val skillName: String) : Screen
 
     @Serializable
@@ -786,5 +752,4 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object Stats : Screen
-
 }
