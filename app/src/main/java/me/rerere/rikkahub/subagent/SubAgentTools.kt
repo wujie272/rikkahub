@@ -55,7 +55,7 @@ fun subagentDispatchTool(
             required = listOf("task"),
         )
     },
-    needsApproval = true,
+    needsApproval = { true },
     execute = { args ->
         val params = args.jsonObject
         val task = params["task"]?.jsonPrimitive?.contentOrNull

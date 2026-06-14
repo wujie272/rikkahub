@@ -384,7 +384,7 @@ class LocalTools(private val context: Context, private val eventBus: AppEventBus
                     required = listOf("enabled"),
                 )
             },
-            needsApproval = true,
+            needsApproval = { true },
             execute = { args ->
                 val config = automationConfig ?: return@Tool listOf(UIMessagePart.Text("""{"error":"config_not_available"}"""))
                 val raw = args.jsonObject["enabled"]?.jsonPrimitive?.contentOrNull
@@ -410,7 +410,7 @@ class LocalTools(private val context: Context, private val eventBus: AppEventBus
                     required = listOf("package_name"),
                 )
             },
-            needsApproval = true,
+            needsApproval = { true },
             execute = { args ->
                 val config = automationConfig ?: return@Tool listOf(UIMessagePart.Text("""{"error":"config_not_available"}"""))
                 val pkg = args.jsonObject["package_name"]?.jsonPrimitive?.contentOrNull?.trim()
@@ -440,7 +440,7 @@ class LocalTools(private val context: Context, private val eventBus: AppEventBus
                     required = listOf("package_name"),
                 )
             },
-            needsApproval = true,
+            needsApproval = { true },
             execute = { args ->
                 val config = automationConfig ?: return@Tool listOf(UIMessagePart.Text("""{"error":"config_not_available"}"""))
                 val pkg = args.jsonObject["package_name"]?.jsonPrimitive?.contentOrNull?.trim()
