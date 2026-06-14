@@ -641,7 +641,7 @@ fun mcpTestTool(settingsStore: SettingsStore, manager: McpManager): Tool = Tool(
         if (!current.commonOptions.enable) {
             return@Tool errEnv("server_disabled", "server '${current.commonOptions.name}' is disabled; enable it first with mcp_set_enabled")
         }
-        manager.forceResync(serverId)
+        manager.notifyChange(serverId)
         awaitTerminal(manager, serverId, timeoutSec * 1000L)
         val finalConfig = settingsStore.settingsFlow.value.mcpServers.firstOrNull { it.id == serverId } ?: current
         val finalStatus = manager.syncingStatus.value[serverId]

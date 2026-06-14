@@ -80,7 +80,6 @@ class RikkaHubApp : Application() {
             setConfigSettingsAsync(remoteConfigSettings {
                 minimumFetchIntervalInSeconds = 1800
             })
-            setDefaultsAsync(R.xml.remote_config_defaults)
             fetchAndActivate()
         }
 

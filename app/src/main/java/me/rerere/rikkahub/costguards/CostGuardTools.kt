@@ -80,8 +80,8 @@ fun checkTokenUsageTool(
         )
         val snapshot = TokenBudgetTracker.snapshot(
             conversation = conv,
-            softCap = assistant.tokenBudgetSoftCap,
-            hardCap = assistant.tokenBudgetHardCap,
+            softCap = assistant.TokenBudgetTracker.DEFAULT_SOFT_CAP,
+            hardCap = assistant.TokenBudgetTracker.DEFAULT_HARD_CAP,
         )
         val payload = buildJsonObject {
             put("conversation_id", conv.id.toString())
