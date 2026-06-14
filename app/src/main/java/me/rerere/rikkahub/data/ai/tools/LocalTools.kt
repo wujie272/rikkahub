@@ -17,6 +17,9 @@ import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.automation.ExternalAutomationConfig
+import me.rerere.rikkahub.subagent.SubAgentEngine
+import me.rerere.rikkahub.subagent.SubAgentRegistry
+import kotlinx.coroutines.flow.first
 import me.rerere.rikkahub.data.event.AppEvent
 import me.rerere.rikkahub.data.event.AppEventBus
 import me.rerere.rikkahub.utils.readClipboardText
@@ -54,9 +57,13 @@ sealed class LocalToolOption {
     @Serializable
     @SerialName("external_automation")
     data object ExternalAutomation : LocalToolOption()
+
+    @Serializable
+    @SerialName("sub_agents")
+    data object SubAgents : LocalToolOption()
 }
 
-class LocalTools(private val context: Context, private val eventBus: AppEventBus, private val automationConfig: ExternalAutomationConfig?) {
+class LocalTools(private val context: Context, private val eventBus: AppEventBus, private val automationConfig: ExternalAutomationConfig?, private val subAgentEngine: SubAgentEngine, private val subAgentRegistry: SubAgentRegistry) {
     val javascriptTool by lazy {
         Tool(
             name = "eval_javascript",
@@ -352,9 +359,9 @@ class LocalTools(private val context: Context, private val eventBus: AppEventBus
             parameters = { InputSchema.Obj(properties = buildJsonObject {}, required = emptyList()) },
             execute = {
                 val config = automationConfig ?: return@Tool listOf(UIMessagePart.Text("""{"error":"config_not_available","detail":"External automation config is not available"}"""))
-                val enabled = runCatching { kotlinx.coroutines.flow.first(config.enabledFlow) }.getOrDefault(false)
-                val trusted = runCatching { kotlinx.coroutines.flow.first(config.trustedPackagesFlow) }.getOrDefault(emptySet())
-                val recent = runCatching { kotlinx.coroutines.flow.first(config.recentInvocationsFlow) }.getOrDefault(emptyList())
+                val enabled = try { config.enabledFlow.first() } catch (_: Exception) { false }
+                val trusted = try { config.trustedPackagesFlow.first() } catch (_: Exception) { emptySet<String>() }
+                val recent = try { config.recentInvocationsFlow.first() } catch (_: Exception) { emptyList<ExternalAutomationConfig.InvocationLog>() }
                 val payload = buildJsonObject {
                     put("enabled", enabled)
                     put("trusted_packages", kotlinx.serialization.json.JsonPrimitive(trusted.joinToString(", ")))
@@ -380,9 +387,12 @@ class LocalTools(private val context: Context, private val eventBus: AppEventBus
             needsApproval = true,
             execute = { args ->
                 val config = automationConfig ?: return@Tool listOf(UIMessagePart.Text("""{"error":"config_not_available"}"""))
-                val enabled = args.jsonObject["enabled"]?.jsonPrimitive?.contentOrNull?.toBooleanOrNull()
-                    ?: return@Tool listOf(UIMessagePart.Text("""{"error":"invalid_enabled"}"""))
-                runCatching { config.setEnabled(enabled) }
+                val raw = args.jsonObject["enabled"]?.jsonPrimitive?.contentOrNull
+                val enabled = raw == "true"
+                if (raw != "true" && raw != "false") {
+                    return@Tool listOf(UIMessagePart.Text("""{"error":"invalid_enabled"}"""))
+                }
+                try { config.setEnabled(enabled) } catch (_: Exception) {}
                 listOf(UIMessagePart.Text(buildJsonObject { put("enabled", enabled) }.toString()))
             }
         )
@@ -408,8 +418,8 @@ class LocalTools(private val context: Context, private val eventBus: AppEventBus
                 if (!pkg.matches(Regex("""^[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z0-9_]+)*$"""))) {
                     return@Tool listOf(UIMessagePart.Text("""{"error":"invalid_package","detail":"not a valid Android package identifier"}"""))
                 }
-                runCatching { config.addTrustedPackage(pkg) }
-                val trusted = runCatching { kotlinx.coroutines.flow.first(config.trustedPackagesFlow) }.getOrDefault(emptySet())
+                try { config.addTrustedPackage(pkg) } catch (_: Exception) {}
+                val trusted = try { config.trustedPackagesFlow.first() } catch (_: Exception) { emptySet<String>() }
                 listOf(UIMessagePart.Text(buildJsonObject {
                     put("added", pkg)
                     put("trusted_packages", kotlinx.serialization.json.JsonPrimitive(trusted.joinToString(", ")))
@@ -435,8 +445,8 @@ class LocalTools(private val context: Context, private val eventBus: AppEventBus
                 val config = automationConfig ?: return@Tool listOf(UIMessagePart.Text("""{"error":"config_not_available"}"""))
                 val pkg = args.jsonObject["package_name"]?.jsonPrimitive?.contentOrNull?.trim()
                     ?: return@Tool listOf(UIMessagePart.Text("""{"error":"package_name_required"}"""))
-                runCatching { config.removeTrustedPackage(pkg) }
-                val trusted = runCatching { kotlinx.coroutines.flow.first(config.trustedPackagesFlow) }.getOrDefault(emptySet())
+                try { config.removeTrustedPackage(pkg) } catch (_: Exception) {}
+                val trusted = try { config.trustedPackagesFlow.first() } catch (_: Exception) { emptySet<String>() }
                 listOf(UIMessagePart.Text(buildJsonObject {
                     put("removed", pkg)
                     put("trusted_packages", kotlinx.serialization.json.JsonPrimitive(trusted.joinToString(", ")))
@@ -446,7 +456,11 @@ class LocalTools(private val context: Context, private val eventBus: AppEventBus
     }
 
 
-    fun getTools(options: List<LocalToolOption>): List<Tool> {
+    fun getTools(
+        options: List<LocalToolOption>,
+        conversationId: String? = null,
+        assistantId: String? = null,
+    ): List<Tool> {
         val tools = mutableListOf<Tool>()
         if (options.contains(LocalToolOption.JavascriptEngine)) {
             tools.add(javascriptTool)
@@ -471,6 +485,12 @@ class LocalTools(private val context: Context, private val eventBus: AppEventBus
             tools.add(externalAutomationSetEnabledTool)
             tools.add(externalAutomationAddTrustedPackageTool)
             tools.add(externalAutomationRemoveTrustedPackageTool)
+        }
+        if (options.contains(LocalToolOption.SubAgents)) {
+            tools.add(me.rerere.rikkahub.subagent.subagentDispatchTool(subAgentEngine, conversationId, assistantId))
+            tools.add(me.rerere.rikkahub.subagent.subagentListTool(subAgentRegistry))
+            tools.add(me.rerere.rikkahub.subagent.subagentGetTool(subAgentRegistry))
+            tools.add(me.rerere.rikkahub.subagent.subagentCancelTool(subAgentRegistry))
         }
         return tools
     }

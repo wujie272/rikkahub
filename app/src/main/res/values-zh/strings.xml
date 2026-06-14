@@ -1151,6 +1151,10 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_model_page_enable_suggestion">启用聊天建议</string>
   <string name="assistant_page_gradient_background">渐变背景</string>
   <string name="assistant_page_gradient_background_desc">在聊天页面使用动态渐变背景</string>
+  <string name="assistant_page_local_tools_external_automation_title">外部自动化</string>
+  <string name="assistant_page_local_tools_external_automation_desc">允许 Tasker、MacroDroid、ADB 等应用通过 Intent 触发 AI（me.rerere.rikkahub.RUN_TASK）</string>
+  <string name="assistant_page_local_tools_sub_agents_title">子代理</string>
+  <string name="assistant_page_local_tools_sub_agents_desc">派发独立上下文的子代理用于并行任务（每助手上限 4 个，全局 16 个）。适用于研究、多步操作或后台处理。</string>
 
   <!-- External Automation Settings -->
   <string name="setting_page_external_automation">外部自动化</string>

@@ -20,6 +20,8 @@ import me.rerere.rikkahub.utils.UpdateChecker
 import me.rerere.rikkahub.web.WebServerManager
 import me.rerere.rikkahub.automation.ExternalAutomationConfig
 import me.rerere.rikkahub.automation.ExternalAutomationDispatcher
+import me.rerere.rikkahub.subagent.SubAgentEngine
+import me.rerere.rikkahub.subagent.SubAgentRegistry
 import me.rerere.tts.provider.TTSManager
 import org.koin.dsl.module
 
@@ -35,7 +37,7 @@ val appModule = module {
     }
 
     single {
-        LocalTools(get(), get(), get())
+        LocalTools(get(), get(), get(), get(), get())
     }
 
     single {
@@ -115,6 +117,19 @@ val appModule = module {
             context = get(),
             config = get(),
             chatService = get(),
+            conversationRepo = get(),
+            settingsStore = get(),
+            appScope = get()
+        )
+    }
+
+    single {
+        SubAgentRegistry()
+    }
+
+    single {
+        SubAgentEngine(
+            registry = get(),
             conversationRepo = get(),
             settingsStore = get(),
             appScope = get()

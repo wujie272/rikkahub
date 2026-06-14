@@ -89,6 +89,8 @@
   <string name="assistant_page_local_tools_location_desc">Get the current geographic location (coordinates, altitude, address)</string>
   <string name="assistant_page_local_tools_external_automation_title">External Automation</string>
   <string name="assistant_page_local_tools_external_automation_desc">Allow Tasker, MacroDroid, ADB and other apps to trigger the AI via Intents (me.rerere.rikkahub.RUN_TASK)</string>
+  <string name="assistant_page_local_tools_sub_agents_title">Sub-Agents</string>
+  <string name="assistant_page_local_tools_sub_agents_desc">Dispatch isolated sub-agents that run in a clean context for parallel tasks (max 4 per assistant, 16 globally). Use for research, multi-step work, or background processing.</string>
   <string name="assistant_page_local_tools_clipboard_desc">Read or write plain text from the device clipboard</string>
   <string name="assistant_page_local_tools_clipboard_title">Clipboard</string>
   <string name="assistant_page_local_tools_javascript_engine_desc">Execute JavaScript code with QuickJS engine for calculations and scripting</string>
