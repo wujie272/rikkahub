@@ -41,6 +41,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import kotlinx.coroutines.withTimeout
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -330,6 +331,63 @@ internal fun SettingMultiKeyContent(
                                     },
                             )
                         }
+                }
+            }
+
+            // 底部操作栏
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    var showAdd by remember { mutableStateOf(false) }
+                    Button(
+                        onClick = { showAdd = true },
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Icon(HugeIcons.PlusSign, null)
+                        Spacer(Modifier.size(8.dp))
+                        Text(ctx.getString(R.string.multi_key_add))
+                    }
+                    if (showAdd) {
+                        AddKeysSheet(
+                            onDismiss = { showAdd = false },
+                            onAdd = { newKeys ->
+                                val existingSet = apiKeys.map { it.key.trim() }.toSet()
+                                val unique = newKeys.filter { it.trim() !in existingSet && it.isNotBlank() }.distinct()
+                                if (unique.isNotEmpty()) {
+                                    val added = unique.map { ApiKeyConfig(key = it.trim(), name = "Key ${apiKeys.size + 1}") }
+                                    updateKeys(apiKeys + added)
+                                    Toast.makeText(ctx, ctx.getString(R.string.multi_key_imported, added.size), Toast.LENGTH_SHORT).show()
+                                }
+                                showAdd = false
+                            }
+                        )
+                    }
+                    if (errorKeys > 0) {
+                        OutlinedButton(
+                            onClick = {
+                                val removedErrorKeys = apiKeys.filter { it.status == ApiKeyStatus.ERROR }
+                                val good = apiKeys.filter { it.status != ApiKeyStatus.ERROR }
+                                val deleted = errorKeys
+                                updateKeys(good)
+                                scope.launch {
+                                    val result = snackbarHostState.showSnackbar(
+                                        message = ctx.getString(R.string.multi_key_deleted_errors, deleted),
+                                        actionLabel = ctx.getString(R.string.multi_key_undo),
+                                        duration = SnackbarDuration.Short
+                                    )
+                                    if (result == SnackbarResult.ActionPerformed) {
+                                        updateKeys(internalProvider.apiKeys + removedErrorKeys)
+                                    }
+                                }
+                            },
+                        ) {
+                            Icon(HugeIcons.Delete01, null)
+                            Spacer(Modifier.size(8.dp))
+                            Text(ctx.getString(R.string.multi_key_delete_errors))
+                        }
+                    }
                 }
             }
         }
