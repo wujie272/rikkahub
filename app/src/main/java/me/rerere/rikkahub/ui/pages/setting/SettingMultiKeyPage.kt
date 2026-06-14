@@ -127,65 +127,48 @@ fun SettingMultiKeyPage(id: Uuid) {
         updateKeys(mutableKeys)
     }
 
-    Scaffold(
-        containerColor = CustomColors.topBarColors.containerColor,
-        topBar = {
-            TopAppBar(
-                navigationIcon = { BackButton() },
-                colors = CustomColors.topBarColors,
-                title = { Text(ctx.getString(R.string.multi_key_title), style = MaterialTheme.typography.titleLarge) },
-                actions = {
-                    IconButton(
-                        enabled = errorKeys > 0,
-                        onClick = {
-                            val removedErrorKeys = apiKeys.filter { it.status == ApiKeyStatus.ERROR }
-                            val good = apiKeys.filter { it.status != ApiKeyStatus.ERROR }
-                            val deleted = errorKeys
-                            updateKeys(good)
-                            scope.launch {
-                                val result = snackbarHostState.showSnackbar(
-                                    message = ctx.getString(R.string.multi_key_deleted_errors, deleted),
-                                    actionLabel = strUndo,
-                                    duration = SnackbarDuration.Short
-                                )
-                                if (result == SnackbarResult.ActionPerformed) {
-                                    updateKeys(internalProvider.apiKeys + removedErrorKeys)
-                                }
-                            }
-                        }
-                    ) {
-                        Icon(HugeIcons.Delete01, ctx.getString(R.string.multi_key_delete_errors),
-                            tint = if (errorKeys > 0) MaterialTheme.colorScheme.error
-                                   else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
-                    }
-                    var showAdd by remember { mutableStateOf(false) }
-                    IconButton(onClick = { showAdd = true }) {
-                        Icon(HugeIcons.PlusSign, ctx.getString(R.string.multi_key_add))
-                    }
-                    if (showAdd) {
-                        AddKeysSheet(
-                            onDismiss = { showAdd = false },
-                            onAdd = { newKeys ->
-                                val existingSet = apiKeys.map { it.key.trim() }.toSet()
-                                val unique = newKeys.filter { it.trim() !in existingSet && it.isNotBlank() }.distinct()
-                                if (unique.isNotEmpty()) {
-                                    val added = unique.map { ApiKeyConfig(key = it.trim(), name = "Key ${apiKeys.size + 1}") }
-                                    updateKeys(apiKeys + added)
-                                    Toast.makeText(ctx, ctx.getString(R.string.multi_key_imported, added.size), Toast.LENGTH_SHORT).show()
-                                }
-                                showAdd = false
-                            }
-                        )
-                    }
-                }
-            )
-        },
-        snackbarHost = { SnackbarHost(snackbarHostState) }
-    ) { padding ->
-        LazyColumn(
+    SettingMultiKeyContent(
+        internalProvider = internalProvider,
+        saveProvider = ::saveProvider,
+        updateKeys = ::updateKeys,
+        apiKeys = apiKeys,
+        errorKeys = errorKeys,
+        normalKeys = normalKeys,
+        totalKeys = totalKeys,
+        providerManager = providerManager,
+        snackbarHostState = snackbarHostState,
+        lazyListState = lazyListState,
+        reorderableState = reorderableState,
+        strUndo = strUndo,
+        showTopBar = true,
+    )
+}
+
+/**
+ * 无 Scaffold 的内容体，可嵌入其他页面（如 ProviderDetail 的 Key tab）
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun SettingMultiKeyContent(
+    internalProvider: ProviderSetting,
+    saveProvider: (ProviderSetting) -> Unit,
+    updateKeys: (List<ApiKeyConfig>) -> Unit,
+    apiKeys: List<ApiKeyConfig>,
+    errorKeys: Int,
+    normalKeys: Int,
+    totalKeys: Int,
+    providerManager: ProviderManager,
+    snackbarHostState: SnackbarHostState,
+    lazyListState: androidx.compose.foundation.lazy.LazyListState,
+    reorderableState: sh.calvin.reorderable.ReorderableLazyListState,
+    strUndo: String,
+    showTopBar: Boolean = false,
+) {
+    val ctx = LocalContext.current
+
+    LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
                 .padding(start = 16.dp, end = 16.dp)
                 .imePadding(),
             state = lazyListState,

@@ -269,12 +269,17 @@ fun SettingProviderDetailPage(id: Uuid, vm: SettingVM = koinViewModel()) {
                     val apiKeysCount = provider.apiKeys.size
                     val normalKeys = provider.apiKeys.count { it.status == ApiKeyStatus.ACTIVE }
                     val errorKeys = provider.apiKeys.count { it.status == ApiKeyStatus.ERROR }
-                    var internalProvider by remember(provider) { mutableStateOf(provider) }
-                    var showStrategy by remember { mutableStateOf(false) }
+                    val totalKeys = apiKeysCount
 
-                    fun saveStrategy(strategy: LoadBalanceStrategy) {
-                        val km = internalProvider.keyManagement.copy(strategy = strategy)
-                        val updated = internalProvider.copyProvider(keyManagement = km)
+                    var internalProvider by remember(provider) { mutableStateOf(provider) }
+                    val snackbarHostState = remember { SnackbarHostState() }
+                    val lazyListState = rememberLazyListState()
+                    val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
+                        val mutableKeys = internalProvider.apiKeys.toMutableList()
+                        val item = mutableKeys.removeAt(from.index)
+                        mutableKeys.add(to.index, item)
+                        val updated = internalProvider.copyProvider(apiKeys = mutableKeys)
+                        updated.syncApiKeyString()
                         val newSettings = settings.copy(
                             providers = settings.providers.map { if (it.id == updated.id) updated else it }
                         )
@@ -282,113 +287,37 @@ fun SettingProviderDetailPage(id: Uuid, vm: SettingVM = koinViewModel()) {
                         internalProvider = updated
                     }
 
-                    val strategyLabel = when (internalProvider.keyManagement.strategy) {
-                        LoadBalanceStrategy.RANDOM -> context.getString(R.string.multi_key_strategy_label_random)
-                        LoadBalanceStrategy.ROUND_ROBIN -> context.getString(R.string.multi_key_strategy_label_round_robin)
-                        LoadBalanceStrategy.LEAST_USED -> context.getString(R.string.multi_key_strategy_label_least_used)
-                        LoadBalanceStrategy.PRIORITY_FIRST -> context.getString(R.string.multi_key_strategy_label_priority)
+                    fun saveProvider(p: ProviderSetting) {
+                        val newSettings = settings.copy(
+                            providers = settings.providers.map { if (it.id == p.id) p else it }
+                        )
+                        scope.launch { vm.updateSettings(newSettings) }
+                        internalProvider = p
                     }
 
-                    if (showStrategy) {
-                        ModalBottomSheet(
-                            onDismissRequest = { showStrategy = false },
-                            sheetState = rememberModalBottomSheetState()
-                        ) {
-                            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                                Text(context.getString(R.string.multi_key_strategy), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 16.dp))
-                                val pairs = listOf(
-                                    LoadBalanceStrategy.ROUND_ROBIN to context.getString(R.string.multi_key_strategy_round_robin),
-                                    LoadBalanceStrategy.RANDOM to context.getString(R.string.multi_key_strategy_random),
-                                    LoadBalanceStrategy.LEAST_USED to context.getString(R.string.multi_key_strategy_label_least_used) + " — 优先选调用次数最少的 Key",
-                                    LoadBalanceStrategy.PRIORITY_FIRST to context.getString(R.string.multi_key_strategy_label_priority) + " — 按列表顺序优先使用前面的 Key",
-                                )
-                                pairs.forEach { (strategy, desc) ->
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth().clickable { saveStrategy(strategy); showStrategy = false }.padding(vertical = 12.dp),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(desc, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-                                        if (strategy == internalProvider.keyManagement.strategy) {
-                                            Text("✓", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleMedium)
-                                        }
-                                    }
-                                }
-                                Spacer(Modifier.height(24.dp))
-                            }
-                        }
+                    fun updateKeys(newKeys: List<me.rerere.ai.util.ApiKeyConfig>) {
+                        val updated = internalProvider.copyProvider(apiKeys = newKeys)
+                        updated.syncApiKeyString()
+                        saveProvider(updated)
                     }
 
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        // 统计卡片
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = MaterialTheme.colorScheme.surface,
-                            tonalElevation = 0.dp,
-                            shadowElevation = 0.dp,
-                        ) {
-                            Column(modifier = Modifier.fillMaxWidth()) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(context.getString(R.string.multi_key_total), style = MaterialTheme.typography.bodyLarge)
-                                    Text("$apiKeysCount", style = MaterialTheme.typography.bodyLarge)
-                                }
-                                Row(
-                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(context.getString(R.string.multi_key_status_active), style = MaterialTheme.typography.bodyLarge)
-                                    Text("$normalKeys", style = MaterialTheme.typography.bodyLarge, color = Color(0xFF4CAF50))
-                                }
-                                Row(
-                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(context.getString(R.string.multi_key_status_error), style = MaterialTheme.typography.bodyLarge)
-                                    Text("$errorKeys", style = MaterialTheme.typography.bodyLarge,
-                                        color = if (errorKeys > 0) MaterialTheme.colorScheme.error else Color.Unspecified)
-                                }
-                                // 策略选择
-                                Row(
-                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp).clickable { showStrategy = true },
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(context.getString(R.string.multi_key_strategy), style = MaterialTheme.typography.bodyLarge)
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(strategyLabel, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                        Spacer(Modifier.width(4.dp))
-                                        Icon(HugeIcons.ArrowRight01, null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    }
-                                }
-                            }
-                        }
+                    val providerManager = koinInject<ProviderManager>()
+                    val strUndo = context.getString(R.string.multi_key_undo)
 
-                        Spacer(Modifier.weight(1f))
-
-                        // 管理密钥按钮
-                        Button(
-                            onClick = { navController.navigate(Screen.SettingMultiKey(provider.id.toString())) },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Icon(HugeIcons.Key01, null)
-                            Spacer(Modifier.size(8.dp))
-                            Text(context.getString(R.string.multi_key_manage))
-                        }
-
-                        Spacer(Modifier.height(32.dp))
-                    }
+                    SettingMultiKeyContent(
+                        internalProvider = internalProvider,
+                        saveProvider = ::saveProvider,
+                        updateKeys = ::updateKeys,
+                        apiKeys = internalProvider.apiKeys,
+                        errorKeys = errorKeys,
+                        normalKeys = normalKeys,
+                        totalKeys = totalKeys,
+                        providerManager = providerManager,
+                        snackbarHostState = snackbarHostState,
+                        lazyListState = lazyListState,
+                        reorderableState = reorderableState,
+                        strUndo = strUndo,
+                    )
                 }
 
                 2 -> {
