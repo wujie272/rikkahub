@@ -122,6 +122,7 @@ import me.rerere.rikkahub.ui.pages.setting.SettingSearchPage
 import me.rerere.rikkahub.ui.pages.setting.SettingSpeechPage
 import me.rerere.rikkahub.ui.pages.setting.SettingMultiKeyPage
 import me.rerere.rikkahub.ui.pages.setting.SettingWebPage
+import me.rerere.rikkahub.ui.pages.setting.SettingExternalAutomationPage
 import me.rerere.rikkahub.ui.pages.share.handler.ShareHandlerPage
 import me.rerere.rikkahub.ui.pages.stats.StatsPage
 import me.rerere.rikkahub.ui.pages.translator.TranslatorPage
@@ -484,6 +485,10 @@ class RouteActivity : ComponentActivity() {
                             entry<Screen.SettingMultiKey> { key ->
                                 SettingMultiKeyPage(id = kotlin.uuid.Uuid.parse(key.providerId))
                             }
+                            entry<Screen.SettingExternalAutomation> {
+                                SettingExternalAutomationPage()
+                            }
+
                             entry<Screen.SettingWeb> {
                                 SettingWebPage()
                             }
@@ -690,6 +695,9 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object SettingWeb : Screen
+
+    @Serializable
+    data object SettingExternalAutomation : Screen
 
     @Serializable
     data object Developer : Screen

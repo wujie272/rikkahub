@@ -97,6 +97,29 @@
       android:name="com.yalantis.ucrop.UCropActivity"
       android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
 
+    <!-- External Automation: exported translucent Activity for Tasker/MacroDroid -->
+    <activity
+      android:name=".automation.ExternalAutomationActivity"
+      android:exported="true"
+      android:excludeFromRecents="true"
+      android:noHistory="true"
+      android:theme="@android:style/Theme.Translucent.NoTitleBar">
+      <intent-filter>
+        <action android:name="me.rerere.rikkahub.RUN_TASK" />
+        <action android:name="me.rerere.rikkahub.RUN_CHAT" />
+        <category android:name="android.intent.category.DEFAULT" />
+      </intent-filter>
+    </activity>
+
+    <!-- ADB entry point for the same RUN_TASK flow -->
+    <receiver
+      android:name=".automation.ExternalAutomationReceiver"
+      android:exported="true">
+      <intent-filter>
+        <action android:name="me.rerere.rikkahub.RUN_TASK" />
+      </intent-filter>
+    </receiver>
+
     <service
       android:name=".service.WebServerService"
       android:exported="false"

@@ -1151,5 +1151,29 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_model_page_enable_suggestion">启用聊天建议</string>
   <string name="assistant_page_gradient_background">渐变背景</string>
   <string name="assistant_page_gradient_background_desc">在聊天页面使用动态渐变背景</string>
+
+  <!-- External Automation Settings -->
+  <string name="setting_page_external_automation">外部自动化</string>
+  <string name="setting_page_external_automation_desc">配置外部应用集成（Tasker、MacroDroid、ADB）</string>
+  <string name="setting_external_automation_page_title">外部自动化</string>
+  <string name="setting_external_automation_master_toggle">启用外部自动化</string>
+  <string name="setting_external_automation_enabled_desc">外部应用可通过 Intent 触发 AI 任务</string>
+  <string name="setting_external_automation_disabled_desc">所有传入的 Intent 将被拒绝</string>
+  <string name="setting_external_automation_trusted_packages">可信调用者</string>
+  <string name="setting_external_automation_no_trusted_packages">暂无可信调用者。请在下方添加。</string>
+  <string name="setting_external_automation_remove_package">移除</string>
+  <string name="setting_external_automation_package_name_hint">包名</string>
+  <string name="setting_external_automation_add_package">添加包名</string>
+  <string name="setting_external_automation_package_empty_error">包名不能为空</string>
+  <string name="setting_external_automation_package_invalid_error">不是有效的 Android 包名格式</string>
+  <string name="setting_external_automation_package_duplicate_error">该包名已在信任列表中</string>
+  <string name="setting_external_automation_quick_add">快速添加常用应用</string>
+  <string name="setting_external_automation_already_added">已添加</string>
+  <string name="setting_external_automation_recent_invocations">最近调用记录</string>
+  <string name="setting_external_automation_no_invocations">暂无调用记录</string>
+  <string name="setting_external_automation_info_title">使用说明</string>
+  <string name="setting_external_automation_info_desc">开启后，其他应用可通过 Android Intent 向你的 AI 助手发送任务。
+使用 action me.rerere.rikkahub.RUN_TASK 并附带 extra "task" 或 "task_b64"（base64 编码）。
+查看文档获取详细信息。</string>
 </resources>
 

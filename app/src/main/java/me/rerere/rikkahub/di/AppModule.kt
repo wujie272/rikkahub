@@ -18,6 +18,8 @@ import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.rikkahub.utils.SoundEffectPlayer
 import me.rerere.rikkahub.utils.UpdateChecker
 import me.rerere.rikkahub.web.WebServerManager
+import me.rerere.rikkahub.automation.ExternalAutomationConfig
+import me.rerere.rikkahub.automation.ExternalAutomationDispatcher
 import me.rerere.tts.provider.TTSManager
 import org.koin.dsl.module
 
@@ -33,7 +35,7 @@ val appModule = module {
     }
 
     single {
-        LocalTools(get(), get())
+        LocalTools(get(), get(), get())
     }
 
     single {
@@ -101,6 +103,21 @@ val appModule = module {
             conversationRepo = get(),
             settingsStore = get(),
             filesManager = get()
+        )
+    }
+
+    single {
+        ExternalAutomationConfig(get())
+    }
+
+    single {
+        ExternalAutomationDispatcher(
+            context = get(),
+            config = get(),
+            chatService = get(),
+            conversationRepo = get(),
+            settingsStore = get(),
+            appScope = get()
         )
     }
 }

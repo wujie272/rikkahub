@@ -16,6 +16,7 @@ import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.automation.ExternalAutomationConfig
 import me.rerere.rikkahub.data.event.AppEvent
 import me.rerere.rikkahub.data.event.AppEventBus
 import me.rerere.rikkahub.utils.readClipboardText
@@ -49,9 +50,13 @@ sealed class LocalToolOption {
     @Serializable
     @SerialName("ask_user")
     data object AskUser : LocalToolOption()
+
+    @Serializable
+    @SerialName("external_automation")
+    data object ExternalAutomation : LocalToolOption()
 }
 
-class LocalTools(private val context: Context, private val eventBus: AppEventBus) {
+class LocalTools(private val context: Context, private val eventBus: AppEventBus, private val automationConfig: ExternalAutomationConfig?) {
     val javascriptTool by lazy {
         Tool(
             name = "eval_javascript",
@@ -340,6 +345,107 @@ class LocalTools(private val context: Context, private val eventBus: AppEventBus
         )
     }
 
+    private val externalAutomationStatusTool by lazy {
+        Tool(
+            name = "external_automation_status",
+            description = "Read-only status of the External Automation feature: whether the master toggle is on and which caller packages are trusted. Use this before any mutation.",
+            parameters = { InputSchema.Obj(properties = buildJsonObject {}, required = emptyList()) },
+            execute = {
+                val config = automationConfig ?: return@Tool listOf(UIMessagePart.Text("""{"error":"config_not_available","detail":"External automation config is not available"}"""))
+                val enabled = runCatching { kotlinx.coroutines.flow.first(config.enabledFlow) }.getOrDefault(false)
+                val trusted = runCatching { kotlinx.coroutines.flow.first(config.trustedPackagesFlow) }.getOrDefault(emptySet())
+                val recent = runCatching { kotlinx.coroutines.flow.first(config.recentInvocationsFlow) }.getOrDefault(emptyList())
+                val payload = buildJsonObject {
+                    put("enabled", enabled)
+                    put("trusted_packages", kotlinx.serialization.json.JsonPrimitive(trusted.joinToString(", ")))
+                    put("recent_count", recent.size)
+                }
+                listOf(UIMessagePart.Text(payload.toString()))
+            }
+        )
+    }
+
+    private val externalAutomationSetEnabledTool by lazy {
+        Tool(
+            name = "external_automation_set_enabled",
+            description = "Enable or disable the External Automation Intent API. When OFF, all incoming intents are rejected. Turning ON also requires at least one trusted caller package.",
+            parameters = {
+                InputSchema.Obj(
+                    properties = buildJsonObject {
+                        put("enabled", buildJsonObject { put("type", "boolean") })
+                    },
+                    required = listOf("enabled"),
+                )
+            },
+            needsApproval = true,
+            execute = { args ->
+                val config = automationConfig ?: return@Tool listOf(UIMessagePart.Text("""{"error":"config_not_available"}"""))
+                val enabled = args.jsonObject["enabled"]?.jsonPrimitive?.contentOrNull?.toBooleanOrNull()
+                    ?: return@Tool listOf(UIMessagePart.Text("""{"error":"invalid_enabled"}"""))
+                runCatching { config.setEnabled(enabled) }
+                listOf(UIMessagePart.Text(buildJsonObject { put("enabled", enabled) }.toString()))
+            }
+        )
+    }
+
+    private val externalAutomationAddTrustedPackageTool by lazy {
+        Tool(
+            name = "external_automation_add_trusted_package",
+            description = "Add a caller package name (e.g. net.dinglisch.android.taskerm for Tasker) to the trusted list. Approval required.",
+            parameters = {
+                InputSchema.Obj(
+                    properties = buildJsonObject {
+                        put("package_name", buildJsonObject { put("type", "string") })
+                    },
+                    required = listOf("package_name"),
+                )
+            },
+            needsApproval = true,
+            execute = { args ->
+                val config = automationConfig ?: return@Tool listOf(UIMessagePart.Text("""{"error":"config_not_available"}"""))
+                val pkg = args.jsonObject["package_name"]?.jsonPrimitive?.contentOrNull?.trim()
+                    ?: return@Tool listOf(UIMessagePart.Text("""{"error":"package_name_required"}"""))
+                if (!pkg.matches(Regex("""^[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z0-9_]+)*$"""))) {
+                    return@Tool listOf(UIMessagePart.Text("""{"error":"invalid_package","detail":"not a valid Android package identifier"}"""))
+                }
+                runCatching { config.addTrustedPackage(pkg) }
+                val trusted = runCatching { kotlinx.coroutines.flow.first(config.trustedPackagesFlow) }.getOrDefault(emptySet())
+                listOf(UIMessagePart.Text(buildJsonObject {
+                    put("added", pkg)
+                    put("trusted_packages", kotlinx.serialization.json.JsonPrimitive(trusted.joinToString(", ")))
+                }.toString()))
+            }
+        )
+    }
+
+    private val externalAutomationRemoveTrustedPackageTool by lazy {
+        Tool(
+            name = "external_automation_remove_trusted_package",
+            description = "Remove a caller package name from the trusted list. Approval required.",
+            parameters = {
+                InputSchema.Obj(
+                    properties = buildJsonObject {
+                        put("package_name", buildJsonObject { put("type", "string") })
+                    },
+                    required = listOf("package_name"),
+                )
+            },
+            needsApproval = true,
+            execute = { args ->
+                val config = automationConfig ?: return@Tool listOf(UIMessagePart.Text("""{"error":"config_not_available"}"""))
+                val pkg = args.jsonObject["package_name"]?.jsonPrimitive?.contentOrNull?.trim()
+                    ?: return@Tool listOf(UIMessagePart.Text("""{"error":"package_name_required"}"""))
+                runCatching { config.removeTrustedPackage(pkg) }
+                val trusted = runCatching { kotlinx.coroutines.flow.first(config.trustedPackagesFlow) }.getOrDefault(emptySet())
+                listOf(UIMessagePart.Text(buildJsonObject {
+                    put("removed", pkg)
+                    put("trusted_packages", kotlinx.serialization.json.JsonPrimitive(trusted.joinToString(", ")))
+                }.toString()))
+            }
+        )
+    }
+
+
     fun getTools(options: List<LocalToolOption>): List<Tool> {
         val tools = mutableListOf<Tool>()
         if (options.contains(LocalToolOption.JavascriptEngine)) {
@@ -359,6 +465,12 @@ class LocalTools(private val context: Context, private val eventBus: AppEventBus
         }
         if (options.contains(LocalToolOption.Location)) {
             tools.add(locationTool)
+        }
+        if (options.contains(LocalToolOption.ExternalAutomation)) {
+            tools.add(externalAutomationStatusTool)
+            tools.add(externalAutomationSetEnabledTool)
+            tools.add(externalAutomationAddTrustedPackageTool)
+            tools.add(externalAutomationRemoveTrustedPackageTool)
         }
         return tools
     }

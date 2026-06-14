@@ -170,6 +170,20 @@ private fun AssistantLocalToolContent(
                     )
                 }
             )
+            item(
+                headlineContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_external_automation_title))
+                },
+                supportingContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_external_automation_desc))
+                },
+                trailingContent = {
+                    Switch(
+                        checked = assistant.localTools.contains(LocalToolOption.ExternalAutomation),
+                        onCheckedChange = { toggleLocalTool(LocalToolOption.ExternalAutomation, it) }
+                    )
+                }
+            )
         }
     }
 }
