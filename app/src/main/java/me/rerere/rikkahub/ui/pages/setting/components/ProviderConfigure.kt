@@ -31,6 +31,8 @@ import androidx.compose.ui.unit.dp
 import com.dokar.sonner.ToastType
 import me.rerere.ai.provider.ClaudePromptCacheTtl
 import me.rerere.ai.provider.ProviderSetting
+import me.rerere.ai.util.ApiKeyConfig
+import me.rerere.ai.util.ApiKeyStatus
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.DEFAULT_PROVIDERS
 import me.rerere.hugeicons.HugeIcons
@@ -157,6 +159,32 @@ internal fun ProviderSetting.isUsingDefaultBaseUrl(): Boolean {
     return baseUrl == defaultBaseUrlForReset()
 }
 
+@Composable
+private fun KeyManagementHint(apiKeys: List<me.rerere.ai.util.ApiKeyConfig>) {
+    val ctx = LocalContext.current
+    val activeCount = apiKeys.count { it.status == me.rerere.ai.util.ApiKeyStatus.ACTIVE }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            HugeIcons.Key01,
+            null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(20.dp)
+        )
+        Text(
+            text = if (apiKeys.isEmpty()) ctx.getString(R.string.multi_key_empty)
+                   else "${activeCount}/${apiKeys.size}",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
 private fun String.convertToTargetBaseUrl(targetDefaultBaseUrl: String): String {
     val sourceUrl = this.toHttpUrlOrNull() ?: return this
     val sourceHost = sourceUrl.host.lowercase()
@@ -214,20 +242,7 @@ private fun ProviderConfigureOpenAI(
         modifier = Modifier.fillMaxWidth(),
     )
 
-    var keyVisible by remember { mutableStateOf(false) }
-    OutlinedTextField(
-        value = provider.apiKey,
-        onValueChange = { onEdit(provider.copy(apiKey = it.trim()).syncApiKeysFromSource() as ProviderSetting.OpenAI) },
-        label = { Text(stringResource(R.string.setting_provider_page_api_key)) },
-        modifier = Modifier.fillMaxWidth(),
-        maxLines = 3,
-        visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
-        trailingIcon = {
-            IconButton(onClick = { keyVisible = !keyVisible }) {
-                Icon(if (keyVisible) HugeIcons.ViewOff else HugeIcons.View, contentDescription = null)
-            }
-        },
-    )
+    KeyManagementHint(provider.apiKeys)
 
     OutlinedTextField(
         value = provider.baseUrl,
@@ -305,20 +320,7 @@ private fun ProviderConfigureClaude(
         maxLines = 3,
     )
 
-    var keyVisible by remember { mutableStateOf(false) }
-    OutlinedTextField(
-        value = provider.apiKey,
-        onValueChange = { onEdit(provider.copy(apiKey = it.trim()).syncApiKeysFromSource() as ProviderSetting.Claude) },
-        label = { Text(stringResource(R.string.setting_provider_page_api_key)) },
-        modifier = Modifier.fillMaxWidth(),
-        maxLines = 3,
-        visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
-        trailingIcon = {
-            IconButton(onClick = { keyVisible = !keyVisible }) {
-                Icon(if (keyVisible) HugeIcons.ViewOff else HugeIcons.View, contentDescription = null)
-            }
-        },
-    )
+    KeyManagementHint(provider.apiKeys)
 
     OutlinedTextField(
         value = provider.baseUrl,
@@ -417,20 +419,7 @@ private fun ProviderConfigureGoogle(
     )
 
     if (!(provider.vertexAI && provider.useServiceAccount)) {
-        var keyVisible by remember { mutableStateOf(false) }
-        OutlinedTextField(
-            value = provider.apiKey,
-            onValueChange = { onEdit(provider.copy(apiKey = it.trim()).syncApiKeysFromSource() as ProviderSetting.Google) },
-            label = { Text(stringResource(R.string.setting_provider_page_api_key)) },
-            modifier = Modifier.fillMaxWidth(),
-            maxLines = 3,
-            visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
-            trailingIcon = {
-                IconButton(onClick = { keyVisible = !keyVisible }) {
-                    Icon(if (keyVisible) HugeIcons.ViewOff else HugeIcons.View, contentDescription = null)
-                }
-            },
-        )
+        KeyManagementHint(provider.apiKeys)
     }
 
     if (!provider.vertexAI) {
