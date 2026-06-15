@@ -419,7 +419,7 @@ private fun SettingProviderModelPage(
 @Composable
 private fun SettingProviderKeyPage(
     provider: ProviderSetting,
-    settings: me.rerere.rikkahub.data.model.Settings,
+    settings: me.rerere.rikkahub.data.datastore.Settings,
     onEdit: (ProviderSetting) -> Unit,
     vm: SettingVM,
     scope: kotlinx.coroutines.CoroutineScope,
