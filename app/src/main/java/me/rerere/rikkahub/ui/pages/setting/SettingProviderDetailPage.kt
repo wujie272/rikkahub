@@ -480,6 +480,7 @@ private fun SettingProviderKeyPage(
     )
 }
 
+@Composable
 private fun ModelList(
     providerSetting: ProviderSetting,
     onUpdateProvider: (ProviderSetting) -> Unit
