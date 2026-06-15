@@ -219,11 +219,33 @@ internal fun SettingMultiKeyContent(
                         }
                     } else {
                         IosCard {
-                            Box(
-                                modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
-                                contentAlignment = Alignment.Center
+                            Column(
+                                modifier = Modifier.fillMaxWidth().padding(24.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(16.dp)
                             ) {
                                 Text(ctx.getString(R.string.multi_key_empty), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                var showAdd by remember { mutableStateOf(false) }
+                                Button(onClick = { showAdd = true }) {
+                                    Icon(HugeIcons.PlusSign, null)
+                                    Spacer(Modifier.size(8.dp))
+                                    Text(ctx.getString(R.string.multi_key_add))
+                                }
+                                if (showAdd) {
+                                    AddKeysSheet(
+                                        onDismiss = { showAdd = false },
+                                        onAdd = { newKeys ->
+                                            val existingSet = apiKeys.map { it.key.trim() }.toSet()
+                                            val unique = newKeys.filter { it.trim() !in existingSet && it.isNotBlank() }.distinct()
+                                            if (unique.isNotEmpty()) {
+                                                val added = unique.map { ApiKeyConfig(key = it.trim(), name = "Key ${apiKeys.size + 1}") }
+                                                updateKeys(apiKeys + added)
+                                                Toast.makeText(ctx, ctx.getString(R.string.multi_key_imported, added.size), Toast.LENGTH_SHORT).show()
+                                            }
+                                            showAdd = false
+                                        }
+                                    )
+                                }
                             }
                         }
                     }
