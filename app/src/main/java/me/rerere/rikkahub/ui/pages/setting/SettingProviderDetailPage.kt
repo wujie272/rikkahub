@@ -267,57 +267,11 @@ fun SettingProviderDetailPage(id: Uuid, vm: SettingVM = koinViewModel()) {
                 }
 
                 1 -> {
-                    val apiKeysCount = provider.apiKeys.size
-                    val normalKeys = provider.apiKeys.count { it.status == ApiKeyStatus.ACTIVE }
-                    val errorKeys = provider.apiKeys.count { it.status == ApiKeyStatus.ERROR }
-                    val totalKeys = apiKeysCount
-
-                    var internalProvider by remember(provider) { mutableStateOf(provider) }
-                    val snackbarHostState = remember { SnackbarHostState() }
-                    val lazyListState = rememberLazyListState()
-                    val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
-                        val mutableKeys = internalProvider.apiKeys.toMutableList()
-                        val item = mutableKeys.removeAt(from.index)
-                        mutableKeys.add(to.index, item)
-                        val updated = internalProvider.copyProvider(apiKeys = mutableKeys)
-                        updated.syncApiKeyString()
-                        val newSettings = settings.copy(
-                            providers = settings.providers.map { if (it.id == updated.id) updated else it }
-                        )
-                        scope.launch { vm.updateSettings(newSettings) }
-                        internalProvider = updated
-                    }
-
-                    fun saveProvider(p: ProviderSetting) {
-                        val newSettings = settings.copy(
-                            providers = settings.providers.map { if (it.id == p.id) p else it }
-                        )
-                        scope.launch { vm.updateSettings(newSettings) }
-                        internalProvider = p
-                    }
-
-                    fun updateKeys(newKeys: List<me.rerere.ai.util.ApiKeyConfig>) {
-                        val updated = internalProvider.copyProvider(apiKeys = newKeys)
-                        updated.syncApiKeyString()
-                        saveProvider(updated)
-                    }
-
-                    val providerManager = koinInject<ProviderManager>()
-                    val strUndo = context.getString(R.string.multi_key_undo)
-
-                    SettingMultiKeyContent(
-                        internalProvider = internalProvider,
-                        saveProvider = ::saveProvider,
-                        updateKeys = ::updateKeys,
-                        apiKeys = internalProvider.apiKeys,
-                        errorKeys = errorKeys,
-                        normalKeys = normalKeys,
-                        totalKeys = totalKeys,
-                        providerManager = providerManager,
-                        snackbarHostState = snackbarHostState,
-                        lazyListState = lazyListState,
-                        reorderableState = reorderableState,
-                        strUndo = strUndo,
+                    SettingProviderKeyPage(
+                        provider = provider,
+                        settings = settings,
+                        onEdit = onEdit,
+                        vm = vm,
                         scope = scope,
                     )
                 }
@@ -463,6 +417,69 @@ private fun SettingProviderModelPage(
 }
 
 @Composable
+private fun SettingProviderKeyPage(
+    provider: ProviderSetting,
+    settings: me.rerere.rikkahub.data.model.Settings,
+    onEdit: (ProviderSetting) -> Unit,
+    vm: SettingVM,
+    scope: kotlinx.coroutines.CoroutineScope,
+) {
+    val apiKeys = provider.apiKeys
+    val normalKeys = apiKeys.count { it.status == ApiKeyStatus.ACTIVE }
+    val errorKeys = apiKeys.count { it.status == ApiKeyStatus.ERROR }
+    val totalKeys = apiKeys.size
+
+    var internalProvider by remember(provider) { mutableStateOf(provider) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val lazyListState = rememberLazyListState()
+    val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
+        val mutableKeys = internalProvider.apiKeys.toMutableList()
+        val item = mutableKeys.removeAt(from.index)
+        mutableKeys.add(to.index, item)
+        val updated = internalProvider.copyProvider(apiKeys = mutableKeys)
+        updated.syncApiKeyString()
+        val newSettings = settings.copy(
+            providers = settings.providers.map { if (it.id == updated.id) updated else it }
+        )
+        scope.launch { vm.updateSettings(newSettings) }
+        internalProvider = updated
+    }
+
+    fun saveProvider(p: ProviderSetting) {
+        val newSettings = settings.copy(
+            providers = settings.providers.map { if (it.id == p.id) p else it }
+        )
+        scope.launch { vm.updateSettings(newSettings) }
+        internalProvider = p
+    }
+
+    fun updateKeys(newKeys: List<me.rerere.ai.util.ApiKeyConfig>) {
+        val updated = internalProvider.copyProvider(apiKeys = newKeys)
+        updated.syncApiKeyString()
+        saveProvider(updated)
+    }
+
+    val context = LocalContext.current
+    val providerManager = koinInject<ProviderManager>()
+    val strUndo = context.getString(R.string.multi_key_undo)
+
+    SettingMultiKeyContent(
+        internalProvider = internalProvider,
+        saveProvider = ::saveProvider,
+        updateKeys = ::updateKeys,
+        apiKeys = internalProvider.apiKeys,
+        errorKeys = errorKeys,
+        normalKeys = normalKeys,
+        totalKeys = totalKeys,
+        providerManager = providerManager,
+        snackbarHostState = snackbarHostState,
+        lazyListState = lazyListState,
+        reorderableState = reorderableState,
+        strUndo = strUndo,
+        scope = scope,
+    )
+}
+
 private fun ModelList(
     providerSetting: ProviderSetting,
     onUpdateProvider: (ProviderSetting) -> Unit
