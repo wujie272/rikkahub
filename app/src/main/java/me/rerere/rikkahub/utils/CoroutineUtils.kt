@@ -22,7 +22,7 @@ fun <T> Flow<T>.toMutableStateFlow(
             it.printStackTrace()
             Log.e(TAG, "Error while collecting flow: ${it.message}", it)
 
-            Runtime.getRuntime().halt(1)
+                        // Runtime.getRuntime().halt(1) — removed: log the error and keep last value instead of hard-killing the process
         }
     }
     return stateFlow

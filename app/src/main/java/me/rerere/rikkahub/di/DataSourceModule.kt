@@ -143,6 +143,10 @@ val dataSourceModule = module {
     }
 
     single {
+        get<AppDatabase>().sshHostDao()
+    }
+
+    single {
         MessageFtsManager(get())
     }
 
