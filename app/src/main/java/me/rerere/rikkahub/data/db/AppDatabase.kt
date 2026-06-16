@@ -12,6 +12,7 @@ import me.rerere.rikkahub.data.db.dao.GenMediaDAO
 import me.rerere.rikkahub.data.db.dao.ManagedFileDAO
 import me.rerere.rikkahub.data.db.dao.MemoryDAO
 import me.rerere.rikkahub.data.db.dao.MessageNodeDAO
+import me.rerere.rikkahub.data.db.dao.SshHostDao
 import me.rerere.rikkahub.data.db.dao.WorkspaceDAO
 import me.rerere.rikkahub.data.db.entity.ConversationEntity
 import me.rerere.rikkahub.data.db.entity.FavoriteEntity
@@ -19,6 +20,7 @@ import me.rerere.rikkahub.data.db.entity.GenMediaEntity
 import me.rerere.rikkahub.data.db.entity.ManagedFileEntity
 import me.rerere.rikkahub.data.db.entity.MemoryEntity
 import me.rerere.rikkahub.data.db.entity.MessageNodeEntity
+import me.rerere.rikkahub.data.db.entity.SshHostEntity
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.data.db.migrations.Migration_16_17
 import me.rerere.rikkahub.data.db.migrations.Migration_22_23
@@ -34,8 +36,9 @@ import me.rerere.rikkahub.utils.JsonInstant
         ManagedFileEntity::class,
         FavoriteEntity::class,
         WorkspaceEntity::class,
+        SshHostEntity::class,
     ],
-    version = 23,
+    version = 24,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),
@@ -54,6 +57,7 @@ import me.rerere.rikkahub.utils.JsonInstant
         AutoMigration(from = 20, to = 21),
         AutoMigration(from = 21, to = 22),
         AutoMigration(from = 22, to = 23, spec = Migration_22_23::class),
+        AutoMigration(from = 23, to = 24),
     ]
 )
 @TypeConverters(TokenUsageConverter::class)
@@ -71,6 +75,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun favoriteDao(): FavoriteDAO
 
     abstract fun workspaceDao(): WorkspaceDAO
+
+    abstract fun sshHostDao(): SshHostDao
 }
 
 object TokenUsageConverter {
