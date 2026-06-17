@@ -153,20 +153,51 @@ class McpManager(
         Log.i(TAG, "callTool: $toolName / $args (server: ${config.commonOptions.name})")
 
         if (client.transport == null) client.connect(getTransport(config))
-        val result = client.callTool(
-            request = CallToolRequest(
-                params = CallToolRequestParams(
-                    name = toolName,
-                    arguments = args,
+
+        // 首次尝试调用
+        runCatching {
+            val result = client.callTool(
+                request = CallToolRequest(
+                    params = CallToolRequestParams(
+                        name = toolName,
+                        arguments = args,
+                    ),
                 ),
-            ),
-            options = RequestOptions(timeout = 120.seconds),
-        )
-        return result.content.map {
-            when(it) {
-                is TextContent -> UIMessagePart.Text(it.text)
-                is ImageContent -> convertImageContentToFilePart(it)
-                else -> UIMessagePart.Text(JsonInstant.encodeToString(it))
+                options = RequestOptions(timeout = 120.seconds),
+            )
+            return result.content.map {
+                when(it) {
+                    is TextContent -> UIMessagePart.Text(it.text)
+                    is ImageContent -> convertImageContentToFilePart(it)
+                    else -> UIMessagePart.Text(JsonInstant.encodeToString(it))
+                }
+            }
+        }.onFailure { e ->
+            // 调用失败（transport 可能已断开但未置 null），尝试重建连接后重试一次
+            Log.w(TAG, "callTool failed, reconnecting and retrying: ${e.message}")
+            val existing = clients.entries.find { it.key.id == serverId }
+            if (existing != null) {
+                runCatching { existing.value.close() }.onFailure { /* ignore */ }
+                clients.remove(existing.key)
+            }
+            addClient(config)
+            val freshClient = clients.entries.find { it.key.id == serverId }?.value
+                ?: return listOf(UIMessagePart.Text("Failed to reconnect MCP client after error"))
+            val retryResult = freshClient.callTool(
+                request = CallToolRequest(
+                    params = CallToolRequestParams(
+                        name = toolName,
+                        arguments = args,
+                    ),
+                ),
+                options = RequestOptions(timeout = 120.seconds),
+            )
+            return retryResult.content.map {
+                when(it) {
+                    is TextContent -> UIMessagePart.Text(it.text)
+                    is ImageContent -> convertImageContentToFilePart(it)
+                    else -> UIMessagePart.Text(JsonInstant.encodeToString(it))
+                }
             }
         }
     }
