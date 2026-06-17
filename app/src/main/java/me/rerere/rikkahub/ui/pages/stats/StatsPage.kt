@@ -43,6 +43,10 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.nav.BackButton
+import me.rerere.rikkahub.ui.pages.stats.cards.StreakCards
+import me.rerere.rikkahub.ui.pages.stats.charts.HourlyBarChart
+import me.rerere.rikkahub.ui.pages.stats.charts.TokenDonutChart
+import me.rerere.rikkahub.ui.pages.stats.charts.TrendLineChart
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.plus
 import org.koin.androidx.compose.koinViewModel
@@ -85,15 +89,54 @@ fun StatsPage(vm: StatsVM = koinViewModel()) {
                 contentPadding = padding + PaddingValues(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                // 对话趋势折线图
                 item {
-                    HeatmapCard(
-                        conversationsPerDay = stats.conversationsPerDay,
+                    TrendLineChart(
+                        data = stats.conversationsByMonth,
                         modifier = Modifier.padding(horizontal = 8.dp),
                     )
                 }
+
+                // 趣味数据行
+                item {
+                    StreakCards(
+                        currentStreak = stats.streakInfo.currentStreak,
+                        longestStreak = stats.streakInfo.longestStreak,
+                        avgMessagesPerConversation = stats.avgMessagesPerConversation,
+                        modifier = Modifier.padding(horizontal = 8.dp),
+                    )
+                }
+
+                // 数字统计卡片
                 item {
                     StatsGrid(
                         stats = stats,
+                        modifier = Modifier.padding(horizontal = 8.dp),
+                    )
+                }
+
+                // Token 占比环形图
+                item {
+                    TokenDonutChart(
+                        promptTokens = stats.totalPromptTokens,
+                        completionTokens = stats.totalCompletionTokens,
+                        cachedTokens = stats.totalCachedTokens,
+                        modifier = Modifier.padding(horizontal = 8.dp),
+                    )
+                }
+
+                // 小时活跃柱状图
+                item {
+                    HourlyBarChart(
+                        data = stats.hourlyDistribution,
+                        modifier = Modifier.padding(horizontal = 8.dp),
+                    )
+                }
+
+                // 热力图（保留原样）
+                item {
+                    HeatmapCard(
+                        conversationsPerDay = stats.conversationsPerDay,
                         modifier = Modifier.padding(horizontal = 8.dp),
                     )
                 }
@@ -101,6 +144,8 @@ fun StatsPage(vm: StatsVM = koinViewModel()) {
         }
     }
 }
+
+// 以下保持原样：HeatmapCard, ChatHeatmap, HeatmapCell, StatsGrid, StatCard, formatCount, formatTokens
 
 @Composable
 private fun HeatmapCard(conversationsPerDay: Map<LocalDate, Int>, modifier: Modifier = Modifier) {
@@ -155,10 +200,8 @@ private fun ChatHeatmap(conversationsPerDay: Map<LocalDate, Int>) {
     val q3 = activeCounts.getOrElse((activeCounts.size * 0.75).toInt()) { 3 }
     val cellSize = 11.dp
     val cellSpacing = 2.dp
-    // Month label row height
     val monthLabelHeight = 14.dp
 
-    // Day-of-week labels (only Mon/Wed/Fri to save space, Sun=0)
     val dowLabels = listOf(
         "",
         stringResource(R.string.stats_page_dow_mon),
@@ -169,11 +212,9 @@ private fun ChatHeatmap(conversationsPerDay: Map<LocalDate, Int>) {
         ""
     )
 
-    // Shared scroll state so month labels + grid scroll together
     val scrollState = rememberScrollState(initial = Int.MAX_VALUE)
 
     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        // Fixed left column: spacer for month label row + DOW labels
         Column(
             modifier = Modifier.width(12.dp),
             verticalArrangement = Arrangement.spacedBy(cellSpacing),
@@ -196,12 +237,10 @@ private fun ChatHeatmap(conversationsPerDay: Map<LocalDate, Int>) {
             }
         }
 
-        // Scrollable area: month labels + heatmap grid share one scroll state
         Column(
             modifier = Modifier.horizontalScroll(scrollState),
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-            // Month labels row
             Row(horizontalArrangement = Arrangement.spacedBy(cellSpacing)) {
                 for (weekIdx in 0 until numWeeks) {
                     val weekStart = startSunday.plusDays((weekIdx * 7).toLong())
@@ -233,7 +272,6 @@ private fun ChatHeatmap(conversationsPerDay: Map<LocalDate, Int>) {
                 }
             }
 
-            // Heatmap grid
             Row(horizontalArrangement = Arrangement.spacedBy(cellSpacing)) {
                 for (weekIdx in 0 until numWeeks) {
                     Column(verticalArrangement = Arrangement.spacedBy(cellSpacing)) {
@@ -261,7 +299,7 @@ private fun ChatHeatmap(conversationsPerDay: Map<LocalDate, Int>) {
 @Composable
 private fun HeatmapCell(alpha: Float, sizeDp: Int) {
     val color = when {
-        alpha < 0f -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f) // future
+        alpha < 0f -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
         alpha == 0f -> MaterialTheme.colorScheme.surfaceVariant
         else -> MaterialTheme.colorScheme.primary.copy(alpha = alpha)
     }

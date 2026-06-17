@@ -46,6 +46,15 @@ interface MessageNodeDAO {
 
     @RawQuery
     suspend fun getMessageCountPerDayRaw(query: SupportSQLiteQuery): List<MessageDayCount>
+
+    @RawQuery
+    suspend fun getHourlyDistributionRaw(query: SupportSQLiteQuery): List<HourlyCount>
+
+    @RawQuery
+    suspend fun getWeekdayDistributionRaw(query: SupportSQLiteQuery): List<WeekdayCount>
+
+    @RawQuery
+    suspend fun getActiveDatesRaw(query: SupportSQLiteQuery): List<String>
 }
 
 data class MessageTokenStats(
@@ -56,6 +65,10 @@ data class MessageTokenStats(
 )
 
 data class MessageDayCount(val day: String, val count: Int)
+
+data class HourlyCount(val hour: Int, val count: Int)
+
+data class WeekdayCount(val weekday: Int, val count: Int)
 
 // SQLite json_each() 展开 messages JSON 数组，json_extract() 提取 Token 字段并聚合
 private val TOKEN_STATS_SQL = SimpleSQLiteQuery(
@@ -69,6 +82,45 @@ private val TOKEN_STATS_SQL = SimpleSQLiteQuery(
 suspend fun MessageNodeDAO.getTokenStats(): MessageTokenStats = getTokenStatsRaw(TOKEN_STATS_SQL)
 
 // 按用户消息的 createdAt 字段（LocalDateTime ISO 字符串前10位即日期）统计每日消息数
+
+// 按小时统计用户活跃度（从 createdAt 提取小时）
+suspend fun MessageNodeDAO.getHourlyDistribution(): List<HourlyCount> =
+    getHourlyDistributionRaw(
+        SimpleSQLiteQuery(
+            "SELECT CAST(SUBSTR(json_extract(j.value, '$.createdAt'), 12, 2) AS INTEGER) AS hour, " +
+                "COUNT(*) AS count " +
+                "FROM message_node mn, json_each(mn.messages) j " +
+                "WHERE json_extract(j.value, '$.role') = 'user' " +
+                "GROUP BY hour " +
+                "ORDER BY hour"
+        )
+    )
+
+// 按星期几统计用户活跃度（strftime('%w') 返回 0=Sunday, 1=Monday...）
+suspend fun MessageNodeDAO.getWeekdayDistribution(): List<WeekdayCount> =
+    getWeekdayDistributionRaw(
+        SimpleSQLiteQuery(
+            "SELECT CAST(strftime('%w', json_extract(j.value, '$.createdAt')) AS INTEGER) AS weekday, " +
+                "COUNT(*) AS count " +
+                "FROM message_node mn, json_each(mn.messages) j " +
+                "WHERE json_extract(j.value, '$.role') = 'user' " +
+                "GROUP BY weekday " +
+                "ORDER BY weekday"
+        )
+    )
+
+// 获取所有活跃日期（用户消息去重后的日期列表），用于计算连续使用天数
+suspend fun MessageNodeDAO.getActiveDates(startDate: String): List<String> =
+    getActiveDatesRaw(
+        SimpleSQLiteQuery(
+            "SELECT DISTINCT substr(json_extract(j.value, '$.createdAt'), 1, 10) AS day " +
+                "FROM message_node mn, json_each(mn.messages) j " +
+                "WHERE json_extract(j.value, '$.role') = 'user' " +
+                "AND json_extract(j.value, '$.createdAt') >= ? " +
+                "ORDER BY day",
+            arrayOf(startDate)
+        )
+    )
 suspend fun MessageNodeDAO.getMessageCountPerDay(startDate: String): List<MessageDayCount> =
     getMessageCountPerDayRaw(
         SimpleSQLiteQuery(
