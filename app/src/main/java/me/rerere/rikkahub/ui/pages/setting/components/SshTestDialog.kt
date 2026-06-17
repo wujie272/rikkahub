@@ -213,8 +213,8 @@ private suspend fun runTest(context: Context, host: SshHostEntity): TestResult =
         )
         val handshakeMs = System.currentTimeMillis() - handshakeStart
         val hostKey = session.getHostKey()
-        val fingerprint = hostKey?.fingerPrint?.takeIf { it.isNotBlank() }
-            ?: "SHA256:${hostKey?.key?.let { java.lang.Long.toHexString(it.hashCode().toLong()) }}"
+        val fingerprint = hostKey?.getFingerPrint(jsch)?.takeIf { it.isNotBlank() }
+            ?: "SHA256:${hostKey?.getKey()?.let { java.lang.Long.toHexString(it.hashCode().toLong()) }}"
 
         // 3) 验证命令
         val cmdStart = System.currentTimeMillis()
