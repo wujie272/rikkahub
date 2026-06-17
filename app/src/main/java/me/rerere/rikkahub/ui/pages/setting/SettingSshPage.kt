@@ -38,11 +38,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import me.rerere.hugeicons.HugeIcons
-import me.rerere.hugeicons.stroke.Add01
-import me.rerere.hugeicons.stroke.Copy01
-import me.rerere.hugeicons.stroke.Delete02
-import me.rerere.hugeicons.stroke.Edit02
-import me.rerere.hugeicons.stroke.Search01
 import me.rerere.hugeicons.stroke.ServerStack01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.db.entity.SshHostEntity
@@ -105,14 +100,14 @@ fun SettingSshPage() {
                 navigationIcon = { BackButton() },
                 actions = {
                     IconButton(onClick = { showSearch = !showSearch; if (!showSearch) searchQuery = "" }) {
-                        Icon(Search01, contentDescription = stringResource(R.string.setting_ssh_search))
+                        Icon(HugeIcons.Search01, contentDescription = stringResource(R.string.setting_ssh_search))
                     }
                 }
             )
         },
         floatingActionButton = {
             FloatingActionButton(onClick = { showAddSheet = true }) {
-                Icon(Add01, contentDescription = stringResource(R.string.setting_ssh_add))
+                Icon(HugeIcons.Add01, contentDescription = stringResource(R.string.setting_ssh_add))
             }
         }
     ) { padding ->
@@ -263,7 +258,7 @@ private fun SshHostItem(
         Row {
             IconButton(onClick = onTest) {
                 Icon(
-                    me.rerere.hugeicons.stroke.Connect,
+                    HugeIcons.Connect,
                     contentDescription = stringResource(R.string.setting_ssh_test),
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(20.dp),
@@ -271,7 +266,7 @@ private fun SshHostItem(
             }
             IconButton(onClick = onEdit) {
                 Icon(
-                    Edit02,
+                    HugeIcons.Edit02,
                     contentDescription = stringResource(R.string.setting_ssh_edit),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(20.dp),
@@ -279,7 +274,7 @@ private fun SshHostItem(
             }
             IconButton(onClick = onDelete) {
                 Icon(
-                    Delete02,
+                    HugeIcons.Delete02,
                     contentDescription = stringResource(R.string.setting_ssh_delete),
                     tint = MaterialTheme.colorScheme.error,
                     modifier = Modifier.size(20.dp),

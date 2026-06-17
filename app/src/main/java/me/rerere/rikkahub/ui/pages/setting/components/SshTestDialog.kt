@@ -31,12 +31,11 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import me.rerere.hugeicons.stroke.Copy01
-import me.rerere.hugeicons.stroke.AlertCircle
-import me.rerere.hugeicons.stroke.CheckmarkCircle01
-import me.rerere.rikkahub.R
+import me.rerere.hugeicons.HugeIcons
 import me.rerere.rikkahub.data.db.entity.SshHostEntity
+import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.tools.local.SshAuth
+import me.rerere.rikkahub.data.ai.tools.local.isUsable
 import me.rerere.rikkahub.data.ai.tools.local.newJSch
 import me.rerere.rikkahub.data.ai.tools.local.openSshSession
 import me.rerere.rikkahub.data.ai.tools.local.probeReachability
@@ -135,7 +134,7 @@ fun SshTestDialog(
             Button(onClick = {
                 copyTestInfo(context, host, result)
             }) {
-                Icon(Copy01, null, modifier = Modifier.size(16.dp))
+                Icon(HugeIcons.Copy01, null, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(6.dp))
                 Text(stringResource(R.string.setting_ssh_copy_info))
             }
@@ -155,7 +154,7 @@ private fun TestRow(label: String, ok: Boolean, detail: String) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
-            if (ok) me.rerere.hugeicons.stroke.CheckmarkCircle01 else me.rerere.hugeicons.stroke.AlertCircle,
+            if (ok) HugeIcons.CheckmarkCircle01 else HugeIcons.AlertCircle,
             contentDescription = null,
             modifier = Modifier.size(18.dp),
             tint = if (ok) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
@@ -211,8 +210,8 @@ private suspend fun runTest(context: Context, host: SshHostEntity): TestResult =
         )
         val handshakeMs = System.currentTimeMillis() - handshakeStart
         val hostKey = session.getHostKey()
-        val fingerprint = hostKey?.fingerprint?.takeIf { it.isNotBlank() }
-            ?: "SHA256:${hostKey?.key?.hashCode()?.let { java.lang.Long.toHexString(it.toLong()) }}"
+        val fingerprint = hostKey?.fingerPrint?.takeIf { it.isNotBlank() }
+            ?: "SHA256:${hostKey?.key?.let { java.lang.Long.toHexString(it.hashCode().toLong()) }}"
 
         // 3) 验证命令
         val cmdStart = System.currentTimeMillis()
