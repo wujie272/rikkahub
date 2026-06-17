@@ -48,3 +48,8 @@
 
 # JSch 运行时通过 Class.forName() 动态加载 JCE 加密实现
 -keep class com.jcraft.jsch.** { *; }
+
+# JSch 的 Windows Pageant SSH agent 引用了 com.sun.jna.*
+# 这些类只在 Windows 上存在，Android 上可安全忽略
+-dontwarn com.sun.jna.**
+-dontwarn com.sun.jna.platform.win32.**
