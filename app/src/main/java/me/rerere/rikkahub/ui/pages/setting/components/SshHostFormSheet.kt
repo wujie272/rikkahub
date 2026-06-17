@@ -86,7 +86,6 @@ fun SshHostFormSheet(
                 }} else null,
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
-                enabled = !isEdit,
             )
             Spacer(Modifier.height(8.dp))
 

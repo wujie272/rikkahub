@@ -180,6 +180,9 @@ fun SettingSshPage() {
             onDismiss = { editingHost = null },
             onSave = { entity ->
                 scope.launch {
+                    if (entity.name != host.name) {
+                        repo.deleteByName(host.name)
+                    }
                     repo.upsert(entity)
                     refresh()
                 }
