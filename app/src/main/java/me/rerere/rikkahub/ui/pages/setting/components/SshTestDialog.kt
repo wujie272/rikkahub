@@ -32,8 +32,11 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import me.rerere.hugeicons.HugeIcons
-import me.rerere.rikkahub.data.db.entity.SshHostEntity
+import me.rerere.hugeicons.stroke.AlertCircle
+import me.rerere.hugeicons.stroke.CheckmarkCircle01
+import me.rerere.hugeicons.stroke.Copy01
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.db.entity.SshHostEntity
 import me.rerere.rikkahub.data.ai.tools.local.SshAuth
 import me.rerere.rikkahub.data.ai.tools.local.isUsable
 import me.rerere.rikkahub.data.ai.tools.local.newJSch

@@ -38,6 +38,11 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Add01
+import me.rerere.hugeicons.stroke.Connect
+import me.rerere.hugeicons.stroke.Delete02
+import me.rerere.hugeicons.stroke.Edit02
+import me.rerere.hugeicons.stroke.Search01
 import me.rerere.hugeicons.stroke.ServerStack01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.db.entity.SshHostEntity
