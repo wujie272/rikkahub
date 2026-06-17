@@ -155,7 +155,7 @@ class McpManager(
         if (client.transport == null) client.connect(getTransport(config))
 
         // 首次尝试调用
-        runCatching {
+        try {
             val result = client.callTool(
                 request = CallToolRequest(
                     params = CallToolRequestParams(
@@ -172,7 +172,7 @@ class McpManager(
                     else -> UIMessagePart.Text(JsonInstant.encodeToString(it))
                 }
             }
-        }.onFailure { e ->
+        } catch (e: Exception) {
             // 调用失败（transport 可能已断开但未置 null），尝试重建连接后重试一次
             Log.w(TAG, "callTool failed, reconnecting and retrying: ${e.message}")
             val existing = clients.entries.find { it.key.id == serverId }
