@@ -49,7 +49,15 @@
 # JSch 运行时通过 Class.forName() 动态加载 JCE 加密实现
 -keep class com.jcraft.jsch.** { *; }
 
-# JSch 的 Windows Pageant SSH agent 引用了 com.sun.jna.*
-# 这些类只在 Windows 上存在，Android 上可安全忽略
+# JSch 的 Windows Pageant SSH agent 引用了 com.sun.jna.*（仅在 Windows 有）
 -dontwarn com.sun.jna.**
 -dontwarn com.sun.jna.platform.win32.**
+
+# JSch 的 Log4j2 日志记录器 — Android 上没有 log4j2
+-dontwarn org.apache.logging.log4j.**
+
+# JSch 的 Kerberos/GSS-API 认证 — Android 不含 org.ietf.jgss
+-dontwarn org.ietf.jgss.**
+
+# JSch 的 Unix Domain Socket 支持（junixsocket）— Android 上没有
+-dontwarn org.newsclub.net.unix.**
