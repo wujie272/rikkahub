@@ -289,6 +289,8 @@ class McpManager(
         }.onFailure {
             it.printStackTrace()
             setStatus(config = config, status = McpStatus.Error(it.message ?: it.javaClass.name))
+            // 首次连接失败也触发重试
+            scheduleReconnect(config)
         }
     }
 
