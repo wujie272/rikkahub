@@ -45,3 +45,6 @@
 -keepattributes Signature, InnerClasses, EnclosingMethod
 -keep class com.fasterxml.jackson.** { *; }
 -keep class com.auth0.jwt.** { *; }
+
+# JSch 运行时通过 Class.forName() 动态加载 JCE 加密实现
+-keep class com.jcraft.jsch.** { *; }
