@@ -10,7 +10,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 1
           submodules: true
 
       - name: Set up JDK
@@ -24,8 +24,6 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Install zsh
-        run: sudo apt-get update && sudo apt-get install -y zsh
       - name: Install pnpm
         run: npm install -g pnpm
 
@@ -49,6 +47,8 @@ jobs:
             ~/.gradle/caches
             ~/.gradle/wrapper
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
 
       - name: Generate google-services.json (dummy)
         run: |
@@ -57,7 +57,7 @@ jobs:
       - name: Gradle Build (assembleDebug)
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug
+          ./gradlew assembleDebug --build-cache
 
       - name: Upload APK artifacts
         uses: actions/upload-artifact@v4
