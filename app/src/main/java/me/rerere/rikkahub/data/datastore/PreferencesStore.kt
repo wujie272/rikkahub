@@ -319,10 +319,8 @@ class SettingsStore(
                         lorebookIds = assistant.lorebookIds.filter { id ->
                             id in validLorebookIds
                         }.toSet(),
-                        // 过滤掉不存在的快捷消息 ID
-
                         // 移除废弃的 sub_agents 本地工具
-                        localTools = assistant.localTools.filterNot { it is LocalToolOption.DeprecatedSubAgents }
+                        localTools = assistant.localTools.filterNot { it is LocalToolOption.DeprecatedSubAgents },
                         quickMessageIds = assistant.quickMessageIds.filter { id ->
                             id in validQuickMessageIds
                         }.toSet()
