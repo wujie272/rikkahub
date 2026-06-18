@@ -26,6 +26,16 @@ import java.util.Locale
 
 @Serializable
 sealed class LocalToolOption {
+
+    /**
+     * Deprecated: sub-agents feature was removed.
+     * Kept for backward compatibility with stored user data.
+     * Deserialized but not registered as a tool.
+     */
+    @Deprecated("sub-agents feature has been removed", ReplaceWith("none"))
+    @Serializable
+    @SerialName("sub_agents")
+    data object DeprecatedSubAgents : LocalToolOption()
     @Serializable
     @SerialName("javascript_engine")
     data object JavascriptEngine : LocalToolOption()
