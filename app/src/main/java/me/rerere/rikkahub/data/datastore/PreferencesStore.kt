@@ -35,6 +35,8 @@ import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV1Migration
 import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV2Migration
 import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV3Migration
 import me.rerere.rikkahub.data.model.Assistant
+
+import me.rerere.rikkahub.data.ai.tools.LocalToolOption
 import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.Lorebook
@@ -318,6 +320,9 @@ class SettingsStore(
                             id in validLorebookIds
                         }.toSet(),
                         // 过滤掉不存在的快捷消息 ID
+
+                        // 移除废弃的 sub_agents 本地工具
+                        localTools = assistant.localTools.filterNot { it is LocalToolOption.DeprecatedSubAgents }
                         quickMessageIds = assistant.quickMessageIds.filter { id ->
                             id in validQuickMessageIds
                         }.toSet()
