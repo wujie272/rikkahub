@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import me.rerere.rikkahub.data.ai.group.SpeakerStrategy
 import me.rerere.ai.provider.Model
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
@@ -218,4 +219,62 @@ class GroupChatVM(
 
     fun dismissError(id: Uuid) = chatService.dismissError(id)
     fun clearAllErrors() = chatService.clearAllErrors()
+
+    // ── Group management (inline, no navigation needed) ──
+
+    fun addMember(assistantId: String) {
+        viewModelScope.launch {
+            val gid = chatService.getGroupId(conversationId) ?: return@launch
+            val existing = groupRepository.getMember(gid, assistantId)
+            if (existing != null) return@launch
+            groupRepository.upsertMember(
+                GroupMemberEntity(
+                    groupId = gid,
+                    assistantId = assistantId,
+                    createdAtMs = System.currentTimeMillis(),
+                )
+            )
+        }
+    }
+
+    fun removeMember(assistantId: String) {
+        viewModelScope.launch {
+            val gid = chatService.getGroupId(conversationId) ?: return@launch
+            groupRepository.deleteMember(gid, assistantId)
+        }
+    }
+
+    fun updateMemberPriority(assistantId: String, priority: Int) {
+        viewModelScope.launch {
+            val gid = chatService.getGroupId(conversationId) ?: return@launch
+            val member = groupRepository.getMember(gid, assistantId) ?: return@launch
+            groupRepository.upsertMember(member.copy(priority = priority))
+        }
+    }
+
+    fun updateMemberProbability(assistantId: String, probability: Float) {
+        viewModelScope.launch {
+            val gid = chatService.getGroupId(conversationId) ?: return@launch
+            val member = groupRepository.getMember(gid, assistantId) ?: return@launch
+            groupRepository.upsertMember(member.copy(responseProbability = probability))
+        }
+    }
+
+    fun updateSpeakerStrategy(strategyId: String) {
+        viewModelScope.launch {
+            val g = group.value ?: return@launch
+            groupRepository.upsert(
+                g.copy(speakerStrategy = strategyId, updatedAtMs = System.currentTimeMillis())
+            )
+        }
+    }
+
+    fun updateGroupInfo(name: String, description: String) {
+        viewModelScope.launch {
+            val g = group.value ?: return@launch
+            groupRepository.upsert(
+                g.copy(name = name, description = description, updatedAtMs = System.currentTimeMillis())
+            )
+        }
+    }
 }

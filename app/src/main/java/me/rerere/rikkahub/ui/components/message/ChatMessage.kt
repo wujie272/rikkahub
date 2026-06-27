@@ -105,6 +105,7 @@ fun ChatMessage(
     loading: Boolean = false,
     model: Model? = null,
     assistant: Assistant? = null,
+    senderColor: Color? = null,
     lastMessage: Boolean = false,
     onFork: () -> Unit,
     onRegenerate: () -> Unit,
@@ -150,6 +151,7 @@ fun ChatMessage(
                     assistant = assistant,
                     loading = loading,
                     senderName = node.senderName,
+                    senderColor = senderColor,
                     modifier = Modifier.weight(1f)
                 )
                 ChatMessageUserAvatar(

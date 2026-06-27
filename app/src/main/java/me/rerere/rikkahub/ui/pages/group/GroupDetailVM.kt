@@ -58,6 +58,18 @@ class GroupDetailVM(
         }
     }
 
+    fun updateSpeakerStrategy(strategyId: String) {
+        viewModelScope.launch {
+            val g = repository.getById(groupId) ?: return@launch
+            repository.upsert(
+                g.copy(
+                    speakerStrategy = strategyId,
+                    updatedAtMs = System.currentTimeMillis(),
+                )
+            )
+        }
+    }
+
     fun addMember(assistantId: String) {
         viewModelScope.launch {
             val existing = repository.getMember(groupId, assistantId)

@@ -6,11 +6,13 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.db.entity.GroupEntity
+import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.data.repository.GroupRepository
 import kotlin.uuid.Uuid
 
 class GroupVM(
     private val repository: GroupRepository,
+    private val chatService: ChatService,
 ) : ViewModel() {
     val groups = repository.listFlow()
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
@@ -43,5 +45,17 @@ class GroupVM(
             repository.deleteMembersByGroupId(group.id)
             repository.delete(group)
         }
+    }
+
+    fun startChat(groupId: String): String? {
+        var convId: String? = null
+        viewModelScope.launch {
+            convId = chatService.startGroupConversation(groupId).toString()
+        }
+        return convId
+    }
+
+    suspend fun startChatSuspend(groupId: String): String {
+        return chatService.startGroupConversation(groupId).toString()
     }
 }

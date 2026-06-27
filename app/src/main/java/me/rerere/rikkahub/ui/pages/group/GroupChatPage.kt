@@ -24,6 +24,13 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -31,7 +38,9 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,12 +55,17 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Cancel01
+import me.rerere.hugeicons.stroke.CheckmarkCircle01
 import me.rerere.hugeicons.stroke.MessageAdd01
 import me.rerere.hugeicons.stroke.Play
 import me.rerere.hugeicons.stroke.Settings03
+import me.rerere.hugeicons.stroke.Add01
+import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.UserMultiple
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
+import me.rerere.rikkahub.data.ai.group.SpeakerStrategy
+import me.rerere.rikkahub.data.db.entity.GroupEntity
 import me.rerere.rikkahub.data.db.entity.GroupMemberEntity
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.service.ChatError
@@ -104,6 +118,16 @@ fun GroupChatPage(id: String) {
         }.toMap()
     }
 
+    // Map each member assistantId to a stable color
+    val memberColors = remember(members) {
+        members.mapIndexed { index, member ->
+            val displayName = memberDisplayNames[member.assistantId] ?: member.assistantId.take(8)
+            displayName to avatarColors[index % avatarColors.size]
+        }.toMap()
+    }
+
+    var showManageSheet by remember { mutableStateOf(false) }
+
     val speakerStrategy = when (group?.speakerStrategy) {
         "PROBABILITY_BASED" -> "概率"
         "ROUND_ROBIN" -> "轮询"
@@ -131,7 +155,7 @@ fun GroupChatPage(id: String) {
                 speakerStrategy = speakerStrategy,
                 onBack = { navController.popBackStack() },
                 onGroupManagement = if (groupId != null) {
-                    { navController.navigate(Screen.GroupDetail(id = groupId)) }
+                    { showManageSheet = true }
                 } else null,
             )
         },
@@ -154,6 +178,7 @@ fun GroupChatPage(id: String) {
             processingStatus = processingStatus,
             errors = errors,
             settings = settings,
+            memberColors = memberColors,
             onDismissError = { vm.dismissError(it) },
             onClearAllErrors = { vm.clearAllErrors() },
             onRegenerate = { message: UIMessage -> vm.regenerateAtMessage(message) },
@@ -173,6 +198,22 @@ fun GroupChatPage(id: String) {
                 vm.translateMessage(message, locale)
             },
             onClearTranslation = { message -> vm.clearTranslationField(message.id) },
+        )
+    }
+
+    if (showManageSheet && group != null) {
+        GroupManageSheet(
+            group = group!!,
+            members = members,
+            memberDisplayNames = memberDisplayNames,
+            settings = settings,
+            onDismiss = { showManageSheet = false },
+            onAddMember = { vm.addMember(it) },
+            onRemoveMember = { vm.removeMember(it) },
+            onUpdatePriority = { id, p -> vm.updateMemberPriority(id, p) },
+            onUpdateProbability = { id, p -> vm.updateMemberProbability(id, p) },
+            onUpdateStrategy = { vm.updateSpeakerStrategy(it) },
+            onUpdateGroupInfo = { name, desc -> vm.updateGroupInfo(name, desc) },
         )
     }
 }
@@ -334,6 +375,7 @@ private fun GroupChatList(
     onDismissError: (Uuid) -> Unit,
     onClearAllErrors: () -> Unit,
     settings: me.rerere.rikkahub.data.datastore.Settings,
+    memberColors: Map<String, Color> = emptyMap(),
     onRegenerate: (me.rerere.ai.ui.UIMessage) -> Unit,
     onEdit: (me.rerere.ai.ui.UIMessage) -> Unit,
     onDelete: (me.rerere.ai.ui.UIMessage) -> Unit,
@@ -357,6 +399,7 @@ private fun GroupChatList(
         processingStatus = processingStatus,
         previewMode = false,
         settings = settings,
+        senderColors = memberColors,
         hazeState = dev.chrisbanes.haze.rememberHazeState(),
         errors = errors,
         onDismissError = onDismissError,
@@ -375,4 +418,281 @@ private fun GroupChatList(
         onToggleFavorite = onToggleFavorite,
         onConversationSystemPromptChange = {},
     )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun GroupManageSheet(
+    group: GroupEntity,
+    members: List<GroupMemberEntity>,
+    memberDisplayNames: Map<String, String>,
+    settings: me.rerere.rikkahub.data.datastore.Settings,
+    onDismiss: () -> Unit,
+    onAddMember: (String) -> Unit,
+    onRemoveMember: (String) -> Unit,
+    onUpdatePriority: (String, Int) -> Unit,
+    onUpdateProbability: (String, Float) -> Unit,
+    onUpdateStrategy: (String) -> Unit,
+    onUpdateGroupInfo: (String, String) -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val scope = rememberCoroutineScope()
+    var showEditNameDialog by remember { mutableStateOf(false) }
+    var showAddMemberDialog by remember { mutableStateOf(false) }
+
+    val currentMemberIds = remember(members) { members.map { it.assistantId }.toSet() }
+    val availableAssistants = remember(settings, currentMemberIds) {
+        settings.assistants.filter { it.id.toString() !in currentMemberIds }
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+    ) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = group.name,
+                        style = MaterialTheme.typography.titleLarge,
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        TextButton(onClick = { showEditNameDialog = true }) {
+                            Text(stringResource(R.string.edit))
+                        }
+                        TextButton(onClick = { showAddMemberDialog = true }) {
+                            Text(stringResource(R.string.group_detail_add_member))
+                        }
+                    }
+                }
+            }
+
+            item {
+                Text(
+                    text = stringResource(R.string.group_detail_speaker_strategy),
+                    style = MaterialTheme.typography.titleSmallEmphasized,
+                    modifier = Modifier.padding(top = 4.dp, bottom = 4.dp),
+                )
+            }
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    SpeakerStrategy.ALL.values.forEach { strategy ->
+                        val isSelected = strategy.id == group.speakerStrategy
+                        Surface(
+                            onClick = { onUpdateStrategy(strategy.id) },
+                            shape = RoundedCornerShape(10.dp),
+                            color = if (isSelected) MaterialTheme.colorScheme.primaryContainer
+                                    else MaterialTheme.colorScheme.surfaceContainerHigh,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                Text(
+                                    text = when (strategy) {
+                                        is SpeakerStrategy.ProbabilityBased -> "🎲"
+                                        is SpeakerStrategy.RoundRobin -> "🔄"
+                                        is SpeakerStrategy.PriorityBased -> "👑"
+                                        is SpeakerStrategy.Random -> "🎰"
+                                        is SpeakerStrategy.ForcedOnly -> "🤐"
+                                        else -> "?"
+                                    },
+                                    style = MaterialTheme.typography.titleMedium,
+                                )
+                                Text(
+                                    text = strategy.displayName,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                if (isSelected) {
+                                    Icon(
+                                        HugeIcons.CheckmarkCircle01,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(18.dp),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            item {
+                val countText = " (" + members.size + ")"
+                Text(
+                    text = stringResource(R.string.group_detail_members) + countText,
+                    style = MaterialTheme.typography.titleSmallEmphasized,
+                    modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
+                )
+            }
+
+            if (members.isEmpty()) {
+                item {
+                    Text(
+                        text = stringResource(R.string.group_detail_no_members),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            items(members, key = { it.assistantId }) { member ->
+                val name = memberDisplayNames[member.assistantId] ?: member.assistantId.take(8)
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = androidx.compose.material3.CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    ),
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Icon(
+                                HugeIcons.UserMultiple,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                                tint = MaterialTheme.colorScheme.primary,
+                            )
+                            Text(
+                                text = name,
+                                style = MaterialTheme.typography.bodyLarge,
+                                modifier = Modifier.weight(1f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            IconButton(onClick = { onRemoveMember(member.assistantId) }) {
+                                Icon(
+                                    HugeIcons.Delete01,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.error,
+                                )
+                            }
+                        }
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            val prioStr = stringResource(R.string.group_detail_member_priority)
+                            Text(
+                                text = prioStr + ": " + member.priority,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Slider(
+                                value = member.priority.toFloat(),
+                                onValueChange = { onUpdatePriority(member.assistantId, it.toInt()) },
+                                valueRange = 0f..10f,
+                                steps = 9,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            val probStr = stringResource(R.string.group_detail_member_probability)
+                            val pct = (member.responseProbability * 100).toInt()
+                            Text(
+                                text = probStr + ": " + pct + "%",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Slider(
+                                value = member.responseProbability,
+                                onValueChange = { onUpdateProbability(member.assistantId, it) },
+                                valueRange = 0f..1f,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (showEditNameDialog) {
+        var newName by remember { mutableStateOf(group.name) }
+        AlertDialog(
+            onDismissRequest = { showEditNameDialog = false },
+            title = { Text(stringResource(R.string.group_detail_edit_info)) },
+            text = {
+                OutlinedTextField(
+                    value = newName,
+                    onValueChange = { newName = it },
+                    label = { Text(stringResource(R.string.group_page_name)) },
+                    singleLine = true,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    onUpdateGroupInfo(newName, group.description)
+                    showEditNameDialog = false
+                }) { Text(stringResource(R.string.common_save)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEditNameDialog = false }) {
+                    Text(stringResource(R.string.common_cancel))
+                }
+            },
+        )
+    }
+
+    if (showAddMemberDialog) {
+        AlertDialog(
+            onDismissRequest = { showAddMemberDialog = false },
+            title = { Text(stringResource(R.string.group_detail_add_member)) },
+            text = {
+                if (availableAssistants.isEmpty()) {
+                    Text(
+                        text = stringResource(R.string.group_detail_all_assistants_added),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    LazyColumn(
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        items(availableAssistants.take(10), key = { it.id.toString() }) { assistant ->
+                            TextButton(
+                                onClick = {
+                                    onAddMember(assistant.id.toString())
+                                    showAddMemberDialog = false
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Text(
+                                    text = assistant.name,
+                                    modifier = Modifier.weight(1f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showAddMemberDialog = false }) {
+                    Text(stringResource(R.string.common_cancel))
+                }
+            },
+        )
+    }
 }

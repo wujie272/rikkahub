@@ -31,6 +31,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -45,6 +46,7 @@ import me.rerere.hugeicons.stroke.Add01
 import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.Edit01
 import me.rerere.hugeicons.stroke.Play
+import me.rerere.hugeicons.stroke.MessageAdd01
 import me.rerere.hugeicons.stroke.MoreVertical
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
@@ -53,6 +55,7 @@ import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.theme.CustomColors
+import kotlinx.coroutines.launch
 import me.rerere.rikkahub.utils.plus
 import org.koin.androidx.compose.koinViewModel
 
@@ -60,6 +63,7 @@ import org.koin.androidx.compose.koinViewModel
 @Composable
 fun GroupListPage(vm: GroupVM = koinViewModel()) {
     val navController = LocalNavController.current
+    val scope = rememberCoroutineScope()
     val groups by vm.groups.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     var showCreateDialog by rememberSaveable { mutableStateOf(false) }
@@ -100,6 +104,12 @@ fun GroupListPage(vm: GroupVM = koinViewModel()) {
                     onRename = { editTarget = group },
                     onDelete = { deleteTarget = group },
                     onOpen = { navController.navigate(Screen.GroupDetail(group.id)) },
+                    onStartChat = {
+                        scope.launch {
+                            val convId = vm.startChatSuspend(group.id)
+                            navController.navigate(Screen.GroupChat(id = convId))
+                        }
+                    },
                 )
             }
         }
@@ -178,6 +188,7 @@ private fun GroupCard(
     onRename: () -> Unit,
     onDelete: () -> Unit,
     onOpen: () -> Unit,
+    onStartChat: () -> Unit,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
 
@@ -220,6 +231,13 @@ private fun GroupCard(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
+            }
+            IconButton(onClick = onStartChat) {
+                Icon(
+                    HugeIcons.MessageAdd01,
+                    contentDescription = "Start Chat",
+                    tint = MaterialTheme.colorScheme.primary,
+                )
             }
             Box {
                 IconButton(onClick = { menuExpanded = true }) {

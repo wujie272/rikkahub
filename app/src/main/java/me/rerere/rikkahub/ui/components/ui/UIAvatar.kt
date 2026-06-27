@@ -91,6 +91,7 @@ fun UIAvatar(
     value: Avatar,
     modifier: Modifier = Modifier,
     loading: Boolean = false,
+    containerColor: Color? = null,
     onUpdate: ((Avatar) -> Unit)? = null,
     onClick: (() -> Unit)? = null
 ) {
@@ -120,7 +121,7 @@ fun UIAvatar(
                 if (onUpdate != null) showPickOption = true
             },
             tonalElevation = 4.dp,
-            color = MaterialTheme.colorScheme.secondaryContainer,
+            color = containerColor ?: MaterialTheme.colorScheme.secondaryContainer,
         ) {
             Box(
                 contentAlignment = Alignment.Center,

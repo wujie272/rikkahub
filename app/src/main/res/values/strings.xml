@@ -325,6 +325,8 @@
   <string name="group_detail_start_chat">Start Chat</string>
     <string name="group_chat_title">Group Chat</string>
     <string name="group_chat_manage">Manage Group</string>
+    <string name="group_detail_speaker_strategy">Speaker Strategy</string>
+    <string name="group_detail_strategy_desc">Choose how the next speaker is selected when multiple members are in the group.</string>
   <string name="chat_page_today">Today</string>
   <string name="chat_page_yesterday">Yesterday</string>
   <string name="chat_size_dialog_content">Current message count: %1$d. This may cause the application to crash or lag, or even lose this conversation data. Please create a new conversation as soon as possible to continue chatting.</string>

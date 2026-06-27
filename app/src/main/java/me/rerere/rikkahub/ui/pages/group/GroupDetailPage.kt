@@ -37,6 +37,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -45,17 +47,18 @@ import me.rerere.hugeicons.stroke.Add01
 import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.MessageAdd01
 import me.rerere.hugeicons.stroke.Play
+import me.rerere.hugeicons.stroke.CheckmarkCircle01
 import me.rerere.hugeicons.stroke.UserMultiple
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.db.entity.GroupMemberEntity
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.theme.CustomColors
+import me.rerere.rikkahub.data.ai.group.SpeakerStrategy
 import me.rerere.rikkahub.utils.plus
 import org.koin.androidx.compose.koinViewModel
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.Screen
-import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.utils.navigateToChatPage
 import org.koin.core.parameter.parametersOf
@@ -124,6 +127,19 @@ fun GroupDetailPage(id: String) {
                         name = group?.name ?: "",
                         description = group?.description ?: "",
                         onEdit = { showEditInfoDialog = true },
+                    )
+                }
+            }
+
+            // ── Speaker strategy section ──
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CustomColors.cardColorsOnSurfaceContainer,
+                ) {
+                    SpeakerStrategySelector(
+                        currentStrategyId = group?.speakerStrategy ?: SpeakerStrategy.DEFAULT.id,
+                        onStrategyChange = { vm.updateSpeakerStrategy(it) },
                     )
                 }
             }
@@ -372,6 +388,81 @@ private fun MemberCard(
                     valueRange = 0f..1f,
                     modifier = Modifier.fillMaxWidth(),
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SpeakerStrategySelector(
+    currentStrategyId: String,
+    onStrategyChange: (String) -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.group_detail_speaker_strategy),
+            style = MaterialTheme.typography.titleSmallEmphasized,
+        )
+        Text(
+            text = stringResource(R.string.group_detail_strategy_desc),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+        SpeakerStrategy.ALL.values.forEach { strategy ->
+            val isSelected = strategy.id == currentStrategyId
+
+            Card(
+                onClick = { onStrategyChange(strategy.id) },
+                modifier = Modifier.fillMaxWidth(),
+                colors = if (isSelected) {
+                    androidx.compose.material3.CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    )
+                } else {
+                    CustomColors.cardColorsOnSurfaceContainer
+                },
+                shape = RoundedCornerShape(12.dp),
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    val iconText = when (strategy) {
+                        is SpeakerStrategy.ProbabilityBased -> "\uD83C\uDFB2"
+                        is SpeakerStrategy.RoundRobin -> "\uD83D\uDD04"
+                        is SpeakerStrategy.PriorityBased -> "\uD83D\uDC51"
+                        is SpeakerStrategy.Random -> "\uD83C\uDFB0"
+                        is SpeakerStrategy.ForcedOnly -> "\uD83E\uDD10"
+                        else -> "?"
+                    }
+                    Text(
+                        text = iconText,
+                        style = MaterialTheme.typography.titleLarge,
+                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = strategy.displayName,
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                        )
+                    }
+                    if (isSelected) {
+                        Icon(
+                            imageVector = HugeIcons.CheckmarkCircle01,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
             }
         }
     }

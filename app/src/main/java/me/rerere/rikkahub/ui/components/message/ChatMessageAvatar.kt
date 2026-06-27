@@ -9,6 +9,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.provider.Model
@@ -57,6 +58,7 @@ fun ChatMessageAssistantAvatar(
     model: Model?,
     assistant: Assistant?,
     senderName: String? = null,
+    senderColor: Color? = null,
     modifier: Modifier = Modifier,
 ) {
     val settings = LocalSettings.current
@@ -76,6 +78,7 @@ fun ChatMessageAssistantAvatar(
                         modifier = Modifier.size(28.dp),
                         value = Avatar.Dummy,
                         loading = loading,
+                        containerColor = senderColor,
                     )
                 }
                 if (settings.displaySetting.showModelName) {
