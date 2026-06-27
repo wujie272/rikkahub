@@ -51,6 +51,8 @@ import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.writeClipboardText
+import me.rerere.rikkahub.utils.hasUsageStatsPermission
+import me.rerere.rikkahub.utils.openUsageAccessSettings
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
@@ -102,7 +104,18 @@ private fun AssistantLocalToolContent(
     onUpdate: (Assistant) -> Unit,
     onUpdateAssistant: ((Assistant) -> Assistant) -> Unit,
 ) {
+    val context = LocalContext.current
+    val toaster = LocalToaster.current
+    val permissionRequiredText =
+        stringResource(R.string.assistant_page_local_tools_screen_time_permission_required)
+
     fun toggleLocalTool(option: LocalToolOption, enabled: Boolean) {
+        // Screen time needs the special "Usage access" permission; guide the user to grant
+        // it right when the switch is turned on, instead of failing later on first use.
+        if (enabled && option == LocalToolOption.ScreenTime && !context.hasUsageStatsPermission()) {
+            toaster.show(message = permissionRequiredText, type = ToastType.Warning)
+            context.openUsageAccessSettings()
+        }
         // Use the transform path so rapid taps (especially through a permission-grant
         // round-trip to system Settings) all serialise against the actual current state
         // instead of whatever stale snapshot the recomposition was holding.
@@ -121,7 +134,6 @@ private fun AssistantLocalToolContent(
     // missing (e.g. Termux dialog is suppressed if the integration was already verified
     // recently; Telegram dialog is suppressed if a token is on file).
     val ctx = LocalContext.current
-    val toaster = LocalToaster.current
     val scope = rememberCoroutineScope()
     val telegramBotPreferences = koinInject<TelegramBotPreferences>()
     // Hardware-availability gate for the NFC toggle: a device with no NFC chip can never
@@ -168,7 +180,7 @@ private fun AssistantLocalToolContent(
             },
             confirmButton = {
                 TextButton(onClick = {
-                    ctx.writeClipboardText(termuxCommand)
+                    context.writeClipboardText(termuxCommand)
                     toaster.show(termuxCopiedText)
                     showTermuxPostGrantDialog = false
                 }) {
@@ -304,6 +316,20 @@ private fun AssistantLocalToolContent(
                     Switch(
                         checked = assistant.localTools.contains(LocalToolOption.AskUser),
                         onCheckedChange = { toggleLocalTool(LocalToolOption.AskUser, it) }
+                    )
+                }
+            )
+            item(
+                headlineContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_screen_time_title))
+                },
+                supportingContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_screen_time_desc))
+                },
+                trailingContent = {
+                    Switch(
+                        checked = assistant.localTools.contains(LocalToolOption.ScreenTime),
+                        onCheckedChange = { toggleLocalTool(LocalToolOption.ScreenTime, it) }
                     )
                 }
             )

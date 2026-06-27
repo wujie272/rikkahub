@@ -61,6 +61,7 @@ import me.rerere.hugeicons.stroke.Search01
 import me.rerere.hugeicons.stroke.Settings03
 import me.rerere.hugeicons.stroke.Sparkles
 import me.rerere.hugeicons.stroke.TransactionHistory
+import me.rerere.hugeicons.stroke.Play
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.Settings
@@ -511,6 +512,36 @@ private fun DrawerActions(navController: Navigator) {
                 )
                 Text(
                     text = stringResource(R.string.chat_page_history),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            }
+        }
+
+        // 角色扮演入口
+        Surface(
+            onClick = { navController.navigate(Screen.GroupList) },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp),
+            shape = MaterialTheme.shapes.medium,
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Icon(
+                    imageVector = HugeIcons.Play,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+                Text(
+                    text = stringResource(R.string.roleplay_title),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                 )

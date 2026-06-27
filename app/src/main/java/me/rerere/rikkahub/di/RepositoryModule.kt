@@ -9,6 +9,7 @@ import me.rerere.rikkahub.data.repository.FavoriteRepository
 import me.rerere.rikkahub.data.repository.FilesRepository
 import me.rerere.rikkahub.data.repository.GenMediaRepository
 import me.rerere.rikkahub.data.repository.MemoryRepository
+import me.rerere.rikkahub.data.repository.GroupRepository
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.workspace.ProotShellRunner
 import me.rerere.workspace.RootfsInstaller
@@ -53,6 +54,10 @@ val repositoryModule = module {
                         source = File(context.filesDir, FileFolders.TOOL_OUTPUTS).apply { mkdirs() },
                         target = "/tool_outputs",
                     ),
+                    WorkspaceBindMount(
+                        source = File(context.filesDir, FileFolders.UPLOAD).apply { mkdirs() },
+                        target = "/upload",
+                    ),
                 ),
             )
         )
@@ -64,6 +69,10 @@ val repositoryModule = module {
 
     single {
         WorkspaceRepository(get(), get(), get(), get())
+    }
+
+    single {
+        GroupRepository(get())
     }
 
     single {

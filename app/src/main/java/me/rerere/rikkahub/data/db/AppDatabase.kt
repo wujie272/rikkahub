@@ -16,6 +16,7 @@ import me.rerere.rikkahub.data.db.dao.MemoryDAO
 import me.rerere.rikkahub.data.db.dao.MessageNodeDAO
 import me.rerere.rikkahub.data.db.dao.ScheduledJobDao
 import me.rerere.rikkahub.data.db.dao.ScheduledJobRunDao
+import me.rerere.rikkahub.data.db.dao.GroupDao
 import me.rerere.rikkahub.data.db.dao.SshHostDao
 import me.rerere.rikkahub.data.db.dao.TelegramChatDao
 import me.rerere.rikkahub.data.db.dao.WorkspaceDAO
@@ -29,6 +30,8 @@ import me.rerere.rikkahub.data.db.entity.ScheduledJobEntity
 import me.rerere.rikkahub.data.db.entity.ScheduledJobRunEntity
 import me.rerere.rikkahub.data.db.entity.SshHostEntity
 import me.rerere.rikkahub.data.db.entity.TelegramChatEntity
+import me.rerere.rikkahub.data.db.entity.GroupEntity
+import me.rerere.rikkahub.data.db.entity.GroupMemberEntity
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.data.db.migrations.Migration_16_17
 import me.rerere.rikkahub.data.db.migrations.Migration_20_21
@@ -56,9 +59,11 @@ import me.rerere.rikkahub.workflow.db.WorkflowRunEntity
         WorkflowEntity::class,
         WorkflowRunEntity::class,
         AgentRun::class,
+        GroupEntity::class,
+        GroupMemberEntity::class,
         WorkspaceEntity::class,
     ],
-    version = 26,
+    version = 28,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),
@@ -83,6 +88,8 @@ import me.rerere.rikkahub.workflow.db.WorkflowRunEntity
         // v26: the 2.3.1 merge brings upstream's workspaces table (WorkspaceEntity). Existing
         // fork users never had it, so Room auto-creates the table on this step.
         AutoMigration(from = 25, to = 26),
+        AutoMigration(from = 26, to = 27),
+
     ]
 )
 @TypeConverters(TokenUsageConverter::class)
@@ -112,6 +119,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun workflowRunDao(): WorkflowRunDao
 
     abstract fun agentRunDao(): AgentRunDao
+
+    abstract fun groupDao(): GroupDao
 
     abstract fun workspaceDao(): WorkspaceDAO
 }

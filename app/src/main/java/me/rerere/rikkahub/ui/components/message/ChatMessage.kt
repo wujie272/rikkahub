@@ -149,6 +149,7 @@ fun ChatMessage(
                     model = model,
                     assistant = assistant,
                     loading = loading,
+                    senderName = node.senderName,
                     modifier = Modifier.weight(1f)
                 )
                 ChatMessageUserAvatar(

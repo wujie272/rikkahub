@@ -70,6 +70,7 @@ class ResponseAPI(
         messages: List<UIMessage>,
         params: TextGenerationParams
     ): MessageChunk {
+        val apiKey = keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
         val requestBody = buildRequestBody(
             providerSetting = providerSetting,
             messages = messages,
@@ -82,7 +83,7 @@ class ResponseAPI(
             .post(json.encodeToString(requestBody).toRequestBody("application/json".toMediaType()))
             .addHeader(
                 "Authorization",
-                "Bearer ${keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())}"
+                "Bearer ${apiKey}"
             )
             .addHeader("Content-Type", "application/json")
             .configureReferHeaders(providerSetting.baseUrl)
@@ -108,6 +109,7 @@ class ResponseAPI(
         messages: List<UIMessage>,
         params: TextGenerationParams
     ): Flow<MessageChunk> = callbackFlow {
+        val apiKey = keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
         val requestBody = buildRequestBody(
             providerSetting = providerSetting,
             messages = messages,
@@ -120,7 +122,7 @@ class ResponseAPI(
             .post(json.encodeToString(requestBody).toRequestBody("application/json".toMediaType()))
             .addHeader(
                 "Authorization",
-                "Bearer ${keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())}"
+                "Bearer ${apiKey}"
             )
             .configureReferHeaders(providerSetting.baseUrl)
             .build()

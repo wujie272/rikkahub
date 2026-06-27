@@ -73,6 +73,7 @@ class ChatCompletionsAPI(
         messages: List<UIMessage>,
         params: TextGenerationParams,
     ): MessageChunk = withContext(Dispatchers.IO) {
+        val apiKey = keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
         val requestBody =
             buildChatCompletionRequest(
                 messages = messages,
@@ -84,7 +85,7 @@ class ChatCompletionsAPI(
             .url("${providerSetting.baseUrl}${providerSetting.chatCompletionsPath}")
             .headers(params.customHeaders.toHeaders())
             .post(json.encodeToString(requestBody).toRequestBody("application/json".toMediaType()))
-            .addHeader("Authorization", "Bearer ${keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())}")
+            .addHeader("Authorization", "Bearer ${apiKey}")
             .configureReferHeaders(providerSetting.baseUrl)
             .build()
 
@@ -130,6 +131,7 @@ class ChatCompletionsAPI(
         messages: List<UIMessage>,
         params: TextGenerationParams,
     ): Flow<MessageChunk> = callbackFlow {
+        val apiKey = keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
         val requestBody = buildChatCompletionRequest(
             messages = messages,
             params = params,
@@ -141,7 +143,7 @@ class ChatCompletionsAPI(
             .url("${providerSetting.baseUrl}${providerSetting.chatCompletionsPath}")
             .headers(params.customHeaders.toHeaders())
             .post(json.encodeToString(requestBody).toRequestBody("application/json".toMediaType()))
-            .addHeader("Authorization", "Bearer ${keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())}")
+            .addHeader("Authorization", "Bearer ${apiKey}")
             .addHeader("Content-Type", "application/json")
             .configureReferHeaders(providerSetting.baseUrl)
             .build()
@@ -375,6 +377,10 @@ class ChatCompletionsAPI(
                         if (modelId in siliconflowThinkingModels) {
                             put("enable_thinking", level.isEnabled)
                         }
+                    }
+
+                    "aiping.cn" -> {
+                        put("enable_thinking", level.isEnabled)
                     }
 
                     "open.bigmodel.cn" -> {

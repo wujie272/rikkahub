@@ -110,6 +110,8 @@ data class MessageNode(
     val selectIndex: Int = 0,
     @Transient
     val isFavorite: Boolean = false,
+    /** Phase 5B: sender display name for group roleplay conversations. */
+    val senderName: String? = null,
 ) {
     val currentMessage get() = if (messages.isEmpty() || selectIndex !in messages.indices) {
         throw IllegalStateException("MessageNode has no valid current message: messages.size=${messages.size}, selectIndex=$selectIndex")

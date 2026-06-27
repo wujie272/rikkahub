@@ -396,6 +396,14 @@ internal fun AssistantBasicContent(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.75f),
                 )
+
+                if (assistant.contextMessageSize > 0) {
+                    Text(
+                        text = stringResource(R.string.assistant_page_context_message_truncation_warning),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
             }
             HorizontalDivider()
             FormItem(
@@ -485,6 +493,41 @@ internal fun AssistantBasicContent(
                         } else {
                             Text(stringResource(R.string.assistant_page_max_tokens_no_token_limit))
                         }
+                    }
+                )
+            }
+            HorizontalDivider()
+            FormItem(
+                modifier = Modifier.padding(8.dp),
+                label = {
+                    Text("最大工具轮数")
+                },
+                description = {
+                    Text("限制单次任务中工具调用的最大轮数（Agent 循环上限）")
+                }
+            ) {
+                var stepsInput by remember(assistant.id) {
+                    mutableStateOf(assistant.maxSteps.toString())
+                }
+                val stepsValue = stepsInput.toIntOrNull()
+                OutlinedTextField(
+                    value = stepsInput,
+                    onValueChange = { value ->
+                        stepsInput = value
+                        value.toIntOrNull()?.takeIf { it in 1..64 }?.let { steps ->
+                            onUpdate(
+                                assistant.copy(
+                                    maxSteps = steps
+                                )
+                            )
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                    isError = stepsValue == null || stepsValue !in 1..64,
+                    supportingText = {
+                        Text("1 - 64")
                     }
                 )
             }

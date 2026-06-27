@@ -56,18 +56,36 @@ fun ChatMessageAssistantAvatar(
     loading: Boolean,
     model: Model?,
     assistant: Assistant?,
+    senderName: String? = null,
     modifier: Modifier = Modifier,
 ) {
     val settings = LocalSettings.current
     val showIcon = settings.displaySetting.showModelIcon
     val useAssistantAvatar = assistant?.useAssistantAvatar == true
-    if (message.role == MessageRole.ASSISTANT && (model != null || useAssistantAvatar)) {
+    if (message.role == MessageRole.ASSISTANT && (model != null || useAssistantAvatar || senderName != null)) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
             modifier = modifier
         ) {
-            if (useAssistantAvatar) {
+            if (senderName != null) {
+                // Phase 5B: Group conversation — show sender name
+                if (showIcon) {
+                    UIAvatar(
+                        name = senderName,
+                        modifier = Modifier.size(28.dp),
+                        value = Avatar.Dummy,
+                        loading = loading,
+                    )
+                }
+                if (settings.displaySetting.showModelName) {
+                    Text(
+                        text = senderName,
+                        style = MaterialTheme.typography.labelLargeEmphasized,
+                        maxLines = 1,
+                    )
+                }
+            } else if (useAssistantAvatar) {
                 if (showIcon) {
                     UIAvatar(
                         name = assistant.name,

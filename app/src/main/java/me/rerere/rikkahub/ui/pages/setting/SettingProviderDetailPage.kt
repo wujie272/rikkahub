@@ -5,11 +5,15 @@ import me.rerere.hugeicons.stroke.Package01
 import me.rerere.hugeicons.stroke.Connect
 import me.rerere.hugeicons.stroke.ArrowDown01
 import me.rerere.hugeicons.stroke.Add01
+import me.rerere.hugeicons.stroke.Key01
 import me.rerere.hugeicons.stroke.Refresh03
 import me.rerere.hugeicons.stroke.Tools
 import me.rerere.hugeicons.stroke.Share01
 import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.Cancel01
+import me.rerere.hugeicons.stroke.ArrowRight01
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -27,6 +31,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -42,6 +47,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FloatingToolbarDefaults.ScreenOffset
+import me.rerere.rikkahub.Screen
 import androidx.compose.material3.FloatingToolbarDefaults.floatingToolbarVerticalNestedScroll
 import androidx.compose.material3.HorizontalFloatingToolbar
 import androidx.compose.material3.Icon
@@ -68,6 +74,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.rememberBottomSheetState
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -119,6 +126,7 @@ import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.hooks.useEditState
 import me.rerere.rikkahub.ui.pages.assistant.detail.CustomBodies
 import me.rerere.rikkahub.ui.pages.assistant.detail.CustomHeaders
+
 import me.rerere.rikkahub.ui.pages.setting.components.ProviderConfigure
 import me.rerere.rikkahub.ui.pages.setting.components.CodexProviderConfigure
 import me.rerere.rikkahub.ui.pages.setting.components.ProviderConnectionTester
@@ -140,10 +148,11 @@ fun SettingProviderDetailPage(id: Uuid, vm: SettingVM = koinViewModel()) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     val navController = LocalNavController.current
     val provider = settings.providers.find { it.id == id } ?: return
-    val pager = rememberPagerState { 2 }
+    val pager = rememberPagerState { 3 }
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
     val context = LocalContext.current
+
 
     val onEdit = { newProvider: ProviderSetting ->
         val newSettings = settings.copy(
@@ -213,11 +222,21 @@ fun SettingProviderDetailPage(id: Uuid, vm: SettingVM = koinViewModel()) {
                 )
                 NavigationBarItem(
                     selected = pager.currentPage == 1,
+                    label = { Text(stringResource(R.string.setting_provider_page_keys)) },
+                    icon = { Icon(HugeIcons.Key01, null) },
+                    onClick = {
+                        scope.launch {
+                            pager.animateScrollToPage(1)
+                        }
+                    }
+                )
+                NavigationBarItem(
+                    selected = pager.currentPage == 2,
                     label = { Text(stringResource(id = R.string.setting_provider_page_models)) },
                     icon = { Icon(HugeIcons.Package01, null) },
                     onClick = {
                         scope.launch {
-                            pager.animateScrollToPage(1)
+                            pager.animateScrollToPage(2)
                         }
                     }
                 )
@@ -248,14 +267,28 @@ fun SettingProviderDetailPage(id: Uuid, vm: SettingVM = koinViewModel()) {
                 }
 
                 1 -> {
+                    SettingProviderKeyPage(
+                        provider = provider,
+                        settings = settings,
+                        onEdit = onEdit,
+                        vm = vm,
+                        scope = scope,
+                    )
+                }
+
+                2 -> {
                     SettingProviderModelPage(
                         provider = provider,
                         onEdit = onEdit
                     )
                 }
+
+
             }
         }
     }
+
+
 }
 
 @Composable
@@ -388,6 +421,58 @@ private fun SettingProviderModelPage(
         providerSetting = provider,
         onUpdateProvider = onEdit
     )
+}
+
+@Composable
+private fun SettingProviderKeyPage(
+    provider: ProviderSetting,
+    settings: me.rerere.rikkahub.data.datastore.Settings,
+    onEdit: (ProviderSetting) -> Unit,
+    vm: SettingVM,
+    scope: kotlinx.coroutines.CoroutineScope,
+) {
+    var internalProvider by remember(provider) { mutableStateOf(provider) }
+    val context = LocalContext.current
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .imePadding()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        val currentApiKey = when (val p = internalProvider) {
+            is ProviderSetting.OpenAI -> p.apiKey
+            is ProviderSetting.Google -> p.apiKey
+            is ProviderSetting.Claude -> p.apiKey
+            else -> ""
+        }
+
+        OutlinedTextField(
+            value = currentApiKey,
+            onValueChange = { newKey ->
+                internalProvider = when (internalProvider) {
+                    is ProviderSetting.OpenAI -> (internalProvider as ProviderSetting.OpenAI).copy(apiKey = newKey)
+                    is ProviderSetting.Google -> (internalProvider as ProviderSetting.Google).copy(apiKey = newKey)
+                    is ProviderSetting.Claude -> (internalProvider as ProviderSetting.Claude).copy(apiKey = newKey)
+                    else -> internalProvider
+                }
+            },
+            label = { Text(stringResource(R.string.search_detail_api_key)) },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+        )
+
+        Button(
+            onClick = {
+                onEdit(internalProvider)
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(context.getString(R.string.setting_provider_page_save))
+        }
+    }
 }
 
 @Composable

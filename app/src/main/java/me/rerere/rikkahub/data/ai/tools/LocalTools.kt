@@ -109,6 +109,7 @@ import me.rerere.rikkahub.data.ai.tools.local.notificationActionClickTool
 import me.rerere.rikkahub.data.ai.tools.local.notificationReplyTool
 import me.rerere.rikkahub.data.ai.tools.local.notificationStatusTool
 import me.rerere.rikkahub.data.ai.tools.local.batchCopyTool
+import me.rerere.rikkahub.data.ai.tools.local.buildScreenTimeTool
 import me.rerere.rikkahub.data.ai.tools.local.batchMoveTool
 import me.rerere.rikkahub.data.ai.tools.local.batchDeleteTool
 import me.rerere.rikkahub.data.ai.tools.local.webFetchTool
@@ -195,6 +196,7 @@ sealed class LocalToolOption {
     @Serializable @SerialName("external_storage")     data object ExternalStorage     : LocalToolOption()
     @Serializable @SerialName("archive")              data object Archive             : LocalToolOption()
     @Serializable @SerialName("keyboard_control")     data object KeyboardControl     : LocalToolOption()
+    @Serializable @SerialName("screen_time")          data object ScreenTime           : LocalToolOption()
 }
 
 private val TOP_TOOL_EXAMPLES: Map<String, String> = mapOf(
@@ -587,6 +589,8 @@ class LocalTools(
         )
     }
 
+    val screenTimeTool by lazy { buildScreenTimeTool(context, eventBus) }
+
     val askUserTool by lazy {
         Tool(
             name = "ask_user",
@@ -687,6 +691,9 @@ class LocalTools(
         }
         if (options.contains(LocalToolOption.Tts)) {
             tools.add(ttsTool)
+        }
+        if (options.contains(LocalToolOption.ScreenTime)) {
+            tools.add(screenTimeTool)
         }
         if (options.contains(LocalToolOption.AskUser)) {
             tools.add(askUserTool)

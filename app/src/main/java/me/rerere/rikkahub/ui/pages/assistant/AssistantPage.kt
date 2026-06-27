@@ -76,6 +76,7 @@ import me.rerere.rikkahub.ui.hooks.heroAnimation
 import me.rerere.rikkahub.ui.hooks.useEditState
 import me.rerere.rikkahub.ui.modifier.onClick
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantImporter
+import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantExporter
 import me.rerere.rikkahub.ui.theme.CustomColors
 import org.koin.androidx.compose.koinViewModel
 import sh.calvin.reorderable.ReorderableItem
@@ -237,12 +238,12 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
         }
     }
 
-    AssistantCreationSheet(createState)
+    AssistantCreationSheet(createState, vm)
 
-    // 操作菜单 Bottom Sheet
     actionSheetAssistant?.let { assistant ->
         AssistantActionSheet(
             assistant = assistant,
+            settings = settings,
             onDismiss = { actionSheetAssistant = null },
             onCopy = {
                 vm.copyAssistant(assistant)
@@ -322,6 +323,7 @@ private fun AssistantTagsFilterRow(
 @Composable
 private fun AssistantCreationSheet(
     state: EditState<Assistant>,
+    vm: AssistantVM,
 ) {
     state.EditStateContent { assistant, update ->
         ModalBottomSheet(
@@ -363,6 +365,14 @@ private fun AssistantCreationSheet(
                         onUpdate = {
                             update(it)
                             state.confirm()
+                        },
+                        onLorebooks = { books ->
+                            val currentSettings = vm.settings.value
+                            vm.updateSettings(
+                                currentSettings.copy(
+                                    lorebooks = currentSettings.lorebooks + books
+                                )
+                            )
                         },
                         modifier = Modifier.fillMaxWidth(),
                     )
@@ -483,6 +493,7 @@ private fun AssistantItem(
 @Composable
 private fun AssistantActionSheet(
     assistant: Assistant,
+    settings: Settings,
     onDismiss: () -> Unit,
     onCopy: () -> Unit,
     onDelete: () -> Unit
@@ -515,6 +526,18 @@ private fun AssistantActionSheet(
                     style = MaterialTheme.typography.titleMedium
                 )
             }
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+            val linkedLorebooks = remember(assistant.lorebookIds, settings.lorebooks) {
+                settings.lorebooks.filter { it.id in assistant.lorebookIds }
+            }
+
+            // 导出选项 — 使用 AssistantExporter 组件
+            AssistantExporter(
+                assistant = assistant,
+                lorebooks = linkedLorebooks,
+            )
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 

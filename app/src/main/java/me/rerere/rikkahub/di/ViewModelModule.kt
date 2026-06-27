@@ -18,6 +18,9 @@ import me.rerere.rikkahub.ui.pages.extensions.skills.SkillDetailVM
 import me.rerere.rikkahub.ui.pages.extensions.skills.SkillsVM
 import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspaceDetailVM
 import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspaceVM
+import me.rerere.rikkahub.ui.pages.group.GroupVM
+import me.rerere.rikkahub.ui.pages.group.GroupDetailVM
+import me.rerere.rikkahub.ui.pages.group.GroupChatVM
 import me.rerere.rikkahub.ui.pages.setting.SettingVM
 import me.rerere.rikkahub.ui.pages.setting.browser.SettingBrowserViewModel
 import me.rerere.rikkahub.ui.pages.setting.termux.SettingTermuxViewModel
@@ -80,6 +83,28 @@ val viewModelModule = module {
     }
     viewModelOf(::SkillDetailVM)
     viewModelOf(::WorkspaceVM)
+    viewModelOf(::GroupVM)
+    viewModel<GroupDetailVM> {
+        GroupDetailVM(
+            groupId = it.get<String>(),
+            repository = get(),
+            settingsStore = get(),
+            chatService = get(),
+        )
+    }
+    viewModel<GroupChatVM> { params ->
+        GroupChatVM(
+            conversationId = kotlin.uuid.Uuid.parse(params.get<String>()),
+            context = get(),
+            settingsStore = get(),
+            conversationRepo = get(),
+            chatService = get(),
+            updateChecker = get(),
+            filesManager = get(),
+            favoriteRepository = get(),
+            groupRepository = get(),
+        )
+    }
     viewModel<WorkspaceDetailVM> {
         WorkspaceDetailVM(
             id = it.get(),

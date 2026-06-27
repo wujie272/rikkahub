@@ -75,6 +75,14 @@ val appModule = module {
     single { me.rerere.rikkahub.data.telegram.TelegramPollStallTracker() }
     single { NotificationListenerPreferences(get()) }
 
+    // Phase 3: Group roleplay speech strategy engine
+    single {
+        me.rerere.rikkahub.data.ai.group.GroupTurnOrchestrator(
+            groupRepository = get(),
+            settingsStore = get(),
+        )
+    }
+
     // Phase 13: External Automation Intent API
     single { me.rerere.rikkahub.automation.ExternalAutomationConfig(get()) }
     single {
@@ -244,7 +252,9 @@ val appModule = module {
             filesManager = get(),
             skillManager = get(),
             toolApprovalPreferences = get(),
-            workspaceRepository = get()
+            workspaceRepository = get(),
+            groupTurnOrchestrator = get(),
+            groupRepository = get()
         )
     }
 

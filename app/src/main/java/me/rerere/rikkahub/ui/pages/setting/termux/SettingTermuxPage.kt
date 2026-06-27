@@ -49,7 +49,7 @@ import org.koin.androidx.compose.koinViewModel
  * Settings -> Termux. Four sections:
  *
  *  1. Status — integration indicators with tap actions (Termux installed, RUN_COMMAND
- *     permission request, Open Termux, verify smoke test).
+ *     permission request, verify smoke test).
  *  2. Timeouts — command timeout, per-turn budget (all tools), verify smoke-test timeout.
  *  3. Defaults & limits — working directory, stdout/stderr caps, apt-wrap toggle.
  *  4. Help — expandable setup instructions for allow-external-apps=true.
@@ -176,19 +176,6 @@ fun SettingTermuxPage(
                             color = if (hasPermission) StatusColor.Green else StatusColor.Red
                         )
                     },
-                )
-                item(
-                    onClick = {
-                        // Always-tappable: fire the launch Intent to com.termux.
-                        runCatching {
-                            ctx.packageManager
-                                .getLaunchIntentForPackage("com.termux")
-                                ?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                ?.let { ctx.startActivity(it) }
-                        }
-                    },
-                    headlineContent = { Text(stringResource(R.string.setting_termux_status_open)) },
-                    supportingContent = { Text(stringResource(R.string.setting_termux_status_open_desc)) },
                 )
                 item(
                     onClick = {

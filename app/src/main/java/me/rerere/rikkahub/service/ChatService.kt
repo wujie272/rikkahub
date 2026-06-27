@@ -61,6 +61,7 @@ import me.rerere.rikkahub.RouteActivity
 import me.rerere.rikkahub.data.ai.GenerationChunk
 import me.rerere.rikkahub.data.ai.GenerationHandler
 import me.rerere.rikkahub.data.ai.mcp.McpManager
+import me.rerere.rikkahub.data.ai.tools.createConversationTools
 import me.rerere.rikkahub.data.ai.tools.LocalTools
 import me.rerere.rikkahub.data.ai.tools.createSearchTools
 import me.rerere.rikkahub.data.ai.tools.createSkillTools
@@ -78,6 +79,7 @@ import me.rerere.rikkahub.data.ai.transformers.TimeReminderTransformer
 import me.rerere.rikkahub.data.ai.transformers.WorkspaceReminderTransformer
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.findModelById
+import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.datastore.getAssistantById
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
@@ -91,6 +93,11 @@ import me.rerere.rikkahub.data.model.toMessageNode
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
+import me.rerere.rikkahub.data.ai.group.GroupTurnOrchestrator
+import me.rerere.rikkahub.data.ai.group.GroupTurnMessage
+import me.rerere.rikkahub.data.ai.group.GroupTurnPlan
+import me.rerere.rikkahub.data.db.entity.GroupEntity
+import me.rerere.rikkahub.data.repository.GroupRepository
 import me.rerere.rikkahub.web.BadRequestException
 import me.rerere.rikkahub.web.NotFoundException
 import me.rerere.rikkahub.utils.applyPlaceholders
@@ -145,6 +152,9 @@ private val outputTransformers by lazy {
     )
 }
 
+/** Maximum number of sequential group member responses per user message. */
+private const val GROUP_MAX_RESPONSES_PER_TURN = 3
+
 class ChatService(
     private val context: Application,
     private val appScope: AppScope,
@@ -160,6 +170,9 @@ class ChatService(
     private val skillManager: SkillManager,
     private val toolApprovalPreferences: me.rerere.rikkahub.data.preferences.ToolApprovalPreferences,
     private val workspaceRepository: WorkspaceRepository,
+    // Phase 4: Group roleplay speech strategy engine
+    private val groupTurnOrchestrator: GroupTurnOrchestrator,
+    private val groupRepository: GroupRepository,
 ) {
     // workspace 系统提示注入 (依赖 workspaceRepository, 故在类内构造)
     private val workspaceReminderTransformer = WorkspaceReminderTransformer(workspaceRepository)
@@ -176,6 +189,9 @@ class ChatService(
      * themselves are NOT held under this mutex — only the persist boundaries.
      */
     private val sessionMutexes = ConcurrentHashMap<Uuid, Mutex>()
+
+    /** Map: conversationId → groupId for explicit group conversation detection. */
+    private val groupConversationIds = ConcurrentHashMap<Uuid, String>()
     private fun mutexFor(conversationId: Uuid): Mutex =
         sessionMutexes.getOrPut(conversationId) { Mutex() }
 
@@ -806,6 +822,20 @@ class ChatService(
 
             // start generating
             val session = getOrCreateSession(conversationId)
+
+            // Phase 4: Group roleplay detection — delegate to group engine
+            val groupForAssistant = isGroupConversation(conversationId, assistant.id)
+            if (groupForAssistant != null) {
+                handleGroupTurn(
+                    conversationId = conversationId,
+                    group = groupForAssistant,
+                    conversation = conversation,
+                    defaultAssistant = assistant,
+                    settings = settings,
+                )
+                return@runCatching
+            }
+
             generationHandler.generateText(
                 settings = settings,
                 model = model,
@@ -859,6 +889,7 @@ class ChatService(
                     }
                 },
                 assistant = assistant,
+                maxSteps = assistant.maxSteps,
                 conversationSystemPrompt = conversation.customSystemPrompt,
                 conversationModeInjectionIds = conversation.modeInjectionIds,
                 conversationLorebookIds = conversation.lorebookIds,
@@ -893,6 +924,9 @@ class ChatService(
                         modelCanSeeImages = Modality.IMAGE in model.inputModalities,
                     )
                     addAll(localTools.getTools(assistant.localTools, invocationCtx))
+                    if (assistant.enableRecentChatsReference) {
+                        addAll(createConversationTools(conversationRepo, assistant.id))
+                    }
                     addAll(createWorkspaceToolsIfReady(assistant.workspaceId?.toString(), conversation.workspaceCwd))
                     if (assistant.enabledSkills.isNotEmpty()) {
                         addAll(
@@ -1057,7 +1091,551 @@ class ChatService(
         return createWorkspaceTools(workspaceId, workspaceRepository, cwd)
     }
 
-    // ---- 检查无效消息 ----
+// ---- Group conversation support (Phase 4) ----
+
+    // ---- Group info API (exposed for GroupChat UI) ----
+
+    /** Get the group ID for a conversation, or null if it's not a group chat. */
+    fun getGroupId(conversationId: Uuid): String? {
+        return groupConversationIds[conversationId]
+    }
+
+    /** Get the full GroupEntity for a group conversation, or null. */
+    suspend fun getGroupInfo(conversationId: Uuid): GroupEntity? {
+        val gid = groupConversationIds[conversationId] ?: return null
+        return groupRepository.getById(gid)
+    }
+
+    /** Get the group's member count for a group conversation, or 0. */
+    suspend fun getGroupMemberCount(conversationId: Uuid): Int {
+        val gid = groupConversationIds[conversationId] ?: return 0
+        return groupRepository.memberCount(gid)
+    }
+
+    /**
+     * Update the conversation title to match the group name.
+     * Called after startGroupConversation to immediately show the group name in the list.
+     */
+    suspend fun syncGroupTitle(conversationId: Uuid) {
+        val group = getGroupInfo(conversationId) ?: return
+        val conversation = getConversationFlow(conversationId).value
+        if (conversation.title != group.name) {
+            saveConversation(conversationId, conversation.copy(title = group.name))
+        }
+    }
+
+    /** Start a new group conversation and return its ID. */
+    suspend fun startGroupConversation(groupId: String): Uuid {
+        val group = groupRepository.getById(groupId)
+            ?: throw IllegalStateException("Group not found: $groupId")
+        val conversationId = Uuid.random()
+        val assistantId = runCatching { kotlin.uuid.Uuid.parse(group.assistantId) }
+            .getOrNull() ?: settingsStore.settingsFlow.first().getCurrentAssistant().id
+        val conversation = Conversation.ofId(
+            id = conversationId,
+            assistantId = assistantId,
+            newConversation = true,
+        )
+        saveConversation(conversationId, conversation)
+        groupConversationIds[conversationId] = groupId
+        return conversationId
+    }
+
+    /** Detect if a conversation is a group roleplay by assistant ID lookup. */
+    /** Detect if a conversation is a group roleplay.
+     *  1) Check explicit conversationId→groupId map first.
+     *  2) Fallback: legacy assistantId lookup. */
+    private suspend fun isGroupConversation(
+        conversationId: Uuid,
+        assistantId: Uuid,
+    ): GroupEntity? {
+        groupConversationIds[conversationId]?.let { groupId ->
+            return groupRepository.getById(groupId)
+        }
+        return groupRepository.getByAssistantId(assistantId.toString()).firstOrNull()
+    }
+
+    /** Get the last user message text for group context building. */
+    private fun getLastUserMessageText(conversation: Conversation): String? {
+        return conversation.currentMessages
+            .lastOrNull { it.role == me.rerere.ai.core.MessageRole.USER }
+            ?.toText()
+            ?.take(1000)
+    }
+    /**
+     * Handle a group roleplay turn. Selects speakers via GroupTurnOrchestrator
+     * in a loop, generating one response per speaker until the turn is complete
+     * or GROUP_MAX_RESPONSES_PER_TURN is reached.
+     *
+     * Phase 5A: Multi-speaker turn — each speaker's generation sees the FULL
+     * conversation history including previous speakers' responses, via
+     * getConversationFlow().
+     */
+    private suspend fun handleGroupTurn(
+        conversationId: Uuid,
+        group: GroupEntity,
+        conversation: Conversation,
+        defaultAssistant: Assistant,
+        settings: Settings,
+    ) {
+        val userText = getLastUserMessageText(conversation) ?: ""
+        if (userText.isBlank()) {
+            Log.w(TAG, "handleGroupTurn: blank user message, falling back")
+            runStandardGeneration(conversationId, conversation, defaultAssistant, settings)
+            return
+        }
+
+        val contextResult = groupTurnOrchestrator.createContext(
+            groupId = group.id,
+            userMessage = userText,
+        )
+        if (contextResult.isFailure) {
+            Log.w(TAG, "handleGroupTurn: context failed: ${contextResult.exceptionOrNull()?.message}")
+            runStandardGeneration(conversationId, conversation, defaultAssistant, settings)
+            return
+        }
+
+        var turnContext = contextResult.getOrThrow()
+        var speakerCount = 0
+
+        // Phase 5A: Loop — multiple speakers per user turn
+        while (!turnContext.isTurnComplete && speakerCount < GROUP_MAX_RESPONSES_PER_TURN) {
+            Log.d(TAG, "handleGroupTurn: loop start — isTurnComplete=${turnContext.isTurnComplete}, speakerCount=$speakerCount, max=$GROUP_MAX_RESPONSES_PER_TURN")
+            val plan = groupTurnOrchestrator.planNextSpeaker(turnContext)
+            when (plan) {
+                is GroupTurnPlan.SpeakerSelected -> {
+                    val memberAssistant = plan.assistant ?: defaultAssistant
+                    val memberModel = settings.findModelById(
+                        memberAssistant.chatModelId ?: settings.chatModelId
+                    )
+                    if (memberModel == null) {
+                        Log.w(TAG, "handleGroupTurn: no model for ${memberAssistant.name}, breaking loop")
+                        break
+                    }
+
+                    val senderName = memberAssistant.name.ifBlank {
+                        context.getString(R.string.assistant_page_default_assistant)
+                    }
+
+                    Log.i(TAG, "handleGroupTurn: speaker[$speakerCount] = ${memberAssistant.name}, model=${memberModel.modelId}")
+
+                    Log.d(TAG, "handleGroupTurn: generating speaker[$speakerCount] = ${memberAssistant.name}, nodeCount=${getConversationFlow(conversationId).value.messageNodes.size}")
+
+                    // Use the UPDATED conversation (includes previous speakers' responses)
+                    val currentConversation = getConversationFlow(conversationId).value
+
+                    if (speakerCount == 0) {
+                        // First speaker: use the standard runGroupGeneration which uses
+                        // updateCurrentMessages (correct for the first assistant message).
+                        runCatching {
+                            runGroupGeneration(
+                                conversationId = conversationId,
+                                conversation = currentConversation,
+                                assistant = memberAssistant,
+                                model = memberModel,
+                                systemAddendum = plan.systemAddendum,
+                                settings = settings,
+                                senderName = senderName,
+                            )
+                        }.onFailure { e ->
+                            Log.e(TAG, "handleGroupTurn: runGroupGeneration FAILED for ${memberAssistant.name}", e)
+                        }
+                    } else {
+                        // Subsequent speakers: use standalone generation.
+                        // handleMessageChunk appends to the LAST message when the role matches
+                        // (both ASSISTANT), so we CANNOT pass conversation.currentMessages which
+                        // includes previous assistant messages — they'd get merged into one node.
+                        // Instead, generate separately and manually create a new MessageNode.
+                        runCatching {
+                            runGroupGenerationStandalone(
+                                conversationId = conversationId,
+                                conversation = currentConversation,
+                                assistant = memberAssistant,
+                                model = memberModel,
+                                systemAddendum = plan.systemAddendum,
+                                settings = settings,
+                                senderName = senderName,
+                            )
+                        }.onFailure { e ->
+                            Log.e(TAG, "handleGroupTurn: runGroupGenerationStandalone FAILED for ${memberAssistant.name}", e)
+                        }
+                    }
+
+                    Log.d(TAG, "handleGroupTurn: after gen for ${memberAssistant.name}, nodes=${getConversationFlow(conversationId).value.messageNodes.size}")
+
+                    // Phase 5B: Tag the generated message with sender name
+                    val convAfter = getConversationFlow(conversationId).value
+                    val lastNode = convAfter.messageNodes.lastOrNull()
+                    if (lastNode != null && lastNode.role == MessageRole.ASSISTANT) {
+                        val taggedNodes = convAfter.messageNodes.mapIndexed { i, node ->
+                            if (i == convAfter.messageNodes.lastIndex) node.copy(senderName = senderName) else node
+                        }
+                        updateConversation(conversationId, convAfter.copy(messageNodes = taggedNodes))
+                    }
+
+                    // Phase 5D: Build conversation history update and advance context
+                    val lastMsgs = getConversationFlow(conversationId).value.currentMessages
+                    val lastAiMsg = lastMsgs.lastOrNull { it.role == MessageRole.ASSISTANT }
+                    val aiText = lastAiMsg?.toText() ?: ""
+                    Log.d(TAG, "handleGroupTurn: lastAiMsg role=${lastAiMsg?.role}, text=${aiText.take(50)}")
+                    val turnMsg = GroupTurnMessage(
+                        memberAssistantId = runCatching { kotlin.uuid.Uuid.parse(plan.member.assistantId) }.getOrNull(),
+                        speakerName = senderName,
+                        text = aiText,
+                        isAiGenerated = true,
+                    )
+                    val updatedHistory = turnContext.conversationHistory + turnMsg
+                    turnContext = plan.nextContext.advance(
+                        newConversationHistory = updatedHistory,
+                        nextRoundRobinIndex = plan.nextRoundRobinIndex,
+                    )
+                    speakerCount++
+                    Log.d(TAG, "handleGroupTurn: speaker[$speakerCount-1] DONE, historySize=${turnContext.conversationHistory.size}")
+                }
+                is GroupTurnPlan.TurnComplete -> {
+                    Log.d(TAG, "handleGroupTurn: turn complete after $speakerCount speaker(s): ${plan.reason}")
+                    break
+                }
+            }
+        }
+
+        // Phase 5C/5D: Persist round-robin state for the next user turn
+        Log.d(TAG, "handleGroupTurn: loop done, total speakers=$speakerCount")
+        if (speakerCount > 0) {
+            groupRepository.updateNextRoundRobinIndex(group.id, turnContext.roundRobinIndex)
+        }
+    }
+
+
+    /** Fallback: run standard generation without group overrides. */
+    private suspend fun runStandardGeneration(
+        conversationId: Uuid,
+        conversation: Conversation,
+        assistant: Assistant,
+        settings: Settings,
+    ) {
+        val model = settings.findModelById(assistant.chatModelId ?: settings.chatModelId) ?: return
+        val senderName = assistant.name.ifEmpty {
+            context.getString(R.string.assistant_page_default_assistant)
+        }
+        runGroupGeneration(
+            conversationId = conversationId,
+            conversation = conversation,
+            assistant = assistant,
+            model = model,
+            systemAddendum = me.rerere.rikkahub.data.ai.tools.ConversationSystemAddendum.get(conversationId),
+            settings = settings,
+            senderName = senderName,
+        )
+    }
+
+    /**
+     * Standalone generation for subsequent speakers in a group turn.
+     *
+     * Unlike [runGroupGeneration], this does NOT pass the full conversation
+     * [conversation.currentMessages] to [GenerationHandler.generateText] because
+     * [me.rerere.ai.ui.handleMessageChunk] appends to the last message when its role matches
+     * the streaming chunk (both ASSISTANT), causing multiple speakers' responses to be merged
+     * into a single MessageNode.
+     *
+     * Instead:
+     * 1. Builds conversation context into the systemAddendum
+     * 2. Passes ONLY a minimal user-proxy message to generateText (so handleMessageChunk sees
+     *    a USER→ASSISTANT role change and creates a new message)
+     * 3. After generation completes, creates a NEW [MessageNode] from the result and appends it
+     *    directly to the conversation, bypassing [updateCurrentMessages] index-mapping.
+     */
+    private suspend fun runGroupGenerationStandalone(
+        conversationId: Uuid,
+        conversation: Conversation,
+        assistant: Assistant,
+        model: Model,
+        systemAddendum: String?,
+        settings: Settings,
+        senderName: String,
+    ) {
+        val session = getOrCreateSession(conversationId)
+
+        // Build full conversation context into a single message the model can "see"
+        val contextLines = conversation.currentMessages.joinToString("\n") { msg ->
+            val role = when (msg.role) {
+                me.rerere.ai.core.MessageRole.USER -> "User"
+                me.rerere.ai.core.MessageRole.ASSISTANT -> "Assistant"
+                else -> "System"
+            }
+            val text = msg.toText().take(2000)
+            "$role: $text"
+        }
+
+        val fullAddendum = buildString {
+            if (!systemAddendum.isNullOrBlank()) {
+                appendLine(systemAddendum)
+                appendLine()
+            }
+            appendLine("## Conversation So Far")
+            appendLine(contextLines)
+            appendLine()
+            appendLine("## Speaking Instructions")
+            appendLine("You are $senderName. Reply in character as $senderName.")
+            appendLine("Write ONLY what $senderName says. Do NOT repeat the conversation history.")
+            appendLine("Do NOT include \"$senderName:\" before your message.")
+        }
+
+        // Pass a single empty user-marker message so handleMessageChunk sees
+        // last.role=USER → chunk.role=ASSISTANT → creates a NEW message.
+        val markerMessages = listOf(UIMessage.user(""))
+
+        // Capture the final generated message
+        var generatedMessage: UIMessage? = null
+
+        generationHandler.generateText(
+            settings = settings,
+            model = model,
+            processingStatus = session.processingStatus,
+            systemAddendum = fullAddendum,
+            isToolAutoApproved = { toolName ->
+                if (toolName == "ask_user") {
+                    me.rerere.rikkahub.data.ai.tools.HeadlessConversations
+                        .shouldAutoApprove(conversationId)
+                } else {
+                    toolApprovalPreferences.currentYolo() ||
+                        me.rerere.rikkahub.data.ai.tools.HeadlessConversations
+                            .shouldAutoApprove(conversationId) ||
+                        me.rerere.rikkahub.data.ai.tools.ToolApprovalAllowList
+                            .isAllowedForChat(conversationId, toolName) ||
+                        toolApprovalPreferences.current().contains(toolName)
+                }
+            },
+            messages = markerMessages,
+            assistant = assistant,
+            maxSteps = assistant.maxSteps,
+            conversationSystemPrompt = conversation.customSystemPrompt,
+            conversationModeInjectionIds = conversation.modeInjectionIds,
+            conversationLorebookIds = conversation.lorebookIds,
+            workspaceCwd = conversation.workspaceCwd,
+            memories = if (assistant.useGlobalMemory) {
+                memoryRepository.getGlobalMemories()
+            } else {
+                memoryRepository.getMemoriesOfAssistant(assistant.id.toString())
+            },
+            inputTransformers = buildList {
+                addAll(inputTransformers)
+                add(templateTransformer)
+                add(workspaceReminderTransformer)
+            },
+            outputTransformers = outputTransformers,
+            tools = buildList {
+                if (settings.enableWebSearch) addAll(createSearchTools(settings))
+                val invocationCtx = me.rerere.rikkahub.data.ai.tools.ToolInvocationContext(
+                    callerAssistantId = assistant.id.toString(),
+                    callerConversationId = conversationId.toString(),
+                    isHeadless = me.rerere.rikkahub.data.ai.tools.HeadlessConversations.isHeadless(conversationId),
+                    modelCanSeeImages = me.rerere.ai.provider.Modality.IMAGE in model.inputModalities,
+                )
+                addAll(localTools.getTools(assistant.localTools, invocationCtx))
+                if (assistant.enableRecentChatsReference) addAll(createConversationTools(conversationRepo, assistant.id))
+                addAll(createWorkspaceToolsIfReady(assistant.workspaceId?.toString(), conversation.workspaceCwd))
+                if (assistant.enabledSkills.isNotEmpty()) addAll(
+                    createSkillTools(assistant.enabledSkills, skillManager.listSkills(), skillManager)
+                )
+                mcpManager.getAllAvailableTools().forEach { (serverId, serverName, tool) ->
+                    val serverSlug = serverId.toString().take(8).replace("-", "")
+                    val mcpToolName = "mcp__" + serverSlug + "_" + serverName + "__" + tool.name
+                    add(Tool(
+                        name = mcpToolName,
+                        description = tool.description ?: "",
+                        parameters = { tool.inputSchema },
+                        needsApproval = { me.rerere.rikkahub.data.ai.tools.ToolApprovalDefaults.requiresApproval(mcpToolName) || tool.needsApproval },
+                        execute = { mcpManager.callTool(serverId, tool.name, it.jsonObject) },
+                    ))
+                }
+            },
+        ).onCompletion {
+            cancelLiveUpdateNotification(conversationId)
+            if (!isForeground.value && settings.displaySetting.enableNotificationOnMessageGeneration) {
+                sendGenerationDoneNotification(conversationId, senderName)
+            }
+        }.collect { chunk ->
+            when (chunk) {
+                is GenerationChunk.Messages -> {
+                    // Capture the final generated message
+                    generatedMessage = chunk.messages.lastOrNull()
+
+                    // For live preview, we also update the conversation.
+                    // But updateCurrentMessages would index this against existing nodes
+                    // and map index-1 to speaker-1's node. Instead, we temporarily
+                    // show a composite view by updating the conversation with an
+                    // extra node appended manually.
+                    val latest = getConversationFlow(conversationId).value
+                    val lastGen = chunk.messages.lastOrNull()
+                    if (lastGen != null && lastGen.role == me.rerere.ai.core.MessageRole.ASSISTANT) {
+                        // Replace the latest temporary node (if any) or append a new one
+                        val existingTemp = latest.messageNodes.lastOrNull()
+                        val tempNode = if (existingTemp?.role == me.rerere.ai.core.MessageRole.ASSISTANT
+                            && existingTemp.senderName == senderName) {
+                            existingTemp.copy(
+                                messages = existingTemp.messages.map { it.copy(parts = lastGen.parts) },
+                                selectIndex = 0
+                            )
+                        } else {
+                            me.rerere.rikkahub.data.model.MessageNode(
+                                messages = listOf(lastGen),
+                                selectIndex = 0,
+                                senderName = senderName,
+                            )
+                        }
+
+                        val updatedNodes = if (latest.messageNodes.lastOrNull()?.let {
+                                it.role == me.rerere.ai.core.MessageRole.ASSISTANT && it.senderName == senderName
+                            } == true) {
+                            latest.messageNodes.dropLast(1) + tempNode
+                        } else {
+                            latest.messageNodes + tempNode
+                        }
+                        updateConversation(conversationId, latest.copy(messageNodes = updatedNodes))
+                    }
+
+                    val needsSave = chunk.messages.lastOrNull()?.parts?.any { p ->
+                        p is UIMessagePart.Tool && p.executionStartedAt != null && p.output.isEmpty() && p.approvalState is ToolApprovalState.Approved
+                    } ?: false
+                    if (needsSave) {
+                        val current = getConversationFlow(conversationId).value
+                        saveConversation(conversationId, current)
+                    }
+
+                    if (!isForeground.value && settings.displaySetting.enableNotificationOnMessageGeneration && settings.displaySetting.enableLiveUpdateNotification) {
+                        sendLiveUpdateNotification(conversationId, chunk.messages, senderName)
+                    }
+                }
+            }
+        }
+
+        // After generation, make sure a proper final node exists
+        val finalMsg = generatedMessage
+        if (finalMsg != null && finalMsg.role == me.rerere.ai.core.MessageRole.ASSISTANT) {
+            val latest = getConversationFlow(conversationId).value
+            // Check if the last node is already correctly tagged
+            val lastNode = latest.messageNodes.lastOrNull()
+            if (lastNode == null || lastNode.senderName != senderName || lastNode.currentMessage.id != finalMsg.id) {
+                val finalNode = me.rerere.rikkahub.data.model.MessageNode(
+                    messages = listOf(finalMsg),
+                    selectIndex = 0,
+                    senderName = senderName,
+                )
+                // Remove any temporary preview node for this speaker
+                val cleaned = latest.messageNodes.filterNot {
+                    it.role == me.rerere.ai.core.MessageRole.ASSISTANT && it.senderName == senderName
+                }
+                val updated = latest.copy(messageNodes = cleaned + finalNode)
+                updateConversation(conversationId, updated)
+            }
+        }
+    }
+
+    /** Core generation runner shared by group and standard paths. */
+    private suspend fun runGroupGeneration(
+        conversationId: Uuid,
+        conversation: Conversation,
+        assistant: Assistant,
+        model: Model,
+        systemAddendum: String?,
+        settings: Settings,
+        senderName: String,
+    ) {
+        val session = getOrCreateSession(conversationId)
+
+        generationHandler.generateText(
+            settings = settings,
+            model = model,
+            processingStatus = session.processingStatus,
+            systemAddendum = systemAddendum,
+            isToolAutoApproved = { toolName ->
+                if (toolName == "ask_user") {
+                    me.rerere.rikkahub.data.ai.tools.HeadlessConversations
+                        .shouldAutoApprove(conversationId)
+                } else {
+                    toolApprovalPreferences.currentYolo() ||
+                        me.rerere.rikkahub.data.ai.tools.HeadlessConversations
+                            .shouldAutoApprove(conversationId) ||
+                        me.rerere.rikkahub.data.ai.tools.ToolApprovalAllowList
+                            .isAllowedForChat(conversationId, toolName) ||
+                        toolApprovalPreferences.current().contains(toolName)
+                }
+            },
+            messages = conversation.currentMessages,
+            assistant = assistant,
+            maxSteps = assistant.maxSteps,
+            conversationSystemPrompt = conversation.customSystemPrompt,
+            conversationModeInjectionIds = conversation.modeInjectionIds,
+            conversationLorebookIds = conversation.lorebookIds,
+            workspaceCwd = conversation.workspaceCwd,
+            memories = if (assistant.useGlobalMemory) {
+                memoryRepository.getGlobalMemories()
+            } else {
+                memoryRepository.getMemoriesOfAssistant(assistant.id.toString())
+            },
+            inputTransformers = buildList {
+                addAll(inputTransformers)
+                add(templateTransformer)
+                add(workspaceReminderTransformer)
+            },
+            outputTransformers = outputTransformers,
+            tools = buildList {
+                if (settings.enableWebSearch) addAll(createSearchTools(settings))
+                val invocationCtx = me.rerere.rikkahub.data.ai.tools.ToolInvocationContext(
+                    callerAssistantId = assistant.id.toString(),
+                    callerConversationId = conversationId.toString(),
+                    isHeadless = me.rerere.rikkahub.data.ai.tools.HeadlessConversations.isHeadless(conversationId),
+                    modelCanSeeImages = me.rerere.ai.provider.Modality.IMAGE in model.inputModalities,
+                )
+                addAll(localTools.getTools(assistant.localTools, invocationCtx))
+                if (assistant.enableRecentChatsReference) addAll(createConversationTools(conversationRepo, assistant.id))
+                addAll(createWorkspaceToolsIfReady(assistant.workspaceId?.toString(), conversation.workspaceCwd))
+                if (assistant.enabledSkills.isNotEmpty()) addAll(
+                    createSkillTools(assistant.enabledSkills, skillManager.listSkills(), skillManager)
+                )
+                mcpManager.getAllAvailableTools().forEach { (serverId, serverName, tool) ->
+                    val serverSlug = serverId.toString().take(8).replace("-", "")
+                    val mcpToolName = "mcp__" + serverSlug + "_" + serverName + "__" + tool.name
+                    add(Tool(
+                        name = mcpToolName,
+                        description = tool.description ?: "",
+                        parameters = { tool.inputSchema },
+                        needsApproval = { me.rerere.rikkahub.data.ai.tools.ToolApprovalDefaults.requiresApproval(mcpToolName) || tool.needsApproval },
+                        execute = { mcpManager.callTool(serverId, tool.name, it.jsonObject) },
+                    ))
+                }
+            },
+        ).onCompletion {
+            cancelLiveUpdateNotification(conversationId)
+            val updated = getConversationFlow(conversationId).value.copy(
+                messageNodes = getConversationFlow(conversationId).value.messageNodes.map { node ->
+                    node.copy(messages = node.messages.map { it.finishReasoning() })
+                },
+                updateAt = Instant.now()
+            )
+            updateConversation(conversationId, updated)
+            if (!isForeground.value && settings.displaySetting.enableNotificationOnMessageGeneration) {
+                sendGenerationDoneNotification(conversationId, senderName)
+            }
+        }.collect { chunk ->
+            when (chunk) {
+                is GenerationChunk.Messages -> {
+                    val updated = getConversationFlow(conversationId).value.updateCurrentMessages(chunk.messages)
+                    updateConversation(conversationId, updated)
+                    val needsSave = chunk.messages.lastOrNull()?.parts?.any { p ->
+                        p is UIMessagePart.Tool && p.executionStartedAt != null && p.output.isEmpty() && p.approvalState is ToolApprovalState.Approved
+                    } ?: false
+                    if (needsSave) saveConversation(conversationId, updated)
+                    if (!isForeground.value && settings.displaySetting.enableNotificationOnMessageGeneration && settings.displaySetting.enableLiveUpdateNotification) {
+                        sendLiveUpdateNotification(conversationId, chunk.messages, senderName)
+                    }
+                }
+            }
+    }
+    }
+
+        // ---- 检查无效消息 ----
 
     private fun checkInvalidMessages(conversationId: Uuid) {
         val conversation = getConversationFlow(conversationId).value

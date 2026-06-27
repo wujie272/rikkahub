@@ -96,6 +96,9 @@ import me.rerere.rikkahub.ui.pages.extensions.ExtensionsPage
 import me.rerere.rikkahub.ui.pages.extensions.PromptPage
 import me.rerere.rikkahub.ui.pages.extensions.QuickMessagesPage
 import me.rerere.rikkahub.ui.pages.extensions.skills.SkillDetailPage
+import me.rerere.rikkahub.ui.pages.group.GroupListPage
+import me.rerere.rikkahub.ui.pages.group.GroupDetailPage
+import me.rerere.rikkahub.ui.pages.group.GroupChatPage
 import me.rerere.rikkahub.ui.pages.extensions.skills.SkillsPage
 import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspaceDetailPage
 import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspacePage
@@ -127,6 +130,7 @@ import me.rerere.rikkahub.ui.pages.setting.SettingSearchPage
 import me.rerere.rikkahub.ui.pages.setting.SettingTTSPage
 import me.rerere.rikkahub.ui.pages.setting.SettingSpeechPage
 import me.rerere.rikkahub.ui.pages.setting.SettingTelegramPage
+import me.rerere.rikkahub.ui.pages.setting.SettingSshPage
 import me.rerere.rikkahub.ui.pages.setting.SettingWebPage
 import me.rerere.rikkahub.ui.pages.share.handler.ShareHandlerPage
 import me.rerere.rikkahub.ui.pages.stats.StatsPage
@@ -134,6 +138,7 @@ import me.rerere.rikkahub.ui.pages.translator.TranslatorPage
 import me.rerere.rikkahub.ui.pages.webview.WebViewPage
 import me.rerere.rikkahub.ui.theme.LocalDarkMode
 import me.rerere.rikkahub.ui.theme.RikkahubTheme
+import me.rerere.rikkahub.utils.openUsageAccessSettings
 import me.rerere.rikkahub.utils.CrashHandler
 import okhttp3.OkHttpClient
 import org.koin.android.ext.android.inject
@@ -263,6 +268,7 @@ class RouteActivity : ComponentActivity() {
             eventBus.events.collect { event ->
                 when (event) {
                     is AppEvent.Speak -> tts.speak(event.text)
+                    is AppEvent.OpenUsageAccessSettings -> this@RouteActivity.openUsageAccessSettings()
                 }
             }
         }
@@ -496,6 +502,10 @@ class RouteActivity : ComponentActivity() {
                                 SettingWebPage()
                             }
 
+                            entry<Screen.SettingSsh> {
+                                SettingSshPage()
+                            }
+
                             entry<Screen.SettingTelegram> {
                                 SettingTelegramPage()
                             }
@@ -586,6 +596,18 @@ class RouteActivity : ComponentActivity() {
 
                             entry<Screen.SkillDetail> { key ->
                                 SkillDetailPage(skillName = key.skillName)
+                            }
+
+                            entry<Screen.GroupList> {
+                                GroupListPage()
+                            }
+
+                            entry<Screen.GroupDetail> { key ->
+                                GroupDetailPage(key.id)
+                            }
+
+                            entry<Screen.GroupChat> { key ->
+                                GroupChatPage(id = key.id)
                             }
 
                             entry<Screen.MessageSearch> {
@@ -761,6 +783,9 @@ sealed interface Screen : NavKey {
     data object SettingWeb : Screen
 
     @Serializable
+    data object SettingSsh : Screen
+
+    @Serializable
     data object SettingTelegram : Screen
 
     @Serializable
@@ -828,6 +853,15 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data class SkillDetail(val skillName: String) : Screen
+
+    @Serializable
+    data object GroupList : Screen
+
+    @Serializable
+    data class GroupDetail(val id: String) : Screen
+
+    @Serializable
+    data class GroupChat(val id: String) : Screen
 
     @Serializable
     data object MessageSearch : Screen

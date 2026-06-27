@@ -88,9 +88,10 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
 
     override suspend fun listModels(providerSetting: ProviderSetting.Claude): List<Model> =
         withContext(Dispatchers.IO) {
+            val apiKey = keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
             val request = Request.Builder()
                 .url("${providerSetting.baseUrl}/models")
-                .addHeader("x-api-key", keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString()))
+                .addHeader("x-api-key", apiKey)
                 .addHeader("anthropic-version", ANTHROPIC_VERSION)
                 .get()
                 .build()
@@ -151,12 +152,13 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
         messages: List<UIMessage>,
         params: TextGenerationParams
     ): MessageChunk = withContext(Dispatchers.IO) {
+        val apiKey = keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
         val requestBody = buildMessageRequest(providerSetting, messages, params)
         val request = Request.Builder()
             .url("${providerSetting.baseUrl}/messages")
             .headers(params.customHeaders.toHeaders())
             .post(json.encodeToString(requestBody).toRequestBody("application/json".toMediaType()))
-            .addHeader("x-api-key", keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString()))
+            .addHeader("x-api-key", apiKey)
             .addHeader("anthropic-version", ANTHROPIC_VERSION)
             .configureReferHeaders(providerSetting.baseUrl)
             .build()
@@ -198,12 +200,13 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
         messages: List<UIMessage>,
         params: TextGenerationParams
     ): Flow<MessageChunk> = callbackFlow {
+        val apiKey = keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
         val requestBody = buildMessageRequest(providerSetting, messages, params, stream = true)
         val request = Request.Builder()
             .url("${providerSetting.baseUrl}/messages")
             .headers(params.customHeaders.toHeaders())
             .post(json.encodeToString(requestBody).toRequestBody("application/json".toMediaType()))
-            .addHeader("x-api-key", keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString()))
+            .addHeader("x-api-key", apiKey)
             .addHeader("anthropic-version", ANTHROPIC_VERSION)
             .addHeader("Content-Type", "application/json")
             .configureReferHeaders(providerSetting.baseUrl)
