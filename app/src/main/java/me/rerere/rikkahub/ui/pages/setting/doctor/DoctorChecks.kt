@@ -8,7 +8,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import me.rerere.rikkahub.BuildConfig
-import me.rerere.rikkahub.data.ai.tools.LocalToolOption
+import me.rerere.rikkahub.data.ai.tools.local.LocalToolOption
 import me.rerere.rikkahub.data.ai.tools.local.AccessibilityServiceHandle
 import me.rerere.rikkahub.data.ai.tools.local.NotificationListenerHandle
 import me.rerere.rikkahub.data.ai.tools.local.PermissionHelper
