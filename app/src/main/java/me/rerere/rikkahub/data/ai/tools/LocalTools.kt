@@ -110,6 +110,8 @@ import me.rerere.rikkahub.data.ai.tools.local.notificationReplyTool
 import me.rerere.rikkahub.data.ai.tools.local.notificationStatusTool
 import me.rerere.rikkahub.data.ai.tools.local.batchCopyTool
 import me.rerere.rikkahub.data.ai.tools.local.buildScreenTimeTool
+import me.rerere.rikkahub.data.ai.tools.local.buildCalendarQueryTool
+import me.rerere.rikkahub.data.ai.tools.local.buildCalendarCreateTool
 import me.rerere.rikkahub.data.ai.tools.local.batchMoveTool
 import me.rerere.rikkahub.data.ai.tools.local.batchDeleteTool
 import me.rerere.rikkahub.data.ai.tools.local.webFetchTool
@@ -197,6 +199,7 @@ sealed class LocalToolOption {
     @Serializable @SerialName("archive")              data object Archive             : LocalToolOption()
     @Serializable @SerialName("keyboard_control")     data object KeyboardControl     : LocalToolOption()
     @Serializable @SerialName("screen_time")          data object ScreenTime           : LocalToolOption()
+    @Serializable @SerialName("calendar")           data object Calendar             : LocalToolOption()
 }
 
 private val TOP_TOOL_EXAMPLES: Map<String, String> = mapOf(
@@ -591,6 +594,10 @@ class LocalTools(
 
     val screenTimeTool by lazy { buildScreenTimeTool(context, eventBus) }
 
+    val calendarQueryTool by lazy { buildCalendarQueryTool(context) }
+
+    val calendarCreateTool by lazy { buildCalendarCreateTool(context) }
+
     val askUserTool by lazy {
         Tool(
             name = "ask_user",
@@ -694,6 +701,10 @@ class LocalTools(
         }
         if (options.contains(LocalToolOption.ScreenTime)) {
             tools.add(screenTimeTool)
+        }
+        if (options.contains(LocalToolOption.Calendar)) {
+            tools.add(calendarQueryTool)
+            tools.add(calendarCreateTool)
         }
         if (options.contains(LocalToolOption.AskUser)) {
             tools.add(askUserTool)
