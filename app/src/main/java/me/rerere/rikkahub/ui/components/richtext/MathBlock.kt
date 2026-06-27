@@ -42,7 +42,7 @@ fun MathBlock(
         LatexText(
             latex = proceededLatex,
             color = LocalContentColor.current,
-            fontSize = fontSize.takeOrElse { LocalTextStyle.current.fontSize },
+            fontSize = fontSize.takeOrElse { MaterialTheme.typography.bodyLarge.fontSize },
             modifier = Modifier
                 .align(Alignment.Center)
                 .horizontalScroll(

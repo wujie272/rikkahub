@@ -536,8 +536,7 @@ private fun MarkdownNode(
             val enableLatexRendering = LocalSettings.current.displaySetting.enableLatexRendering
             if (enableLatexRendering) {
                 MathInline(
-                    formula, modifier = modifier.padding(horizontal = 1.dp),
-                    fontSize = LocalTextStyle.current.fontSize
+                    formula, modifier = modifier.padding(horizontal = 1.dp)
                 )
             } else {
                 Text(
@@ -555,8 +554,7 @@ private fun MarkdownNode(
                 MathBlock(
                     formula, modifier = modifier
                         .fillMaxWidth()
-                        .padding(vertical = 8.dp),
-                    fontSize = LocalTextStyle.current.fontSize
+                        .padding(vertical = 8.dp)
                 )
             } else {
                 Text(

@@ -36,13 +36,13 @@ jobs:
         with:
           path: |
             ~/.local/share/pnpm/store
-            web/node_modules
-          key: ${{ runner.os }}-pnpm-${{ hashFiles('web/package.json', 'web/pnpm-lock.yaml') }}
+            web-ui/node_modules
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('web-ui/package.json', 'web-ui/pnpm-lock.yaml') }}
           restore-keys: |
             ${{ runner.os }}-pnpm-
 
       - name: Install web dependencies
-        run: cd web && pnpm install
+        run: cd web-ui && pnpm install
 
       - name: Gradle cache
         uses: actions/cache@v4
