@@ -17,6 +17,9 @@ android {
 
     // CI 通过 -PabiFilter=arm64-v8a 只编单架构，默认全编
     val abiList = (project.findProperty("abiFilter") as? String)?.split(",") ?: listOf("arm64-v8a", "x86_64")
+    // 单架构（CI 场景）：关 splits，靠 ndk.abiFilters
+    // 多架构（本地开发）：开 splits，清 ndk.abiFilters 避免 AGP 9 冲突
+    val isSingleAbi = abiList.size == 1
 
     defaultConfig {
         applicationId = "jaye.rikkahub"
@@ -27,21 +30,24 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        ndk {
-            abiFilters += abiList
+        // 单架构：关 splits，全靠 ndk.abiFilters
+        // 多架构：开 splits 且清掉 ndk.abiFilters，避免 AGP 9 冲突
+        if (isSingleAbi) {
+            ndk {
+                abiFilters += abiList
+            }
         }
     }
 
     splits {
         abi {
-            // AppBundle tasks usually contain "bundle" in their name
-            //noinspection WrongGradleMethod
             val isBuildingBundle = gradle.startParameter.taskNames.any { it.lowercase().contains("bundle") }
-            isEnable = !isBuildingBundle
-            reset()
-            include(*abiList.toTypedArray())
-            // 单架构不需要 universal，多架构才产
-            isUniversalApk = abiList.size > 1
+            isEnable = !isBuildingBundle && !isSingleAbi
+            if (!isSingleAbi) {
+                reset()
+                include(*abiList.toTypedArray())
+                isUniversalApk = true
+            }
         }
     }
 
