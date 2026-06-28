@@ -496,41 +496,7 @@ internal fun AssistantBasicContent(
                     }
                 )
             }
-            HorizontalDivider()
-            FormItem(
-                modifier = Modifier.padding(8.dp),
-                label = {
-                    Text("最大工具轮数")
-                },
-                description = {
-                    Text("限制单次任务中工具调用的最大轮数（Agent 循环上限）")
-                }
-            ) {
-                var stepsInput by remember(assistant.id) {
-                    mutableStateOf(assistant.maxSteps.toString())
-                }
-                val stepsValue = stepsInput.toIntOrNull()
-                OutlinedTextField(
-                    value = stepsInput,
-                    onValueChange = { value ->
-                        stepsInput = value
-                        value.toIntOrNull()?.takeIf { it in 1..64 }?.let { steps ->
-                            onUpdate(
-                                assistant.copy(
-                                    maxSteps = steps
-                                )
-                            )
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    singleLine = true,
-                    isError = stepsValue == null || stepsValue !in 1..64,
-                    supportingText = {
-                        Text("1 - 64")
-                    }
-                )
-            }
+
         }
 
         Card(
