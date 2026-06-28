@@ -47,6 +47,10 @@ interface KeyRoulette {
      */
     fun getKeyStates(providerId: String): List<KeyState>
 
+    fun setKeyEnabled(key: String, providerId: String, enabled: Boolean)
+
+    fun thawKey(key: String, providerId: String)
+
     companion object {
         fun default(): KeyRoulette = DefaultKeyRoulette()
 
