@@ -109,9 +109,7 @@
     <intent>
       <action android:name="android.intent.action.TTS_SERVICE" />
     </intent>
-    <!-- Required so launch_app and list_installed_apps can see other launcher apps on
-         Android 11+. QUERY_ALL_PACKAGES above is the catch-all; this is the safer
-         alternative the system queries when the permission is denied. -->
+    <!-- 用于解析屏幕使用时间里各 App 的名称(可见性受 Android 11+ 包可见性限制) -->
     <intent>
       <action android:name="android.intent.action.MAIN" />
       <category android:name="android.intent.category.LAUNCHER" />
@@ -119,6 +117,11 @@
     <!-- Android 11+ package visibility: required so KeyboardApiClient can bindService into
          the agent-keyboard package. Without this the bind silently fails on API 30+. -->
     <package android:name="dev.patrickgold.florisboard" />
+    <!-- 用于识别桌面 launcher 以便在屏幕使用时间中排除 -->
+    <intent>
+      <action android:name="android.intent.action.MAIN" />
+      <category android:name="android.intent.category.HOME" />
+    </intent>
   </queries>
 
   <application
