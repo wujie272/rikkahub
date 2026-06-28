@@ -3,6 +3,10 @@ name: Release Build
 on:
   workflow_dispatch:
 
+# GITHUB_TOKEN 默认没有 release 权限，显式授权
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
