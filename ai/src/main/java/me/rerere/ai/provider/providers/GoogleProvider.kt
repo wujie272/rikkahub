@@ -74,6 +74,10 @@ import kotlin.uuid.Uuid
 
 private const val TAG = "GoogleProvider"
 
+// HTTP 状态码触发冷却：429 (限流) + 5xx (服务端错误)
+// 2xx/4xx(除429外) 不触发冷却以免误伤配置错误
+private val COOLDOWN_STATUS_CODES = setOf(429, 500, 502, 503, 504)
+
 class GoogleProvider(private val client: OkHttpClient, context: Context? = null) : Provider<ProviderSetting.Google> {
     private val keyRoulette = if (context != null) KeyRoulette.lru(context) else KeyRoulette.default()
     private val serviceAccountTokenProvider by lazy {
@@ -92,7 +96,8 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
 
     private suspend fun transformRequest(
         providerSetting: ProviderSetting.Google,
-        request: Request
+        request: Request,
+        keyOverride: String? = null
     ): Request {
         return if (providerSetting.vertexAI && providerSetting.useServiceAccount) {
             val accessToken = serviceAccountTokenProvider.fetchAccessToken(
@@ -103,7 +108,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                 .addHeader("Authorization", "Bearer $accessToken")
                 .build()
         } else {
-            val key = keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
+            val key = keyOverride ?: keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
             if (providerSetting.vertexAI) {
                 request.newBuilder()
                     .url(request.url.newBuilder().addQueryParameter("key", key).build())
@@ -160,6 +165,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
         messages: List<UIMessage>,
         params: TextGenerationParams,
     ): MessageChunk = withContext(Dispatchers.IO) {
+        val apiKey = keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
         val requestBody = buildCompletionRequestBody(messages, params)
 
         val url = buildUrl(
@@ -180,13 +186,24 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                     json.encodeToString(requestBody).toRequestBody("application/json".toMediaType())
                 )
                 .configureReferHeaders(providerSetting.baseUrl)
-                .build()
+                .build(),
+            keyOverride = apiKey
         )
 
         val response = client.newCall(request).await()
         if (!response.isSuccessful) {
-            throw Exception("Failed to get response: ${response.code} ${response.body.string()}")
+            val code = response.code
+            val body = response.body.string()
+            if (code in COOLDOWN_STATUS_CODES) {
+                keyRoulette.reportFailure(
+                    key = apiKey,
+                    providerId = providerSetting.id.toString(),
+                    cooldownMs = providerSetting.fallbackConfig.cooldownSeconds * 1000L
+                )
+            }
+            throw Exception("Failed to get response: $code $body")
         }
+        keyRoulette.reportSuccess(apiKey, providerSetting.id.toString())
 
         val bodyStr = response.body.string()
         val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
@@ -216,6 +233,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
         messages: List<UIMessage>,
         params: TextGenerationParams,
     ): Flow<MessageChunk> = callbackFlow {
+        val apiKey = keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
         val requestBody = buildCompletionRequestBody(messages, params)
 
         val url = buildUrl(
@@ -236,7 +254,8 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                     json.encodeToString(requestBody).toRequestBody("application/json".toMediaType())
                 )
                 .configureReferHeaders(providerSetting.baseUrl)
-                .build()
+                .build(),
+            keyOverride = apiKey
         )
 
         Log.i(TAG, "streamText: ${json.encodeToString(requestBody)}")
@@ -305,6 +324,15 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
 
                 Log.w(TAG, "onFailure: ${t?.message}", t)
 
+                val statusCode = response?.code
+                if (statusCode != null && statusCode in COOLDOWN_STATUS_CODES) {
+                    keyRoulette.reportFailure(
+                        key = apiKey,
+                        providerId = providerSetting.id.toString(),
+                        cooldownMs = providerSetting.fallbackConfig.cooldownSeconds * 1000L
+                    )
+                }
+
                 try {
                     if (t == null && response != null) {
                         val bodyStr = response.body.stringSafe()
@@ -330,7 +358,8 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
             }
 
             override fun onClosed(eventSource: EventSource) {
-                println("[onClosed] 连接已关闭")
+                // 流正常结束时视为成功，重置冷却
+                keyRoulette.reportSuccess(apiKey, providerSetting.id.toString())
                 close()
             }
         }

@@ -63,6 +63,10 @@ import kotlin.time.Clock
 private const val TAG = "ClaudeProvider"
 private const val ANTHROPIC_VERSION = "2023-06-01"
 
+// HTTP 状态码触发冷却：429 (限流) + 5xx (服务端错误)
+// 2xx/4xx(除429外) 不触发冷却以免误伤配置错误
+private val COOLDOWN_STATUS_CODES = setOf(429, 500, 502, 503, 504)
+
 // Minimax's /anthropic/v1/models returns `{"data": null}` (and the OpenAI-shape
 // /v1/models returns `{"object":"","data":null}`) even with a valid API key,
 // despite their public OpenAPI spec documenting the OpenAI-compat list shape.
@@ -167,8 +171,18 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
 
         val response = client.newCall(request).await()
         if (!response.isSuccessful) {
-            throw Exception("Failed to get response: ${response.code} ${response.body.string()}")
+            val code = response.code
+            val body = response.body.string()
+            if (code in COOLDOWN_STATUS_CODES) {
+                keyRoulette.reportFailure(
+                    key = apiKey,
+                    providerId = providerSetting.id.toString(),
+                    cooldownMs = providerSetting.fallbackConfig.cooldownSeconds * 1000L
+                )
+            }
+            throw Exception("Failed to get response: $code $body")
         }
+        keyRoulette.reportSuccess(apiKey, providerSetting.id.toString())
 
         val bodyStr = response.body.string()
         val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
@@ -277,6 +291,15 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
 
                 Log.e(TAG, "onFailure: ${t?.javaClass?.name} ${t?.message} / $response", t)
 
+                val statusCode = response?.code
+                if (statusCode != null && statusCode in COOLDOWN_STATUS_CODES) {
+                    keyRoulette.reportFailure(
+                        key = apiKey,
+                        providerId = providerSetting.id.toString(),
+                        cooldownMs = providerSetting.fallbackConfig.cooldownSeconds * 1000L
+                    )
+                }
+
                 val bodyRaw = response?.body?.stringSafe()
                 try {
                     if (!bodyRaw.isNullOrBlank()) {
@@ -292,7 +315,10 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
             }
 
             override fun onClosed(eventSource: EventSource) {
+                keyRoulette.reportSuccess(apiKey, providerSetting.id.toString())
                 close()
+            }
+
             }
         }
 

@@ -39,6 +39,7 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
@@ -434,6 +435,14 @@ private fun SettingProviderKeyPage(
     var internalProvider by remember(provider) { mutableStateOf(provider) }
     val context = LocalContext.current
 
+    val currentApiKey = when (val p = internalProvider) {
+        is ProviderSetting.OpenAI -> p.apiKey
+        is ProviderSetting.Google -> p.apiKey
+        is ProviderSetting.Claude -> p.apiKey
+        else -> ""
+    }
+    val fallbackConfig = internalProvider.fallbackConfig
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -442,13 +451,7 @@ private fun SettingProviderKeyPage(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        val currentApiKey = when (val p = internalProvider) {
-            is ProviderSetting.OpenAI -> p.apiKey
-            is ProviderSetting.Google -> p.apiKey
-            is ProviderSetting.Claude -> p.apiKey
-            else -> ""
-        }
-
+        // API Key 输入框（多行，支持多 Key）
         OutlinedTextField(
             value = currentApiKey,
             onValueChange = { newKey ->
@@ -460,9 +463,73 @@ private fun SettingProviderKeyPage(
                 }
             },
             label = { Text(stringResource(R.string.search_detail_api_key)) },
+            placeholder = { Text("每行一个 Key，第一个为主 Key") },
             modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
+            maxLines = 5,
         )
+
+        // 多 Key 轮询开关
+        HorizontalDivider()
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "多 Key 轮询",
+                    style = MaterialTheme.typography.titleSmall
+                )
+                Text(
+                    text = "遇到 429 限流时自动切换到下一个 Key",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Switch(
+                checked = fallbackConfig.enabled,
+                onCheckedChange = { enabled ->
+                    internalProvider = internalProvider.copyProvider(
+                        fallbackConfig = fallbackConfig.copy(enabled = enabled)
+                    )
+                }
+            )
+        }
+
+        // 冷却设置（仅轮询开启时显示）
+        if (fallbackConfig.enabled) {
+            OutlinedTextField(
+                value = fallbackConfig.cooldownSeconds.toString(),
+                onValueChange = { text ->
+                    val value = text.filter { it.isDigit() }.take(4).toIntOrNull() ?: 0
+                    internalProvider = internalProvider.copyProvider(
+                        fallbackConfig = fallbackConfig.copy(cooldownSeconds = value.coerceIn(1, 3600))
+                    )
+                },
+                label = { Text("冷却时间（秒）") },
+                supportingText = { Text("Key 触发限流后冷却时长，默认 60 秒") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            )
+
+            OutlinedTextField(
+                value = fallbackConfig.maxRetries.toString(),
+                onValueChange = { text ->
+                    val value = text.filter { it.isDigit() }.take(2).toIntOrNull() ?: 0
+                    internalProvider = internalProvider.copyProvider(
+                        fallbackConfig = fallbackConfig.copy(maxRetries = value.coerceIn(1, 20))
+                    )
+                },
+                label = { Text("最大重试次数") },
+                supportingText = { Text("所有 Key 都限流后最多重试几次，默认 3 次") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            )
+        }
+
+        HorizontalDivider()
 
         Button(
             onClick = {

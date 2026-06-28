@@ -64,6 +64,10 @@ import kotlin.time.Clock
 
 private const val TAG = "ChatCompletionsAPI"
 
+// HTTP 状态码触发冷却：429 (限流) + 5xx (服务端错误)
+// 2xx/4xx(除429外) 不触发冷却以免误伤配置错误
+private val COOLDOWN_STATUS_CODES = setOf(429, 500, 502, 503, 504)
+
 class ChatCompletionsAPI(
     private val client: OkHttpClient,
     private val keyRoulette: KeyRoulette
@@ -93,8 +97,18 @@ class ChatCompletionsAPI(
 
         val response = client.newCall(request).await()
         if (!response.isSuccessful) {
-            throw Exception("Failed to get response: ${response.code} ${response.body.string()}")
+            val code = response.code
+            val body = response.body.string()
+            if (code in COOLDOWN_STATUS_CODES) {
+                keyRoulette.reportFailure(
+                    key = apiKey,
+                    providerId = providerSetting.id.toString(),
+                    cooldownMs = providerSetting.fallbackConfig.cooldownSeconds * 1000L
+                )
+            }
+            throw Exception("Failed to get response: $code $body")
         }
+        keyRoulette.reportSuccess(apiKey, providerSetting.id.toString())
 
         val bodyStr = response.body.string()
         val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
@@ -216,6 +230,15 @@ class ChatCompletionsAPI(
 
                 Log.w(TAG, "onFailure: ${t?.javaClass?.name} ${t?.message} / $response", t)
 
+                val statusCode = response?.code
+                if (statusCode != null && statusCode in COOLDOWN_STATUS_CODES) {
+                    keyRoulette.reportFailure(
+                        key = apiKey,
+                        providerId = providerSetting.id.toString(),
+                        cooldownMs = providerSetting.fallbackConfig.cooldownSeconds * 1000L
+                    )
+                }
+
                 val bodyRaw = response?.body?.stringSafe()
                 try {
                     if (!bodyRaw.isNullOrBlank()) {
@@ -233,6 +256,8 @@ class ChatCompletionsAPI(
             }
 
             override fun onClosed(eventSource: EventSource) {
+                // 流正常结束时视为成功，重置冷却
+                keyRoulette.reportSuccess(apiKey, providerSetting.id.toString())
                 close()
             }
         }

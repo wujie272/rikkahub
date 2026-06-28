@@ -11,11 +11,22 @@ private const val TAG = "KeyRoulette"
 interface KeyRoulette {
     fun next(keys: String, providerId: String = ""): String
 
+    /**
+     * 报告某个 key 请求失败，触发冷却
+     * @param cooldownMs 冷却时长（毫秒），默认 60s
+     */
+    fun reportFailure(key: String, providerId: String, cooldownMs: Long = 60_000L)
+
+    /**
+     * 报告某个 key 请求成功，重置冷却状态
+     */
+    fun reportSuccess(key: String, providerId: String)
+
     companion object {
         fun default(): KeyRoulette = DefaultKeyRoulette()
 
         /**
-         * LRU 轮询，持久化存储到 cacheDir/lru_key_roulette.json
+         * LRU 轮询 + 冷却，持久化存储到 cacheDir/lru_key_roulette.json
          * 通过 providerId 区分同类型的多个 provider 实例，在 next() 调用时传入
          */
         fun lru(context: Context): KeyRoulette = LruKeyRoulette(context)
@@ -41,6 +52,9 @@ private class DefaultKeyRoulette : KeyRoulette {
             keys
         }
     }
+
+    override fun reportFailure(key: String, providerId: String, cooldownMs: Long) {}
+    override fun reportSuccess(key: String, providerId: String) {}
 }
 
 private const val LRU_CACHE_FILE = "lru_key_roulette.json"
@@ -49,8 +63,14 @@ private const val EXPIRE_DURATION_MS = 24 * 60 * 60 * 1000L // 1 天
 // 全局文件锁，防止多个 provider 实例并发读写同一文件
 private object LruFileLock
 
-// 文件结构: Map<providerId, Map<apiKey, lastUsedTimestamp>>
-private typealias LruCache = Map<String, Map<String, Long>>
+// 文件结构: Map<providerId, Map<apiKey, KeyEntry>>
+private typealias LruCache = Map<String, Map<String, KeyEntry>>
+
+@kotlinx.serialization.Serializable
+private data class KeyEntry(
+    val lastUsed: Long,
+    val cooldownUntil: Long = 0, // 冷却到什么时候（毫秒时间戳），0=未冷却
+)
 
 private class LruKeyRoulette(
     private val context: Context,
@@ -59,30 +79,75 @@ private class LruKeyRoulette(
     override fun next(keys: String, providerId: String): String {
         val keyList = splitKey(keys)
         if (keyList.isEmpty()) return keys
+        if (keyList.size == 1) return keyList[0]
 
         synchronized(LruFileLock) {
             val now = System.currentTimeMillis()
             val allCache = loadCache().toMutableMap()
 
-            // 取本 provider 的记录，过滤掉已过期条目和不在当前 key 列表中的条目
-            val providerCache = (allCache[providerId] ?: emptyMap())
-                .filter { (k, lastUsed) -> k in keyList && now - lastUsed < EXPIRE_DURATION_MS }
-                .toMutableMap()
+            val providerCache = (allCache[providerId] ?: emptyMap()).toMutableMap()
+
+            // 过滤：只保留在 key 列表中的条目
+            providerCache.keys.retainAll(keyList)
+
+            // 找出不在冷却中的 key
+            val availableKeys = keyList.filter { key -> (providerCache[key]?.cooldownUntil ?: 0) <= now }
+
+            if (availableKeys.isEmpty()) {
+                // 所有 key 都在冷却中，选最早结束冷却的
+                val earliestKey = providerCache.minByOrNull { it.value.cooldownUntil }?.key
+                    ?: keyList.first()
+                providerCache[earliestKey] = KeyEntry(
+                    lastUsed = now,
+                    cooldownUntil = providerCache[earliestKey]?.cooldownUntil ?: 0,
+                )
+                allCache[providerId] = providerCache
+                saveCache(allCache)
+                return earliestKey
+            }
 
             // 优先选从未使用的 key，否则选最久未使用的
-            val selected = keyList.firstOrNull { it !in providerCache }
-                ?: providerCache.minByOrNull { it.value }!!.key
+            val selected = availableKeys.firstOrNull { it !in providerCache }
+                ?: availableKeys.minByOrNull { providerCache[it]!!.lastUsed }!!
 
-            providerCache[selected] = now
+            providerCache[selected] = KeyEntry(lastUsed = now, cooldownUntil = 0)
             allCache[providerId] = providerCache
 
-            // 清理整个 provider 条目均已过期的记录
+            // 清理其他 provider 的过期记录
             allCache.entries.removeIf { (id, cache) ->
-                id != providerId && cache.values.all { now - it >= EXPIRE_DURATION_MS }
+                id != providerId && cache.values.all { now - it.lastUsed >= EXPIRE_DURATION_MS }
             }
 
             saveCache(allCache)
             return selected
+        }
+    }
+
+    override fun reportFailure(key: String, providerId: String, cooldownMs: Long) {
+        synchronized(LruFileLock) {
+            val now = System.currentTimeMillis()
+            val allCache = loadCache().toMutableMap()
+            val providerCache = (allCache[providerId] ?: emptyMap()).toMutableMap()
+
+            val existing = providerCache[key] ?: KeyEntry(lastUsed = now, cooldownUntil = 0)
+            providerCache[key] = existing.copy(cooldownUntil = now + cooldownMs)
+            allCache[providerId] = providerCache
+            saveCache(allCache)
+
+            Log.w(TAG, "reportFailure: key=$key provider=$providerId cooled until ${now + cooldownMs}")
+        }
+    }
+
+    override fun reportSuccess(key: String, providerId: String) {
+        synchronized(LruFileLock) {
+            val now = System.currentTimeMillis()
+            val allCache = loadCache().toMutableMap()
+            val providerCache = (allCache[providerId] ?: emptyMap()).toMutableMap()
+
+            val existing = providerCache[key] ?: KeyEntry(lastUsed = now, cooldownUntil = 0)
+            providerCache[key] = existing.copy(cooldownUntil = 0)
+            allCache[providerId] = providerCache
+            saveCache(allCache)
         }
     }
 
