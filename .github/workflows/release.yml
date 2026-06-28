@@ -63,10 +63,11 @@ jobs:
       - name: Configure & Build (arm64-v8a only)
         run: |
           chmod +x gradlew
-          # 临时修改 splits 配置：只留 arm64-v8a，关掉 universal
+          # 临时修改：只编 arm64-v8a（splits + ndk abiFilters 都得改，否则冲突）
           sed -i \
             -e 's/include("arm64-v8a", "x86_64")/include("arm64-v8a")/' \
             -e 's/isUniversalApk = true/isUniversalApk = false/' \
+            -e '/abiFilters += listOf/d' \
             app/build.gradle.kts
           ./gradlew assembleRelease --build-cache
 
