@@ -53,6 +53,7 @@ import androidx.compose.material3.FloatingToolbarDefaults.floatingToolbarVertica
 import androidx.compose.material3.HorizontalFloatingToolbar
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -85,6 +86,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -99,6 +101,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dokar.sonner.ToastType
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import me.rerere.ai.provider.BuiltInTools
 import me.rerere.ai.provider.Modality
 import me.rerere.ai.provider.Model
@@ -107,6 +110,8 @@ import me.rerere.ai.provider.ModelType
 import me.rerere.ai.provider.ProviderManager
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
+import me.rerere.ai.util.KeyRoulette
+import me.rerere.ai.util.KeyState
 import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.ui.UIMessage
 import me.rerere.rikkahub.R
@@ -434,6 +439,10 @@ private fun SettingProviderKeyPage(
 ) {
     var internalProvider by remember(provider) { mutableStateOf(provider) }
     val context = LocalContext.current
+    val keyRoulette = remember { KeyRoulette.lru(context) }
+    var showRawKeys by remember { mutableStateOf(false) }
+    var showAddKeyDialog by remember { mutableStateOf(false) }
+    var showAdvanced by remember { mutableStateOf(false) }
 
     val currentApiKey = when (val p = internalProvider) {
         is ProviderSetting.OpenAI -> p.apiKey
@@ -441,104 +450,416 @@ private fun SettingProviderKeyPage(
         is ProviderSetting.Claude -> p.apiKey
         else -> ""
     }
+    val keys = remember(currentApiKey) {
+        currentApiKey.split("\n").map { it.trim() }.filter { it.isNotBlank() }.distinct()
+    }
     val fallbackConfig = internalProvider.fallbackConfig
 
-    Column(
+    // 轮询 key 状态（每秒刷新冷却倒计时）
+    var keyStates by remember { mutableStateOf<List<KeyState>>(emptyList()) }
+    LaunchedEffect(provider.id) {
+        while (true) {
+            keyStates = keyRoulette.getKeyStates(provider.id.toString())
+            delay(1000L)
+        }
+    }
+    val keyStateMap = remember(keyStates) { keyStates.associateBy { it.key } }
+
+    val lazyListState = rememberLazyListState()
+    val reorderableLazyListState = rememberReorderableLazyListState(lazyListState) { from, to ->
+        // 用 key 查找索引，不依赖 LazyColumn 位置（防止 item 偏移导致 IndexOutOfBounds）
+        val fromKey = from.key as? String ?: return@rememberReorderableLazyListState
+        val toKey = to.key as? String ?: return@rememberReorderableLazyListState
+        val fromIdx = keys.indexOf(fromKey)
+        val toIdx = keys.indexOf(toKey)
+        if (fromIdx < 0 || toIdx < 0) return@rememberReorderableLazyListState
+        val newKeys = keys.toMutableList().apply { add(toIdx, removeAt(fromIdx)) }
+        val newApiKey = newKeys.joinToString("\n")
+        internalProvider = when (internalProvider) {
+            is ProviderSetting.OpenAI -> (internalProvider as ProviderSetting.OpenAI).copy(apiKey = newApiKey)
+            is ProviderSetting.Google -> (internalProvider as ProviderSetting.Google).copy(apiKey = newApiKey)
+            is ProviderSetting.Claude -> (internalProvider as ProviderSetting.Claude).copy(apiKey = newApiKey)
+            else -> internalProvider
+        }
+    }
+
+    LazyColumn(
+        state = lazyListState,
         modifier = Modifier
             .fillMaxSize()
             .imePadding()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+            .padding(horizontal = 16.dp),
+        contentPadding = PaddingValues(vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        // API Key 输入框（多行，支持多 Key）
-        OutlinedTextField(
-            value = currentApiKey,
-            onValueChange = { newKey ->
-                internalProvider = when (internalProvider) {
-                    is ProviderSetting.OpenAI -> (internalProvider as ProviderSetting.OpenAI).copy(apiKey = newKey)
-                    is ProviderSetting.Google -> (internalProvider as ProviderSetting.Google).copy(apiKey = newKey)
-                    is ProviderSetting.Claude -> (internalProvider as ProviderSetting.Claude).copy(apiKey = newKey)
-                    else -> internalProvider
+        // --- API Key 输入区域（折叠） ---
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                onClick = { showRawKeys = !showRawKeys }
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "API Keys",
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        Text(
+                            text = "${keys.size} 个 Key · 长按拖拽排序",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Icon(
+                        if (showRawKeys) HugeIcons.ArrowDown01 else HugeIcons.ArrowRight01,
+                        contentDescription = null
+                    )
+                }
+            }
+        }
+
+        // 编辑模式
+        if (showRawKeys) {
+            item {
+                OutlinedTextField(
+                    value = currentApiKey,
+                    onValueChange = { newKey ->
+                        internalProvider = when (internalProvider) {
+                            is ProviderSetting.OpenAI -> (internalProvider as ProviderSetting.OpenAI).copy(apiKey = newKey)
+                            is ProviderSetting.Google -> (internalProvider as ProviderSetting.Google).copy(apiKey = newKey)
+                            is ProviderSetting.Claude -> (internalProvider as ProviderSetting.Claude).copy(apiKey = newKey)
+                            else -> internalProvider
+                        }
+                    },
+                    label = { Text(stringResource(R.string.search_detail_api_key)) },
+                    placeholder = { Text("每行一个 Key") },
+                    modifier = Modifier.fillMaxWidth(),
+                    maxLines = 6,
+                )
+            }
+        }
+
+        // --- Key 状态列表（可拖拽排序） ---
+        items(keys, key = { it }) { key ->
+            val index = keys.indexOf(key)
+            val state = keyStateMap[key]
+            ReorderableItem(
+                state = reorderableLazyListState,
+                key = key
+            ) { isDragging ->
+                KeyStatusCard(
+                    key = key,
+                    state = state,
+                    isPrimary = index == 0,
+                    dragHandle = { Modifier.longPressDraggableHandle() },
+                    modifier = Modifier.graphicsLayer {
+                        if (isDragging) {
+                            scaleX = 1.05f
+                            scaleY = 1.05f
+                        } else {
+                            scaleX = 1f
+                            scaleY = 1f
+                        }
+                    },
+                    onRemove = {
+                        val newKeys = keys.toMutableList().apply { removeAt(index) }
+                        val newApiKey = newKeys.joinToString("\n")
+                        internalProvider = when (internalProvider) {
+                            is ProviderSetting.OpenAI -> (internalProvider as ProviderSetting.OpenAI).copy(apiKey = newApiKey)
+                            is ProviderSetting.Google -> (internalProvider as ProviderSetting.Google).copy(apiKey = newApiKey)
+                            is ProviderSetting.Claude -> (internalProvider as ProviderSetting.Claude).copy(apiKey = newApiKey)
+                            else -> internalProvider
+                        }
+                    }
+                )
+            }
+        }
+
+        // --- 添加 Key 按钮 ---
+        item {
+            OutlinedCard(
+                modifier = Modifier.fillMaxWidth(),
+                onClick = { showAddKeyDialog = true }
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(HugeIcons.Add01, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("添加 Key", style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+        }
+
+        // --- 多 Key 轮询开关 ---
+        item {
+            HorizontalDivider()
+        }
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "多 Key 轮询",
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                    Text(
+                        text = "按列表顺序优先使用·遇到 429 自动切下一个",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = fallbackConfig.enabled,
+                    onCheckedChange = { enabled ->
+                        internalProvider = internalProvider.copyProvider(
+                            fallbackConfig = fallbackConfig.copy(enabled = enabled)
+                        )
+                    }
+                )
+            }
+        }
+
+        // --- 高级配置（折叠） ---
+        if (fallbackConfig.enabled) {
+            item { HorizontalDivider() }
+            item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showAdvanced = !showAdvanced },
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("高级配置", style = MaterialTheme.typography.titleSmall)
+                    Icon(
+                        if (showAdvanced) HugeIcons.ArrowDown01 else HugeIcons.ArrowRight01,
+                        contentDescription = null
+                    )
+                }
+            }
+            if (showAdvanced) {
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        OutlinedTextField(
+                            value = fallbackConfig.cooldownSeconds.toString(),
+                            onValueChange = { text ->
+                                val value = text.filter { it.isDigit() }.take(4).toIntOrNull() ?: 0
+                                internalProvider = internalProvider.copyProvider(
+                                    fallbackConfig = fallbackConfig.copy(cooldownSeconds = value.coerceIn(1, 3600))
+                                )
+                            },
+                            label = { Text("冷却时间（秒）") },
+                            supportingText = { Text("前 2 次失败不计冷却，第 3 次起逐步加重") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        )
+
+                        OutlinedTextField(
+                            value = fallbackConfig.maxRetries.toString(),
+                            onValueChange = { text ->
+                                val value = text.filter { it.isDigit() }.take(2).toIntOrNull() ?: 0
+                                internalProvider = internalProvider.copyProvider(
+                                    fallbackConfig = fallbackConfig.copy(maxRetries = value.coerceIn(1, 20))
+                                )
+                            },
+                            label = { Text("最大重试次数") },
+                            supportingText = { Text("所有 Key 都限流后最多重试几次") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        )
+                    }
+                }
+            }
+        }
+
+        // --- 保存按钮 ---
+        item {
+            HorizontalDivider()
+        }
+        item {
+            Button(
+                onClick = {
+                    onEdit(internalProvider)
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(context.getString(R.string.setting_provider_page_save))
+            }
+        }
+
+        // 底部留白
+        item { Spacer(Modifier.height(32.dp)) }
+    }
+
+    // --- 添加 Key 弹窗 ---
+    if (showAddKeyDialog) {
+        var newKey by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { showAddKeyDialog = false },
+            title = { Text("添加 API Key") },
+            text = {
+                OutlinedTextField(
+                    value = newKey,
+                    onValueChange = { newKey = it },
+                    label = { Text("新 Key") },
+                    placeholder = { Text("sk-...") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (newKey.isNotBlank() && newKey !in keys) {
+                            val newApiKey = (keys + newKey).joinToString("\n")
+                            internalProvider = when (internalProvider) {
+                                is ProviderSetting.OpenAI -> (internalProvider as ProviderSetting.OpenAI).copy(apiKey = newApiKey)
+                                is ProviderSetting.Google -> (internalProvider as ProviderSetting.Google).copy(apiKey = newApiKey)
+                                is ProviderSetting.Claude -> (internalProvider as ProviderSetting.Claude).copy(apiKey = newApiKey)
+                                else -> internalProvider
+                            }
+                        }
+                        showAddKeyDialog = false
+                    }
+                ) {
+                    Text("添加")
                 }
             },
-            label = { Text(stringResource(R.string.search_detail_api_key)) },
-            placeholder = { Text("每行一个 Key，第一个为主 Key") },
-            modifier = Modifier.fillMaxWidth(),
-            maxLines = 5,
+            dismissButton = {
+                TextButton(onClick = { showAddKeyDialog = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
         )
+    }
+}
 
-        // 多 Key 轮询开关
-        HorizontalDivider()
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+@Composable
+private fun KeyStatusCard(
+    key: String,
+    state: KeyState?,
+    isPrimary: Boolean,
+    dragHandle: @Composable () -> Modifier = { Modifier },
+    modifier: Modifier = Modifier,
+    onRemove: () -> Unit,
+) {
+    val isCooling = state?.isCoolingDown == true
+    val remainingSec = if (isCooling) {
+        (state!!.remainingCooldownMs / 1000).toInt()
+    } else 0
+    val progress = state?.cooldownProgress ?: 0f
+
+    Card(modifier = modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(dragHandle())
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "多 Key 轮询",
-                    style = MaterialTheme.typography.titleSmall
+            // 第一行：脱敏 Key + 优先级 + 状态 + 删除
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = key.maskApiKey(),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    if (isPrimary) {
+                        Tag(type = TagType.INFO) {
+                            Text("主", style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    // 状态标签
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = when {
+                            isCooling -> MaterialTheme.colorScheme.errorContainer
+                            state != null -> MaterialTheme.colorScheme.primaryContainer
+                            else -> MaterialTheme.colorScheme.surfaceVariant
+                        }
+                    ) {
+                        Text(
+                            text = when {
+                                isCooling -> "⏳ ${remainingSec}s"
+                                state != null -> "✅ 活跃"
+                                else -> "⚪ 未使用"
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            color = when {
+                                isCooling -> MaterialTheme.colorScheme.onErrorContainer
+                                state != null -> MaterialTheme.colorScheme.onPrimaryContainer
+                                else -> MaterialTheme.colorScheme.onSurfaceVariant
+                            }
+                        )
+                    }
+                    IconButton(
+                        onClick = onRemove,
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(
+                            HugeIcons.Cancel01,
+                            contentDescription = "删除",
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+            }
+
+            // 冷却进度条
+            if (isCooling) {
+                LinearProgressIndicator(
+                    progress = { progress },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(4.dp),
+                    color = MaterialTheme.colorScheme.error,
+                    trackColor = MaterialTheme.colorScheme.errorContainer,
                 )
+            }
+
+            // 统计信息
+            if (state != null) {
                 Text(
-                    text = "遇到 429 限流时自动切换到下一个 Key",
-                    style = MaterialTheme.typography.bodySmall,
+                    text = "请求: ${state.totalRequests} · 成功: ${state.successfulRequests} · 失败: ${state.failedRequests} · 连续失败: ${state.consecutiveFailures}",
+                    style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            Switch(
-                checked = fallbackConfig.enabled,
-                onCheckedChange = { enabled ->
-                    internalProvider = internalProvider.copyProvider(
-                        fallbackConfig = fallbackConfig.copy(enabled = enabled)
-                    )
-                }
-            )
         }
+    }
+}
 
-        // 冷却设置（仅轮询开启时显示）
-        if (fallbackConfig.enabled) {
-            OutlinedTextField(
-                value = fallbackConfig.cooldownSeconds.toString(),
-                onValueChange = { text ->
-                    val value = text.filter { it.isDigit() }.take(4).toIntOrNull() ?: 0
-                    internalProvider = internalProvider.copyProvider(
-                        fallbackConfig = fallbackConfig.copy(cooldownSeconds = value.coerceIn(1, 3600))
-                    )
-                },
-                label = { Text("冷却时间（秒）") },
-                supportingText = { Text("Key 触发限流后冷却时长，默认 60 秒") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            )
-
-            OutlinedTextField(
-                value = fallbackConfig.maxRetries.toString(),
-                onValueChange = { text ->
-                    val value = text.filter { it.isDigit() }.take(2).toIntOrNull() ?: 0
-                    internalProvider = internalProvider.copyProvider(
-                        fallbackConfig = fallbackConfig.copy(maxRetries = value.coerceIn(1, 20))
-                    )
-                },
-                label = { Text("最大重试次数") },
-                supportingText = { Text("所有 Key 都限流后最多重试几次，默认 3 次") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            )
-        }
-
-        HorizontalDivider()
-
-        Button(
-            onClick = {
-                onEdit(internalProvider)
-            },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(context.getString(R.string.setting_provider_page_save))
-        }
+/** 脱敏显示 API Key */
+private fun String.maskApiKey(): String {
+    return when {
+        length <= 8 -> this
+        else -> substring(0, 4) + "..." + substring(length - 4)
     }
 }
 

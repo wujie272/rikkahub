@@ -8,6 +8,25 @@ import java.io.File
 
 private const val TAG = "KeyRoulette"
 
+data class KeyState(
+    val key: String,
+    val lastUsed: Long = 0,
+    val cooldownUntil: Long = 0,
+    val cooldownDurationMs: Long = 0,
+    val consecutiveFailures: Int = 0,
+    val totalRequests: Int = 0,
+    val successfulRequests: Int = 0,
+    val failedRequests: Int = 0,
+) {
+    val isCoolingDown: Boolean get() = cooldownUntil > System.currentTimeMillis()
+    val remainingCooldownMs: Long get() = (cooldownUntil - System.currentTimeMillis()).coerceAtLeast(0)
+    val cooldownProgress: Float get() {
+        if (cooldownDurationMs <= 0) return 0f
+        val elapsed = cooldownDurationMs - remainingCooldownMs
+        return (elapsed.toFloat() / cooldownDurationMs).coerceIn(0f, 1f)
+    }
+}
+
 interface KeyRoulette {
     fun next(keys: String, providerId: String = ""): String
 
@@ -21,6 +40,11 @@ interface KeyRoulette {
      * 报告某个 key 请求成功，重置冷却状态
      */
     fun reportSuccess(key: String, providerId: String)
+
+    /**
+     * 获取指定 provider 的所有 key 状态
+     */
+    fun getKeyStates(providerId: String): List<KeyState>
 
     companion object {
         fun default(): KeyRoulette = DefaultKeyRoulette()
@@ -55,6 +79,7 @@ private class DefaultKeyRoulette : KeyRoulette {
 
     override fun reportFailure(key: String, providerId: String, cooldownMs: Long) {}
     override fun reportSuccess(key: String, providerId: String) {}
+    override fun getKeyStates(providerId: String): List<KeyState> = emptyList()
 }
 
 private const val LRU_CACHE_FILE = "lru_key_roulette.json"
@@ -70,6 +95,12 @@ private typealias LruCache = Map<String, Map<String, KeyEntry>>
 private data class KeyEntry(
     val lastUsed: Long,
     val cooldownUntil: Long = 0, // 冷却到什么时候（毫秒时间戳），0=未冷却
+    val cooldownDurationMs: Long = 0, // 本次冷却总时长（毫秒），用于进度条
+    val consecutiveFailures: Int = 0,
+    val maxFailuresBeforeDisable: Int = 3, // 连续失败多少次后开始冷却
+    val totalRequests: Int = 0,
+    val successfulRequests: Int = 0,
+    val failedRequests: Int = 0,
 )
 
 private class LruKeyRoulette(
@@ -84,16 +115,17 @@ private class LruKeyRoulette(
         synchronized(LruFileLock) {
             val now = System.currentTimeMillis()
             val allCache = loadCache().toMutableMap()
-
             val providerCache = (allCache[providerId] ?: emptyMap()).toMutableMap()
 
             // 过滤：只保留在 key 列表中的条目
             providerCache.keys.retainAll(keyList)
 
-            // 找出不在冷却中的 key
-            val availableKeys = keyList.filter { key -> (providerCache[key]?.cooldownUntil ?: 0) <= now }
+            // 按 keyList 顺序（优先级）找第一个不在冷却中的 key
+            val selected = keyList.firstOrNull { key ->
+                (providerCache[key]?.cooldownUntil ?: 0) <= now
+            }
 
-            if (availableKeys.isEmpty()) {
+            if (selected == null) {
                 // 所有 key 都在冷却中，选最早结束冷却的
                 val earliestKey = providerCache.minByOrNull { it.value.cooldownUntil }?.key
                     ?: keyList.first()
@@ -105,10 +137,6 @@ private class LruKeyRoulette(
                 saveCache(allCache)
                 return earliestKey
             }
-
-            // 优先选从未使用的 key，否则选最久未使用的
-            val selected = availableKeys.firstOrNull { it !in providerCache }
-                ?: availableKeys.minByOrNull { providerCache[it]!!.lastUsed }!!
 
             providerCache[selected] = KeyEntry(lastUsed = now, cooldownUntil = 0)
             allCache[providerId] = providerCache
@@ -130,11 +158,32 @@ private class LruKeyRoulette(
             val providerCache = (allCache[providerId] ?: emptyMap()).toMutableMap()
 
             val existing = providerCache[key] ?: KeyEntry(lastUsed = now, cooldownUntil = 0)
-            providerCache[key] = existing.copy(cooldownUntil = now + cooldownMs)
+            val newFailures = existing.consecutiveFailures + 1
+
+            // 冷却策略：前 2 次失败只计数不冷却，第 3 次开始逐步加重
+            val actualCooldown = when {
+                newFailures <= 2 -> 0L           // 小故障，容忍
+                newFailures == 3 -> cooldownMs    // 第 3 次：冷 60s
+                newFailures == 4 -> cooldownMs * 2 // 第 4 次：冷 120s
+                else -> cooldownMs * 5            // ≥5 次：冷 300s
+            }
+            val cooldownUntil = if (actualCooldown > 0) now + actualCooldown else 0L
+
+            providerCache[key] = existing.copy(
+                cooldownUntil = cooldownUntil,
+                cooldownDurationMs = actualCooldown,
+                consecutiveFailures = newFailures,
+                totalRequests = existing.totalRequests + 1,
+                failedRequests = existing.failedRequests + 1,
+            )
             allCache[providerId] = providerCache
             saveCache(allCache)
 
-            Log.w(TAG, "reportFailure: key=$key provider=$providerId cooled until ${now + cooldownMs}")
+            if (actualCooldown > 0) {
+                Log.w(TAG, "reportFailure: key=$key provider=$providerId failures=$newFailures cooled ${actualCooldown/1000}s")
+            } else {
+                Log.w(TAG, "reportFailure: key=$key provider=$providerId failures=$newFailures (tolerated)")
+            }
         }
     }
 
@@ -145,9 +194,33 @@ private class LruKeyRoulette(
             val providerCache = (allCache[providerId] ?: emptyMap()).toMutableMap()
 
             val existing = providerCache[key] ?: KeyEntry(lastUsed = now, cooldownUntil = 0)
-            providerCache[key] = existing.copy(cooldownUntil = 0)
+            providerCache[key] = existing.copy(
+                cooldownUntil = 0,
+                consecutiveFailures = 0, // 成功一次就重置连续失败计数
+                totalRequests = existing.totalRequests + 1,
+                successfulRequests = existing.successfulRequests + 1,
+            )
             allCache[providerId] = providerCache
             saveCache(allCache)
+        }
+    }
+
+    override fun getKeyStates(providerId: String): List<KeyState> {
+        synchronized(LruFileLock) {
+            val allCache = loadCache()
+            val providerCache = allCache[providerId] ?: return emptyList()
+            return providerCache.map { (key, entry) ->
+                KeyState(
+                    key = key,
+                    lastUsed = entry.lastUsed,
+                    cooldownUntil = entry.cooldownUntil,
+                    cooldownDurationMs = entry.cooldownDurationMs,
+                    consecutiveFailures = entry.consecutiveFailures,
+                    totalRequests = entry.totalRequests,
+                    successfulRequests = entry.successfulRequests,
+                    failedRequests = entry.failedRequests,
+                )
+            }.sortedByDescending { it.lastUsed }
         }
     }
 
@@ -168,5 +241,13 @@ private class LruKeyRoulette(
         } catch (e: Exception) {
             Log.w(TAG, "saveCache: failed to persist LRU key cache", e)
         }
+    }
+}
+
+/** 脱敏显示 API Key：sk-xxx...xxx */
+private fun String.maskApiKey(): String {
+    return when {
+        length <= 8 -> this
+        else -> substring(0, 4) + "..." + substring(length - 4)
     }
 }
