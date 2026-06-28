@@ -17,8 +17,9 @@ data class KeyState(
     val totalRequests: Int = 0,
     val successfulRequests: Int = 0,
     val failedRequests: Int = 0,
+    val disabled: Boolean = false,
 ) {
-    val isCoolingDown: Boolean get() = cooldownUntil > System.currentTimeMillis()
+    val isCoolingDown: Boolean get() = !disabled && cooldownUntil > System.currentTimeMillis()
     val remainingCooldownMs: Long get() = (cooldownUntil - System.currentTimeMillis()).coerceAtLeast(0)
     val cooldownProgress: Float get() {
         if (cooldownDurationMs <= 0) return 0f
@@ -80,6 +81,8 @@ private class DefaultKeyRoulette : KeyRoulette {
     override fun reportFailure(key: String, providerId: String, cooldownMs: Long) {}
     override fun reportSuccess(key: String, providerId: String) {}
     override fun getKeyStates(providerId: String): List<KeyState> = emptyList()
+    override fun setKeyEnabled(key: String, providerId: String, enabled: Boolean) {}
+    override fun thawKey(key: String, providerId: String) {}
 }
 
 private const val LRU_CACHE_FILE = "lru_key_roulette.json"
@@ -94,13 +97,14 @@ private typealias LruCache = Map<String, Map<String, KeyEntry>>
 @kotlinx.serialization.Serializable
 private data class KeyEntry(
     val lastUsed: Long,
-    val cooldownUntil: Long = 0, // 冷却到什么时候（毫秒时间戳），0=未冷却
-    val cooldownDurationMs: Long = 0, // 本次冷却总时长（毫秒），用于进度条
+    val cooldownUntil: Long = 0,
+    val cooldownDurationMs: Long = 0,
     val consecutiveFailures: Int = 0,
-    val maxFailuresBeforeDisable: Int = 3, // 连续失败多少次后开始冷却
+    val maxFailuresBeforeDisable: Int = 3,
     val totalRequests: Int = 0,
     val successfulRequests: Int = 0,
     val failedRequests: Int = 0,
+    val disabled: Boolean = false,
 )
 
 private class LruKeyRoulette(
@@ -120,9 +124,10 @@ private class LruKeyRoulette(
             // 过滤：只保留在 key 列表中的条目
             providerCache.keys.retainAll(keyList)
 
-            // 按 keyList 顺序（优先级）找第一个不在冷却中的 key
+            // 按 keyList 顺序（优先级）找第一个不在冷却中且未禁用的 key
             val selected = keyList.firstOrNull { key ->
-                (providerCache[key]?.cooldownUntil ?: 0) <= now
+                val entry = providerCache[key]
+                !(entry?.disabled == true) && (entry?.cooldownUntil ?: 0) <= now
             }
 
             if (selected == null) {
@@ -219,8 +224,37 @@ private class LruKeyRoulette(
                     totalRequests = entry.totalRequests,
                     successfulRequests = entry.successfulRequests,
                     failedRequests = entry.failedRequests,
+                    disabled = entry.disabled,
                 )
             }.sortedByDescending { it.lastUsed }
+        }
+    }
+
+    override fun setKeyEnabled(key: String, providerId: String, enabled: Boolean) {
+        synchronized(LruFileLock) {
+            val allCache = loadCache().toMutableMap()
+            val providerCache = (allCache[providerId] ?: emptyMap()).toMutableMap()
+            val existing = providerCache[key] ?: KeyEntry(lastUsed = System.currentTimeMillis())
+            providerCache[key] = existing.copy(disabled = !enabled)
+            allCache[providerId] = providerCache
+            saveCache(allCache)
+        }
+    }
+
+    override fun thawKey(key: String, providerId: String) {
+        synchronized(LruFileLock) {
+            val now = System.currentTimeMillis()
+            val allCache = loadCache().toMutableMap()
+            val providerCache = (allCache[providerId] ?: emptyMap()).toMutableMap()
+            val existing = providerCache[key] ?: KeyEntry(lastUsed = now)
+            providerCache[key] = existing.copy(
+                cooldownUntil = 0,
+                cooldownDurationMs = 0,
+                consecutiveFailures = 0,
+            )
+            allCache[providerId] = providerCache
+            saveCache(allCache)
+            Log.w(TAG, "thawKey: key=$key provider=$providerId cooldown cleared")
         }
     }
 

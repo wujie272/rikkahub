@@ -576,7 +576,13 @@ private fun SettingProviderKeyPage(
                             is ProviderSetting.Claude -> (internalProvider as ProviderSetting.Claude).copy(apiKey = newApiKey)
                             else -> internalProvider
                         }
-                    }
+                    },
+                    onToggleEnabled = { enabled ->
+                        keyRoulette.setKeyEnabled(key, provider.id.toString(), enabled)
+                    },
+                    onThaw = {
+                        keyRoulette.thawKey(key, provider.id.toString())
+                    },
                 )
             }
         }
@@ -758,46 +764,89 @@ private fun KeyStatusCard(
     dragHandle: @Composable () -> Modifier = { Modifier },
     modifier: Modifier = Modifier,
     onRemove: () -> Unit,
+    onToggleEnabled: (Boolean) -> Unit = {},
+    onThaw: () -> Unit = {},
 ) {
+    val disabled = state?.disabled == true
     val isCooling = state?.isCoolingDown == true
     val remainingSec = if (isCooling) {
         (state!!.remainingCooldownMs / 1000).toInt()
     } else 0
     val progress = state?.cooldownProgress ?: 0f
+    val scope = rememberCoroutineScope()
+    val swipeState = rememberSwipeToDismissBoxState()
 
-    Card(modifier = modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .then(dragHandle())
-                .padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            // 第一行：脱敏 Key + 优先级 + 状态 + 删除
+    SwipeToDismissBox(
+        state = swipeState,
+        backgroundContent = {
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(8.dp),
+                horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        text = key.maskApiKey(),
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    if (isPrimary) {
-                        Tag(type = TagType.INFO) {
-                            Text("主", style = MaterialTheme.typography.labelSmall)
+                FilledIconButton(
+                    onClick = {
+                        scope.launch {
+                            onRemove()
+                            swipeState.reset()
                         }
                     }
+                ) {
+                    Icon(HugeIcons.Delete01, contentDescription = "删除")
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            }
+        },
+        enableDismissFromStartToEnd = false,
+        gesturesEnabled = true,
+        modifier = modifier
+    ) {
+        Card(
+            colors = androidx.compose.material3.CardDefaults.cardColors(
+                containerColor = if (disabled)
+                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                else
+                    MaterialTheme.colorScheme.surface
+            )
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(dragHandle())
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // 第一行：拖拽把手 + Key + 标签
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = key.maskApiKey(),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (disabled)
+                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                            else
+                                MaterialTheme.colorScheme.onSurface
+                        )
+                        if (isPrimary && !disabled) {
+                            Tag(type = TagType.INFO) {
+                                Text("主", style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                    }
+
                     // 状态标签
                     Surface(
                         shape = RoundedCornerShape(4.dp),
                         color = when {
+                            disabled -> MaterialTheme.colorScheme.surfaceVariant
                             isCooling -> MaterialTheme.colorScheme.errorContainer
                             state != null -> MaterialTheme.colorScheme.primaryContainer
                             else -> MaterialTheme.colorScheme.surfaceVariant
@@ -805,6 +854,7 @@ private fun KeyStatusCard(
                     ) {
                         Text(
                             text = when {
+                                disabled -> "⛔ 已禁用"
                                 isCooling -> "⏳ ${remainingSec}s"
                                 state != null -> "✅ 活跃"
                                 else -> "⚪ 未使用"
@@ -812,44 +862,59 @@ private fun KeyStatusCard(
                             style = MaterialTheme.typography.labelSmall,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                             color = when {
+                                disabled -> MaterialTheme.colorScheme.onSurfaceVariant
                                 isCooling -> MaterialTheme.colorScheme.onErrorContainer
                                 state != null -> MaterialTheme.colorScheme.onPrimaryContainer
                                 else -> MaterialTheme.colorScheme.onSurfaceVariant
                             }
                         )
                     }
-                    IconButton(
-                        onClick = onRemove,
-                        modifier = Modifier.size(28.dp)
-                    ) {
-                        Icon(
-                            HugeIcons.Cancel01,
-                            contentDescription = "删除",
-                            modifier = Modifier.size(16.dp)
-                        )
+                }
+
+                // 第二行：操作按钮
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "启用",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Switch(
+                        checked = !disabled,
+                        onCheckedChange = { onToggleEnabled(it) },
+                        modifier = Modifier.height(24.dp)
+                    )
+
+                    if (isCooling) {
+                        TextButton(onClick = onThaw) {
+                            Text("❄️ 解冻", style = MaterialTheme.typography.labelSmall)
+                        }
                     }
                 }
-            }
 
-            // 冷却进度条
-            if (isCooling) {
-                LinearProgressIndicator(
-                    progress = { progress },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(4.dp),
-                    color = MaterialTheme.colorScheme.error,
-                    trackColor = MaterialTheme.colorScheme.errorContainer,
-                )
-            }
+                // 冷却进度条
+                if (isCooling) {
+                    LinearProgressIndicator(
+                        progress = { progress },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(4.dp),
+                        color = MaterialTheme.colorScheme.error,
+                        trackColor = MaterialTheme.colorScheme.errorContainer,
+                    )
+                }
 
-            // 统计信息
-            if (state != null) {
-                Text(
-                    text = "请求: ${state.totalRequests} · 成功: ${state.successfulRequests} · 失败: ${state.failedRequests} · 连续失败: ${state.consecutiveFailures}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                // 统计信息
+                if (state != null && !disabled) {
+                    Text(
+                        text = "请求: ${state.totalRequests} · 成功: ${state.successfulRequests} · 失败: ${state.failedRequests} · 连续失败: ${state.consecutiveFailures}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
     }
