@@ -15,6 +15,9 @@ android {
     namespace = "me.rerere.rikkahub"
     compileSdk = 37
 
+    // CI 通过 -PabiFilter=arm64-v8a 只编单架构，默认全编
+    val abiList = (project.findProperty("abiFilter") as? String)?.split(",") ?: listOf("arm64-v8a", "x86_64")
+
     defaultConfig {
         applicationId = "jaye.rikkahub"
         minSdk = 26
@@ -25,7 +28,7 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         ndk {
-            abiFilters += listOf("arm64-v8a", "x86_64")
+            abiFilters += abiList
         }
     }
 
@@ -36,8 +39,9 @@ android {
             val isBuildingBundle = gradle.startParameter.taskNames.any { it.lowercase().contains("bundle") }
             isEnable = !isBuildingBundle
             reset()
-            include("arm64-v8a", "x86_64")
-            isUniversalApk = true
+            include(*abiList.toTypedArray())
+            // 单架构不需要 universal，多架构才产
+            isUniversalApk = abiList.size > 1
         }
     }
 
