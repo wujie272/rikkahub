@@ -60,14 +60,33 @@ jobs:
             echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > app/google-services.json
           fi
 
-      - name: Gradle Build
+      - name: Configure & Build (arm64-v8a only)
         run: |
           chmod +x gradlew
+          # 临时修改 splits 配置：只留 arm64-v8a，关掉 universal
+          sed -i \
+            -e 's/include("arm64-v8a", "x86_64")/include("arm64-v8a")/' \
+            -e 's/isUniversalApk = true/isUniversalApk = false/' \
+            app/build.gradle.kts
           ./gradlew assembleRelease --build-cache
 
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v7
-        if: success()
+      - name: Get version info
+        id: version
+        run: |
+          echo "versionName=$(grep versionName app/build.gradle.kts | sed 's/.*"\(.*\)".*/\1/')" >> $GITHUB_OUTPUT
+          echo "versionCode=$(grep versionCode app/build.gradle.kts | sed 's/.*=\s*\([0-9]*\)/\1/' | head -1)" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
         with:
-          name: artifacts
-          path: app/build/outputs/apk/release/*.apk
+          tag_name: v${{ steps.version.outputs.versionName }}
+          name: RikkaHub v${{ steps.version.outputs.versionName }}
+          body: |
+            ### RikkaHub v${{ steps.version.outputs.versionName }} (build ${{ steps.version.outputs.versionCode }})
+
+            🚀 自动构建发布，仅包含 arm64-v8a 架构。
+
+          draft: false
+          prerelease: false
+          files: |
+            app/build/outputs/apk/release/*.apk
