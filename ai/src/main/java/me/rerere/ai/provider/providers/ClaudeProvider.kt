@@ -319,7 +319,6 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
                 close()
             }
 
-            }
         }
 
         val eventSource = EventSources.createFactory(client)
