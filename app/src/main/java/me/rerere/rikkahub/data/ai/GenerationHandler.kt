@@ -523,6 +523,14 @@ class GenerationHandler(
                                     "should run it themselves in a terminal outside the agent."
                             ))
                         }
+                        // ask_user always enters Pending for the interactive question card UI,
+                        // regardless of needsApproval. This decouples the approval gate from
+                        // the question flow — no approve/deny buttons, just answer input.
+                        tool.toolName == "ask_user" && tool.approvalState is ToolApprovalState.Auto -> {
+                            hasPendingApproval = true
+                            tool.copy(approvalState = ToolApprovalState.Pending)
+                        }
+                        
                         // Tool needs approval and state is Auto:
                         toolDef?.needsApproval(tool.inputAsJson()) == true &&
                             tool.approvalState is ToolApprovalState.Auto -> {

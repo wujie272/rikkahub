@@ -660,7 +660,7 @@ class LocalTools(
                     required = listOf("questions")
                 )
             },
-            needsApproval = { true },
+            needsApproval = { false },
             execute = {
                 // Reached only when no human-in-the-loop surface intercepted this call. The
                 // in-app question card and the Telegram clarify flow both handle ask_user before

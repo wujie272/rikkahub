@@ -6,7 +6,6 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
-
 internal fun buildAskUserTool(): Tool = Tool(
     name = "ask_user",
     description = """
