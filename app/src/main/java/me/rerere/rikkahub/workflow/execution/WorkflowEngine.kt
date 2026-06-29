@@ -199,7 +199,7 @@ class WorkflowEngine(
                     Log.w(TAG, "fire: authoring assistant $storedId for workflow $workflowId no longer exists; falling back to first-with-Workflows")
                 }
                 settings.assistants.firstOrNull { asst ->
-                    asst.localTools.any { it is me.rerere.rikkahub.data.ai.tools.LocalToolOption.Workflows }
+                    asst.localTools.any { it is me.rerere.rikkahub.data.ai.tools.local.LocalToolOption.Workflows }
                 }
             }
         }
