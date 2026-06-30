@@ -11,10 +11,8 @@ import me.rerere.rikkahub.data.event.AppEventBus
 import me.rerere.rikkahub.data.ai.tools.local.InteractiveToolStreamer
 import me.rerere.rikkahub.data.repository.ScheduledJobRepository
 import me.rerere.rikkahub.data.repository.SshHostRepository
-import me.rerere.rikkahub.data.repository.TelegramChatRepository
+
 import me.rerere.rikkahub.data.notifications.NotificationListenerPreferences
-import me.rerere.rikkahub.data.telegram.TelegramBotClient
-import me.rerere.rikkahub.data.telegram.TelegramBotPreferences
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.service.CronJobScheduler
 import me.rerere.rikkahub.utils.EmojiData
@@ -50,29 +48,13 @@ val appModule = module {
     single { me.rerere.rikkahub.service.DirectModeActionRunner(get()) }
     single { CronJobScheduler(get(), get()) }
     single { SshHostRepository(get<me.rerere.rikkahub.data.db.AppDatabase>().sshHostDao()) }
-    single { TelegramChatRepository(get<me.rerere.rikkahub.data.db.AppDatabase>().telegramChatDao()) }
-    single { TelegramBotPreferences(get()) }
+
+
     single { me.rerere.rikkahub.browser.BrowserPreferences(get()) }
     single { me.rerere.rikkahub.data.preferences.TermuxPreferences(get()) }
-    // Pass 3: Telegram-bound screenshot streamer for headless browser mode. Bound to the
-    // [BrowserScreenshotStreamer] interface so [BrowserController.streamScreenshotIfHeadless]
-    // can resolve it lazily via Koin without taking a constructor dep — avoids a cycle
-    // through TelegramBotClient → TelegramBotPreferences → ... → LocalTools → controller.
-    single<me.rerere.rikkahub.browser.BrowserScreenshotStreamer> {
-        me.rerere.rikkahub.data.telegram.TelegramBrowserScreenshotStreamer(get(), get(), get())
-    }
-    // Interactive-tool post-action screenshot streamer for headless mode (Telegram bot /
-    // cron / sub-agent). Resolves lazily inside each interactive tool's execute lambda so
-    // there's no DI cycle through LocalTools → ChatService → ... → TelegramBotClient.
-    single<InteractiveToolStreamer> {
-        me.rerere.rikkahub.data.telegram.TelegramInteractiveToolStreamer(get(), get(), get(), get())
-    }
+
+
     single { me.rerere.rikkahub.data.preferences.ToolApprovalPreferences(get()) }
-    single { TelegramBotClient { runCatching { kotlinx.coroutines.runBlocking { get<TelegramBotPreferences>().current().token } }.getOrDefault("") } }
-    // Phase 24 — Telegram long-poll stall tracker. Shared singleton: TelegramBotService's
-    // poll loop calls markUpdate() on every getUpdates; the in-service stall checker and
-    // DoctorChecks read it. No cross-dependencies, so no DI-cycle risk.
-    single { me.rerere.rikkahub.data.telegram.TelegramPollStallTracker() }
     single { NotificationListenerPreferences(get()) }
 
     // Phase 3: Group roleplay speech strategy engine
@@ -182,8 +164,7 @@ val appModule = module {
             cronJobScheduler = get(),
             settingsStore = get(),
             sshHostRepository = get(),
-            telegramBotPreferences = get(),
-            telegramBotClient = get(),
+
             notificationListenerPreferences = get(),
             mcpManager = get(),
             externalAutomationConfig = get(),
@@ -273,7 +254,7 @@ val appModule = module {
         me.rerere.rikkahub.ui.pages.setting.doctor.DoctorChecks(
             context = get(),
             settingsStore = get(),
-            telegramPrefs = get(),
+
             workflowRepository = get(),
             scheduledJobRepository = get(),
             scheduledJobRunRepository = get(),

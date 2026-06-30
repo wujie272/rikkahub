@@ -1217,8 +1217,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="assistant_page_local_tools_mic_recorder_title">麦克风录音</string>
   <string name="assistant_page_local_tools_notification_desc">代表用户发布 Android 通知。</string>
   <string name="assistant_page_local_tools_notification_title">通知</string>
-  <string name="assistant_page_local_tools_notifications_desc">让大模型读取来自其他应用的传入通知。白名单应用还会自动转发到你的默认 Telegram 聊天。在 设置 -&gt; 通知 中配置。</string>
-  <string name="assistant_page_local_tools_notifications_title">通知感知</string>
+    <string name="assistant_page_local_tools_notifications_title">通知感知</string>
   <string name="assistant_page_local_tools_perm_denied_toast">%1$s 权限被拒绝</string>
   <string name="assistant_page_local_tools_perm_needed">需要权限 — 点击授予</string>
   <string name="assistant_page_local_tools_perm_special_dialog_message">此工具需要系统访问权限。你将被带到系统设置页面进行授权。完成后请返回此处。</string>
@@ -1256,11 +1255,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="assistant_page_local_tools_sub_agents_title">子智能体</string>
   <string name="assistant_page_local_tools_system_intents_desc">让助手为你预填系统应用，由你最终确认：日历事件、新建联系人、邮件编辑器、短信编辑器、WiFi 设置、地图。没有你在目标应用中的点击，不会保存或发送任何内容。</string>
   <string name="assistant_page_local_tools_system_intents_title">系统 Intent</string>
-  <string name="assistant_page_local_tools_telegram_desc">将助手作为 Telegram 机器人运行 — 收发消息、文件，管理 /命令。完全通过工具配置（设置 token、白名单、默认聊天，然后启用）。前台服务处理长轮询。</string>
-  <string name="assistant_page_local_tools_telegram_notoken_message">开关已打开，但尚未设置机器人 Token。\n\n简单方法：在聊天中让助手 — &quot;设置 Telegram 机器人，我的 token 是 …，我的用户 ID 是 …，把我设为默认聊天，并启用它。&quot;\n\n手动方法：在 Telegram 上向 @BotFather 发送 /newbot 获取 token，向 @userinfobot 发送 /start 获取你的数字用户 ID。然后让助手设置，或在 设置 → Telegram 机器人 中粘贴。</string>
-  <string name="assistant_page_local_tools_telegram_notoken_title">Telegram 机器人需要 Token</string>
-  <string name="assistant_page_local_tools_telegram_title">Telegram 机器人</string>
-  <string name="assistant_page_local_tools_telephony_desc">读取 SIM 卡和网络信息（运营商、网络类型）。需要 READ_PHONE_STATE 权限。</string>
+          <string name="assistant_page_local_tools_telephony_desc">读取 SIM 卡和网络信息（运营商、网络类型）。需要 READ_PHONE_STATE 权限。</string>
   <string name="assistant_page_local_tools_telephony_title">电话信息</string>
   <string name="assistant_page_local_tools_termux_postgrant_command">mkdir -p ~/.termux &amp;&amp; echo \'allow-external-apps=true\' &gt;&gt; ~/.termux/termux.properties</string>
   <string name="assistant_page_local_tools_termux_postgrant_copied">命令已复制 — 将其粘贴到 Termux 中。</string>
@@ -1460,10 +1455,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_page_notifications_action_ago_hours">%1$d 小时前</string>
   <string name="setting_page_notifications_action_ago_minutes">%1$d 分钟前</string>
   <string name="setting_page_notifications_action_ago_seconds">%1$d 秒前</string>
-  <string name="setting_page_notifications_default_chat_set">默认 Telegram 聊天：%1$s</string>
-  <string name="setting_page_notifications_default_chat_unset">默认 Telegram 聊天：未设置（自动路由已禁用）</string>
-  <string name="setting_page_notifications_desc">通知访问状态、最近活动日志，以及自动转发到 Telegram 的逐应用白名单。</string>
-  <string name="setting_page_notifications_open_settings">打开通知使用权设置</string>
+        <string name="setting_page_notifications_open_settings">打开通知使用权设置</string>
   <string name="setting_page_notifications_recent_empty">尚未捕获任何通知。</string>
   <string name="setting_page_notifications_recent_section">最近活动</string>
   <string name="setting_page_notifications_status_connected">服务：已连接</string>
@@ -1505,11 +1497,9 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
     <string name="perm_desc_overlay">自动操作时显示“智能体正在工作”悬浮标签。</string>
     <string name="perm_desc_write_settings">允许智能体通过 set_brightness 调整亮度。</string>
     <string name="perm_desc_dnd">允许智能体更改响铃模式和每流音量。</string>
-    <string name="perm_desc_battery">熄屏时保持 Telegram 机器人前台服务响应。</string>
-    <string name="perm_desc_notifications">机器人前台服务和 TTS/进度通知所需。</string>
+        <string name="perm_desc_notifications">机器人前台服务和 TTS/进度通知所需。</string>
     <string name="perm_desc_accessibility">点击、滑动、截图、读取屏幕等界面操作工具所需。</string>
-    <string name="perm_desc_notification_listener">允许智能体读取通知并自动将白名单应用转发到 Telegram。</string>
-    <string name="perm_desc_custom">自定义权限。所属应用可能尚未安装。</string>
+        <string name="perm_desc_custom">自定义权限。所属应用可能尚未安装。</string>
     <string name="perm_desc_runtime_fallback">一个或多个已启用的工具所需的运行时权限。</string>
     <string name="perm_desc_auto_granted">安装时自动授予（无需操作）。</string>
   <string name="setting_page_scheduled_jobs">定时任务</string>
@@ -1552,26 +1542,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_page_scheduled_jobs_subtitle_never_run">从未触发</string>
   <string name="setting_page_scheduled_jobs_subtitle_ran">上次触发 %1$s</string>
   <string name="setting_page_scheduled_jobs_subtitle_when">时间：%1$s</string>
-  <string name="setting_page_telegram">Telegram 机器人</string>
-  <string name="setting_page_telegram_battery_already_ok">已从电池优化中加入白名单。</string>
-  <string name="setting_page_telegram_battery_desc">屏幕关闭时，激进的 OEM 系统（小米、OPPO、一加、Vivo）会切断非白名单应用的网络。机器人只能在偶尔的维护窗口期投递消息。点击将 RikkaHub 加入白名单。</string>
-  <string name="setting_page_telegram_battery_needed">电池优化：未加入白名单 - 点击修复</string>
-  <string name="setting_page_telegram_battery_ok">电池优化：已加入白名单</string>
-  <string name="setting_page_telegram_boot_note">启动后，机器人也会在设备开机时自动启动。</string>
-  <string name="setting_page_telegram_default_chat">默认聊天</string>
-  <string name="setting_page_telegram_default_chat_desc">当大模型省略 chat_id 时（例如定时任务提醒），外发消息的去向。使用你的 Telegram 数字用户 ID。</string>
-  <string name="setting_page_telegram_desc">将大模型作为 Telegram 机器人运行 — 从任何设备远程与它聊天。</string>
-  <string name="setting_page_telegram_no_token_toast">请先设置机器人 Token。</string>
-  <string name="setting_page_telegram_start">启动</string>
-  <string name="setting_page_telegram_status_running">运行中</string>
-  <string name="setting_page_telegram_status_starting">正在启动…</string>
-  <string name="setting_page_telegram_status_stopped">已停止</string>
-  <string name="setting_page_telegram_stop">停止</string>
-  <string name="setting_page_telegram_token">机器人 Token</string>
-  <string name="setting_page_telegram_token_desc">来自 @BotFather。必须停止机器人才能编辑。</string>
-  <string name="setting_page_telegram_whitelist">允许的聊天 ID</string>
-  <string name="setting_page_telegram_whitelist_desc">用逗号分隔。留空 = 不允许任何人。用 @userinfobot 查找你的 ID。</string>
-  <string name="setting_page_tool_approvals">工具授权</string>
+                                        <string name="setting_page_tool_approvals">工具授权</string>
   <string name="setting_page_tool_approvals_desc">你通过“始终允许”永久授权的工具。可随时撤销。</string>
   <string name="setting_page_tool_approvals_empty">尚未授予任何工具“始终允许”。机器人在运行任何有副作用的工具前都会询问。</string>
   <string name="setting_page_tool_approvals_header">以下工具在本设备上运行时永不询问。如果你不再信任模型拥有此能力，请撤销。</string>

@@ -135,7 +135,7 @@ object PermissionInventory {
                 return Row(
                     id = perm,
                     label = "Ignore battery optimizations",
-                    description = "Keeps the Telegram bot foreground service responsive when the screen is off.",
+                    description = "Keeps background services (workflows, cron jobs) responsive when the screen is off.",
                     status = if (granted) Status.GRANTED else Status.DENIED,
                     group = Group.SpecialAccess,
                     // ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS pops a system dialog asking
@@ -243,7 +243,7 @@ object PermissionInventory {
         return Row(
             id = "rikkahub.SERVICE_NOTIFICATION_LISTENER",
             label = "Notification access",
-            description = "Lets the agent read incoming notifications and auto-forward whitelisted apps to Telegram.",
+            description = "Lets the agent read incoming notifications from other apps.",
             status = if (enabled) Status.GRANTED else Status.DENIED,
             group = Group.ServicesAndIntegrations,
             grant = GrantAction.SystemSettings(

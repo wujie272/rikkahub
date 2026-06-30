@@ -1188,11 +1188,8 @@
   <string name="assistant_page_local_tools_section_network">Network</string>
   <string name="assistant_page_local_tools_ssh_title">SSH</string>
   <string name="assistant_page_local_tools_ssh_desc">Let the assistant run shell commands and transfer files on remote machines via SSH/SFTP. Saved hosts, password or private-key auth, accept-new host-key checking.</string>
-  <string name="assistant_page_local_tools_telegram_title">Telegram bot</string>
-  <string name="assistant_page_local_tools_telegram_desc">Run the assistant as a Telegram bot — send/receive messages, files, manage /commands. Configured entirely via tools (set token, whitelist, default chat, then enable). Foreground service handles long-poll.</string>
-  <string name="setting_page_telegram">Telegram bot</string>
-  <string name="setting_page_telegram_desc">Run the LLM as a Telegram bot — chat with it remotely from any device.</string>
-  <string name="setting_page_workflows">Workflows</string>
+
+      <string name="setting_page_workflows">Workflows</string>
   <string name="setting_page_workflows_desc">Trigger-based automations: when something happens on the device, run a sequence of tools.</string>
   <string name="setting_page_scheduled_jobs">Scheduled jobs</string>
   <string name="setting_page_scheduled_jobs_desc">Time-based jobs the assistant scheduled — one-shots and recurring cron expressions.</string>
@@ -1208,24 +1205,7 @@
   <string name="setting_page_tool_approvals_empty">No tools have been "Always Allow"-granted yet. The bot will ask before running any side-effecting tool.</string>
   <string name="setting_page_tool_approvals_revoke">Revoke</string>
   <string name="setting_page_tool_approvals_revoke_all">Revoke all</string>
-  <string name="setting_page_telegram_token">Bot token</string>
-  <string name="setting_page_telegram_token_desc">From @BotFather. The bot must be stopped to edit.</string>
-  <string name="setting_page_telegram_default_chat">Default chat</string>
-  <string name="setting_page_telegram_default_chat_desc">Where outbound messages go when the LLM omits chat_id (e.g. cron job alerts). Use your numeric Telegram user id.</string>
-  <string name="setting_page_telegram_whitelist">Allowed chat IDs</string>
-  <string name="setting_page_telegram_whitelist_desc">Comma-separated. Empty = nobody. Find your id with @userinfobot.</string>
-  <string name="setting_page_telegram_status_running">Running</string>
-  <string name="setting_page_telegram_status_starting">Starting…</string>
-  <string name="setting_page_telegram_status_stopped">Stopped</string>
-  <string name="setting_page_telegram_start">Start</string>
-  <string name="setting_page_telegram_stop">Stop</string>
-  <string name="setting_page_telegram_no_token_toast">Set the bot token first.</string>
-  <string name="setting_page_telegram_boot_note">When started, the bot also auto-starts on device boot.</string>
-  <string name="setting_page_telegram_battery_ok">Battery optimization: whitelisted</string>
-  <string name="setting_page_telegram_battery_needed">Battery optimization: not whitelisted - tap to fix</string>
-  <string name="setting_page_telegram_battery_desc">When the screen turns off, aggressive OEM ROMs (Xiaomi, OPPO, OnePlus, Vivo) cut network for non-whitelisted apps. The bot will only deliver during occasional maintenance windows. Tap to whitelist RikkaHub.</string>
-  <string name="setting_page_telegram_battery_already_ok">Already whitelisted from battery optimization.</string>
-  <string name="assistant_page_local_tools_media_player_desc">Play and stop audio from a file path or URL.</string>
+                                  <string name="assistant_page_local_tools_media_player_desc">Play and stop audio from a file path or URL.</string>
   <string name="assistant_page_local_tools_media_player_title">Media player</string>
   <string name="assistant_page_local_tools_media_scanner_desc">Notify Android\'s media scanner about new files so they appear in gallery/music apps.</string>
   <string name="assistant_page_local_tools_media_scanner_title">Media scanner</string>
@@ -1314,8 +1294,8 @@
   <string name="assistant_page_local_tools_app_launcher_title">App launcher</string>
   <string name="assistant_page_local_tools_app_launcher_desc">Open installed apps by package name (e.g. Termux, Settings) and list available apps. Pairs with screen automation for full UI control.</string>
   <string name="assistant_page_local_tools_notifications_title">Notification awareness</string>
-  <string name="assistant_page_local_tools_notifications_desc">Let the LLM read incoming notifications from other apps. Whitelisted apps also auto-forward to your default Telegram chat. Configure in Settings -&gt; Notifications.</string>
-  <string name="assistant_page_local_tools_termux_title">Termux integration</string>
+  <string name="assistant_page_local_tools_notifications_desc">Let the LLM read incoming notifications from other apps. Configure in Settings -&gt; Notifications.</string>
+    <string name="assistant_page_local_tools_termux_title">Termux integration</string>
   <string name="assistant_page_local_tools_termux_status_not_installed">Termux not installed - install from github.com/termux/termux-app/releases</string>
   <string name="assistant_page_local_tools_termux_status_no_permission">Toggle on to grant the RUN_COMMAND permission</string>
   <string name="assistant_page_local_tools_termux_status_untested">Almost ready. Open Termux and run: mkdir -p ~/.termux &amp;&amp; echo \'allow-external-apps=true\' &gt;&gt; ~/.termux/termux.properties — then force-stop Termux and reopen. Tap to verify.</string>
@@ -1329,8 +1309,7 @@
   <string name="assistant_page_local_tools_termux_postgrant_command">mkdir -p ~/.termux &amp;&amp; echo \'allow-external-apps=true\' &gt;&gt; ~/.termux/termux.properties</string>
   <string name="assistant_page_local_tools_termux_postgrant_copy">Copy command</string>
   <string name="assistant_page_local_tools_termux_postgrant_copied">Command copied — paste it into Termux.</string>
-  <string name="assistant_page_local_tools_telegram_notoken_title">Telegram bot needs a token</string>
-  <string name="assistant_page_local_tools_telegram_notoken_message">The toggle is on, but no bot token is set yet.\n\nEasy way: ask the assistant in chat — &quot;Set up the Telegram bot, my token is …, my user id is …, set me as default chat, enable it.&quot;\n\nManual way: message @BotFather on Telegram with /newbot for a token, and @userinfobot with /start for your numeric user id. Then ask the assistant or paste them in Settings → Telegram bot.</string>
+
   <string name="assistant_page_local_tools_cron_jobs_toast_hint">Heads up: scheduled jobs use the tools you have enabled. If a job calls SSH, Telegram, or any other tool, those toggles must also be on.</string>
   <string name="assistant_page_local_tools_dialog_dismiss">Got it</string>
   <string name="assistant_page_local_tools_termux_verify_no_permission">RUN_COMMAND permission not granted. Toggle Termux off then on to retry the system prompt.</string>
@@ -1392,11 +1371,9 @@
     <string name="perm_desc_overlay">Lets RikkaHub draw the "agent is working" overlay while automation is in progress.</string>
     <string name="perm_desc_write_settings">Lets the agent change brightness via set_brightness.</string>
     <string name="perm_desc_dnd">Lets the agent change ringer mode and per-stream volume.</string>
-    <string name="perm_desc_battery">Keeps the Telegram bot foreground service responsive when the screen is off.</string>
-    <string name="perm_desc_notifications">Required so the bot foreground service and TTS / progress notifications can show.</string>
+        <string name="perm_desc_notifications">Required so the bot foreground service and TTS / progress notifications can show.</string>
     <string name="perm_desc_accessibility">Required for tap, swipe, click_node, screenshot, read_window_tree, set_text and other UI-driving tools.</string>
-    <string name="perm_desc_notification_listener">Lets the agent read incoming notifications and auto-forward whitelisted apps to Telegram.</string>
-    <string name="perm_desc_custom">Custom permission. Owner app may not be installed yet.</string>
+        <string name="perm_desc_custom">Custom permission. Owner app may not be installed yet.</string>
     <string name="perm_desc_runtime_fallback">Runtime permission required by one or more enabled tools.</string>
     <string name="perm_desc_auto_granted">Auto-granted at install (no user action needed).</string>
   <string name="setting_provider_delete_title">Remove provider?</string>
@@ -1406,15 +1383,13 @@
   <string name="setting_provider_aicore_release_stage">Release stage</string>
   <string name="setting_provider_aicore_status_help">On-device. Requires Pixel 8/9/10 with the AICore app installed AND enrollment in the GenAI Prompt-API early-access program (separate opt-in). If you see ErrorCode 606 / FEATURE_NOT_FOUND on first run, you have AICore installed but not the Prompt-API channel — request access via the GenAI Prompt-API early-access form, then reboot. Tool calling is supported via prompt engineering — Gemini Nano emits &lt;tool_call&gt; markup which RikkaHub parses and dispatches.</string>
   <string name="setting_page_notifications">Notifications</string>
-  <string name="setting_page_notifications_desc">Notification access status, recent activity log, and the per-app whitelist that auto-forwards to Telegram.</string>
-  <string name="setting_page_notifications_status_section">Status</string>
+  <string name="setting_page_notifications_desc">Notification access status, recent activity log, and the per-app whitelist.</string>
+    <string name="setting_page_notifications_status_section">Status</string>
   <string name="setting_page_notifications_status_connected">Service: Connected</string>
   <string name="setting_page_notifications_status_not_connected">Service: Not connected</string>
   <string name="setting_page_notifications_status_help">RikkaHub needs notification access to read incoming notifications. Open Settings → Notification access → Notification access and enable RikkaHub.</string>
   <string name="setting_page_notifications_open_settings">Open Notification access settings</string>
-  <string name="setting_page_notifications_default_chat_set">Default Telegram chat: %1$s</string>
-  <string name="setting_page_notifications_default_chat_unset">Default Telegram chat: not set (auto-route disabled)</string>
-  <string name="setting_page_notifications_whitelist_section">Auto-route whitelist</string>
+      <string name="setting_page_notifications_whitelist_section">Auto-route whitelist</string>
   <string name="setting_page_notifications_whitelist_help">Apps whose notifications auto-forward to your default Telegram chat. Empty = nothing forwarded. Toggle each app on or off in the picker.</string>
   <string name="setting_page_notifications_whitelist_label">Whitelisted apps</string>
   <string name="setting_page_notifications_whitelist_summary_zero">No apps whitelisted</string>

@@ -45,7 +45,6 @@ import me.rerere.rikkahub.data.ai.tools.local.LocalToolOption
 import me.rerere.rikkahub.data.ai.tools.local.PermissionHelper
 import me.rerere.rikkahub.data.ai.tools.local.TermuxIntegration
 import me.rerere.rikkahub.data.model.Assistant
-import me.rerere.rikkahub.data.telegram.TelegramBotPreferences
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionInfo
@@ -158,7 +157,6 @@ private fun AssistantLocalToolContent(
     // recently; Telegram dialog is suppressed if a token is on file).
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
-    val telegramBotPreferences = koinInject<TelegramBotPreferences>()
     // Hardware-availability gate for the NFC toggle: a device with no NFC chip can never
     // run the nfc tools, so the toggle is shown disabled with a "no NFC hardware" subtitle
     // rather than letting the user enable a tool that would only ever error.
@@ -167,11 +165,9 @@ private fun AssistantLocalToolContent(
     }
 
     var showTermuxPostGrantDialog by remember { mutableStateOf(false) }
-    var showTelegramNoTokenDialog by remember { mutableStateOf(false) }
     var showWorkflowsHintDialog by remember { mutableStateOf(false) }
     var showKeyboardSetupDialog by remember { mutableStateOf(false) }
     var termuxDialogShownThisVisit by remember { mutableStateOf(false) }
-    var telegramDialogShownThisVisit by remember { mutableStateOf(false) }
     var cronToastShownThisVisit by remember { mutableStateOf(false) }
     var workflowsDialogShownThisVisit by remember { mutableStateOf(false) }
     var keyboardDialogShownThisVisit by remember { mutableStateOf(false) }
@@ -218,18 +214,7 @@ private fun AssistantLocalToolContent(
         )
     }
 
-    if (showTelegramNoTokenDialog) {
-        AlertDialog(
-            onDismissRequest = { showTelegramNoTokenDialog = false },
-            title = { Text(stringResource(R.string.assistant_page_local_tools_telegram_notoken_title)) },
-            text = { Text(stringResource(R.string.assistant_page_local_tools_telegram_notoken_message)) },
-            confirmButton = {
-                TextButton(onClick = { showTelegramNoTokenDialog = false }) {
-                    Text(stringResource(R.string.assistant_page_local_tools_dialog_dismiss))
-                }
-            },
-        )
-    }
+
 
     if (showWorkflowsHintDialog) {
         AlertDialog(
@@ -870,30 +855,7 @@ private fun AssistantLocalToolContent(
                     )
                 }
             )
-            item(
-                headlineContent = {
-                    Text(stringResource(R.string.assistant_page_local_tools_telegram_title))
-                },
-                supportingContent = {
-                    Text(stringResource(R.string.assistant_page_local_tools_telegram_desc))
-                },
-                trailingContent = {
-                    PermissionedSwitch(
-                        checked = assistant.localTools.contains(LocalToolOption.TelegramBot),
-                        onCheckedChange = { newValue ->
-                            toggleLocalTool(LocalToolOption.TelegramBot, newValue)
-                            if (newValue && !telegramDialogShownThisVisit) {
-                                scope.launch {
-                                    if (telegramBotPreferences.current().token.isBlank()) {
-                                        telegramDialogShownThisVisit = true
-                                        showTelegramNoTokenDialog = true
-                                    }
-                                }
-                            }
-                        }
-                    )
-                }
-            )
+
             item(
                 headlineContent = {
                     Text(stringResource(R.string.assistant_page_local_tools_mcp_control_title))

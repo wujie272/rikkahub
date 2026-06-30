@@ -94,16 +94,8 @@ class RikkaHubApp : Application() {
         startWebServerIfEnabled()
 
         // Eagerly construct ChatService on the main thread. Its constructor calls
-        // LifecycleRegistry.addObserver which throws if it runs off-main, and the Telegram
-        // bot service runs on Dispatchers.IO — without this priming, the first inbound bot
-        // message after a fresh app start crashes the bot's handleIncoming with
-        // "addObserver must be called on the main thread" because Koin's lazy factory
-        // builds ChatService on the IO thread.
+        // LifecycleRegistry.addObserver which throws if it runs off-main.
         eagerlyInitChatService()
-
-        // Start Telegram bot if previously enabled — service is START_NOT_STICKY so OS won't
-        // auto-revive it after a process kill; we need to bring it back ourselves.
-        startTelegramBotIfEnabled()
 
         // Initialise the agent's `~` workspace at /data/data/<pkg>/files/workspace/.
         // Tools resolve `~` and `~/foo` paths to this dir, giving the LLM a stable
@@ -344,25 +336,6 @@ class RikkaHubApp : Application() {
         }
     }
 
-    private fun startTelegramBotIfEnabled() {
-        get<AppScope>().launch(Dispatchers.IO) {
-            runCatching {
-                val cfg = get<me.rerere.rikkahub.data.telegram.TelegramBotPreferences>().current()
-                if (cfg.isUsable) {
-                    Log.i(TAG, "startTelegramBotIfEnabled: re-starting bot service")
-                    me.rerere.rikkahub.service.TelegramBotService.start(this@RikkaHubApp)
-                    // Defense-in-depth against OEM aggressive task-killing: a 30-min
-                    // periodic health probe re-starts the service if anything killed it
-                    // outside our control. Idempotent — uses ExistingPeriodicWorkPolicy.KEEP.
-                    me.rerere.rikkahub.service.TelegramBotHealthWorker.schedule(this@RikkaHubApp)
-                } else {
-                    me.rerere.rikkahub.service.TelegramBotHealthWorker.cancel(this@RikkaHubApp)
-                }
-            }.onFailure {
-                Log.e(TAG, "startTelegramBotIfEnabled failed", it)
-            }
-        }
-    }
 
     private fun cleanupWorkspaceTempDirs() {
         get<AppScope>().launch(Dispatchers.IO) {

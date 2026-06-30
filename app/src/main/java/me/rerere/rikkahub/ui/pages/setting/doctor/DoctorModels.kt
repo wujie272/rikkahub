@@ -69,7 +69,6 @@ sealed interface FixAction {
 }
 
 enum class AppRouteKey {
-    SettingTelegram,
     SettingScheduledJobs,
     SettingWorkflows,
     SettingPermissions,

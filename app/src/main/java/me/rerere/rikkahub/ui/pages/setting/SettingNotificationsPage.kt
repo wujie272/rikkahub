@@ -55,8 +55,6 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.notifications.NotificationEntry
 import me.rerere.rikkahub.data.notifications.NotificationListenerConfig
 import me.rerere.rikkahub.data.notifications.NotificationListenerPreferences
-import me.rerere.rikkahub.data.telegram.TelegramBotConfig
-import me.rerere.rikkahub.data.telegram.TelegramBotPreferences
 import me.rerere.rikkahub.service.RikkaNotificationListenerService
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
@@ -67,7 +65,6 @@ import org.koin.compose.koinInject
 /**
  * Settings page for the notification listener subsystem. Shows live bound state, the
  * per-app whitelist editor, and a recent-activity log. Whitelist persists via
- * NotificationListenerPreferences. Mirrors the SettingTelegramPage layout.
  */
 @Composable
 fun SettingNotificationsPage() {
@@ -76,11 +73,10 @@ fun SettingNotificationsPage() {
     val scope = rememberCoroutineScope()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
-    val listenerPrefs: NotificationListenerPreferences = koinInject()
-    val telegramPrefs: TelegramBotPreferences = koinInject()
 
+
+    val listenerPrefs: NotificationListenerPreferences = koinInject()
     val cfg by listenerPrefs.flow.collectAsStateWithLifecycle(initialValue = NotificationListenerConfig())
-    val tg by telegramPrefs.flow.collectAsStateWithLifecycle(initialValue = TelegramBotConfig())
 
     // Live service handle: collected via StateFlow when the service is bound; falls back to
     // empty defaults otherwise. Recompositions key off the listener's bound flag.
@@ -142,19 +138,7 @@ fun SettingNotificationsPage() {
                         Text(stringResource(R.string.setting_page_notifications_open_settings))
                     },
                 )
-                item(
-                    headlineContent = {
-                        val chatId = tg.defaultChatId
-                        Text(
-                            if (chatId != null && tg.enabled)
-                                stringResource(R.string.setting_page_notifications_default_chat_set, chatId.toString())
-                            else
-                                stringResource(R.string.setting_page_notifications_default_chat_unset),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    },
-                )
+
             }
 
             // Whitelist

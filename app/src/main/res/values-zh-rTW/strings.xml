@@ -1169,8 +1169,7 @@
   <string name="assistant_page_local_tools_mic_recorder_title">麥克風錄音</string>
   <string name="assistant_page_local_tools_notification_desc">代表使用者發佈 Android 通知。</string>
   <string name="assistant_page_local_tools_notification_title">通知</string>
-  <string name="assistant_page_local_tools_notifications_desc">讓大型語言模型讀取來自其他應用程式的傳入通知。白名單應用程式還會自動轉發到你的預設 Telegram 聊天。在 設定 -&gt; 通知 中設定。</string>
-  <string name="assistant_page_local_tools_notifications_title">通知感知</string>
+    <string name="assistant_page_local_tools_notifications_title">通知感知</string>
   <string name="assistant_page_local_tools_perm_denied_toast">%1$s 權限遭拒絕</string>
   <string name="assistant_page_local_tools_perm_needed">需要權限 — 點選授予</string>
   <string name="assistant_page_local_tools_perm_special_dialog_message">此工具需要系統存取權限。你將被帶到系統設定頁面進行授權。完成後請返回此處。</string>
@@ -1208,11 +1207,7 @@
   <string name="assistant_page_local_tools_sub_agents_title">子代理</string>
   <string name="assistant_page_local_tools_system_intents_desc">讓助理為你預先填寫系統應用程式，由你最終確認：日曆活動、新增聯絡人、電子郵件編輯器、簡訊編輯器、WiFi 設定、地圖。沒有你在目標應用程式中的點選，不會儲存或傳送任何內容。</string>
   <string name="assistant_page_local_tools_system_intents_title">系統 Intent</string>
-  <string name="assistant_page_local_tools_telegram_desc">將助理作為 Telegram 機器人執行 — 收發訊息、檔案，管理 /指令。完全透過工具設定（設定 token、白名單、預設聊天，然後啟用）。前景服務處理長輪詢。</string>
-  <string name="assistant_page_local_tools_telegram_notoken_message">開關已開啟，但尚未設定機器人 Token。\n\n簡單方法：在聊天中讓助理 — &quot;設定 Telegram 機器人，我的 token 是 …，我的使用者 ID 是 …，把我設為預設聊天，並啟用它。&quot;\n\n手動方法：在 Telegram 上向 @BotFather 傳送 /newbot 取得 token，向 @userinfobot 傳送 /start 取得你的數字使用者 ID。然後讓助理設定，或在 設定 → Telegram 機器人 中貼上。</string>
-  <string name="assistant_page_local_tools_telegram_notoken_title">Telegram 機器人需要 Token</string>
-  <string name="assistant_page_local_tools_telegram_title">Telegram 機器人</string>
-  <string name="assistant_page_local_tools_telephony_desc">讀取 SIM 卡和網路資訊（電信業者、網路類型）。需要 READ_PHONE_STATE 權限。</string>
+          <string name="assistant_page_local_tools_telephony_desc">讀取 SIM 卡和網路資訊（電信業者、網路類型）。需要 READ_PHONE_STATE 權限。</string>
   <string name="assistant_page_local_tools_telephony_title">電話資訊</string>
   <string name="assistant_page_local_tools_termux_postgrant_command">mkdir -p ~/.termux &amp;&amp; echo \'allow-external-apps=true\' &gt;&gt; ~/.termux/termux.properties</string>
   <string name="assistant_page_local_tools_termux_postgrant_copied">指令已複製 — 將其貼到 Termux 中。</string>
@@ -1412,10 +1407,7 @@
   <string name="setting_page_notifications_action_ago_hours">%1$d 小時前</string>
   <string name="setting_page_notifications_action_ago_minutes">%1$d 分鐘前</string>
   <string name="setting_page_notifications_action_ago_seconds">%1$d 秒前</string>
-  <string name="setting_page_notifications_default_chat_set">預設 Telegram 聊天：%1$s</string>
-  <string name="setting_page_notifications_default_chat_unset">預設 Telegram 聊天：未設定（自動路由已停用）</string>
-  <string name="setting_page_notifications_desc">通知存取狀態、最近活動記錄，以及自動轉發到 Telegram 的逐應用程式白名單。</string>
-  <string name="setting_page_notifications_open_settings">開啟通知存取權設定</string>
+        <string name="setting_page_notifications_open_settings">開啟通知存取權設定</string>
   <string name="setting_page_notifications_recent_empty">尚未擷取任何通知。</string>
   <string name="setting_page_notifications_recent_section">最近活動</string>
   <string name="setting_page_notifications_status_connected">服務：已連接</string>
@@ -1483,26 +1475,7 @@
   <string name="setting_page_scheduled_jobs_subtitle_never_run">從未觸發</string>
   <string name="setting_page_scheduled_jobs_subtitle_ran">上次觸發 %1$s</string>
   <string name="setting_page_scheduled_jobs_subtitle_when">時間：%1$s</string>
-  <string name="setting_page_telegram">Telegram 機器人</string>
-  <string name="setting_page_telegram_battery_already_ok">已從電池最佳化中加入白名單。</string>
-  <string name="setting_page_telegram_battery_desc">螢幕關閉時，激進的 OEM 系統（小米、OPPO、一加、Vivo）會切斷非白名單應用程式的網路。機器人只能在偶爾的維護時段投遞訊息。點選將 RikkaHub 加入白名單。</string>
-  <string name="setting_page_telegram_battery_needed">電池最佳化：未加入白名單 - 點選修復</string>
-  <string name="setting_page_telegram_battery_ok">電池最佳化：已加入白名單</string>
-  <string name="setting_page_telegram_boot_note">啟動後，機器人也會在裝置開機時自動啟動。</string>
-  <string name="setting_page_telegram_default_chat">預設聊天</string>
-  <string name="setting_page_telegram_default_chat_desc">當大型語言模型省略 chat_id 時（例如排程任務提醒），外發訊息的去向。使用你的 Telegram 數字使用者 ID。</string>
-  <string name="setting_page_telegram_desc">將大型語言模型作為 Telegram 機器人執行 — 從任何裝置遠端與它聊天。</string>
-  <string name="setting_page_telegram_no_token_toast">請先設定機器人 Token。</string>
-  <string name="setting_page_telegram_start">啟動</string>
-  <string name="setting_page_telegram_status_running">執行中</string>
-  <string name="setting_page_telegram_status_starting">正在啟動…</string>
-  <string name="setting_page_telegram_status_stopped">已停止</string>
-  <string name="setting_page_telegram_stop">停止</string>
-  <string name="setting_page_telegram_token">機器人 Token</string>
-  <string name="setting_page_telegram_token_desc">來自 @BotFather。必須停止機器人才能編輯。</string>
-  <string name="setting_page_telegram_whitelist">允許的聊天 ID</string>
-  <string name="setting_page_telegram_whitelist_desc">以逗號分隔。留空 = 不允許任何人。用 @userinfobot 查詢你的 ID。</string>
-  <string name="setting_page_tool_approvals">工具授權</string>
+                                        <string name="setting_page_tool_approvals">工具授權</string>
   <string name="setting_page_tool_approvals_desc">你透過「永遠允許」永久授權的工具。可隨時撤銷。</string>
   <string name="setting_page_tool_approvals_empty">尚未授予任何工具「永遠允許」。機器人在執行任何有副作用的工具前都會詢問。</string>
   <string name="setting_page_tool_approvals_header">以下工具在本裝置上執行時永不詢問。如果你不再信任模型擁有此能力，請撤銷。</string>

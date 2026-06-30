@@ -52,7 +52,6 @@ sealed class LocalToolOption {
     @Serializable @SerialName("fingerprint")     data object Fingerprint    : LocalToolOption()
     @Serializable @SerialName("cron_jobs")       data object CronJobs       : LocalToolOption()
     @Serializable @SerialName("ssh")             data object Ssh            : LocalToolOption()
-    @Serializable @SerialName("telegram_bot")    data object TelegramBot    : LocalToolOption()
     @Serializable @SerialName("screen_automation") data object ScreenAutomation : LocalToolOption()
     @Serializable @SerialName("app_launcher")      data object AppLauncher       : LocalToolOption()
     @Serializable @SerialName("termux")            data object Termux            : LocalToolOption()

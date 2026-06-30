@@ -69,20 +69,6 @@ import me.rerere.rikkahub.data.ai.tools.local.wifiInfoTool
 import me.rerere.rikkahub.data.ai.tools.local.deleteSshHostTool
 import me.rerere.rikkahub.data.ai.tools.local.forgetSshHostKeyTool
 import me.rerere.rikkahub.data.ai.tools.local.listSshHostsTool
-import me.rerere.rikkahub.data.ai.tools.local.telegramAddWhitelistTool
-import me.rerere.rikkahub.data.ai.tools.local.telegramDeleteCommandsTool
-import me.rerere.rikkahub.data.ai.tools.local.telegramDisableTool
-import me.rerere.rikkahub.data.ai.tools.local.telegramEnableTool
-import me.rerere.rikkahub.data.ai.tools.local.telegramGetCommandsTool
-import me.rerere.rikkahub.data.ai.tools.local.telegramRemoveWhitelistTool
-import me.rerere.rikkahub.data.ai.tools.local.telegramSendDocumentTool
-import me.rerere.rikkahub.data.ai.tools.local.telegramSendMessageTool
-import me.rerere.rikkahub.data.ai.tools.local.telegramSendPhotoTool
-import me.rerere.rikkahub.data.ai.tools.local.telegramSetAssistantTool
-import me.rerere.rikkahub.data.ai.tools.local.telegramSetCommandsTool
-import me.rerere.rikkahub.data.ai.tools.local.telegramSetDefaultChatTool
-import me.rerere.rikkahub.data.ai.tools.local.telegramSetTokenTool
-import me.rerere.rikkahub.data.ai.tools.local.telegramStatusTool
 import me.rerere.rikkahub.data.ai.tools.local.saveSshHostTool
 import me.rerere.rikkahub.data.ai.tools.local.sshDownloadTool
 import me.rerere.rikkahub.data.ai.tools.local.sshExecSavedTool
@@ -226,8 +212,7 @@ class LocalTools(
     private val cronJobScheduler: me.rerere.rikkahub.service.CronJobScheduler,
     private val settingsStore: me.rerere.rikkahub.data.datastore.SettingsStore,
     private val sshHostRepository: me.rerere.rikkahub.data.repository.SshHostRepository,
-    private val telegramBotPreferences: me.rerere.rikkahub.data.telegram.TelegramBotPreferences,
-    private val telegramBotClient: me.rerere.rikkahub.data.telegram.TelegramBotClient,
+
     private val notificationListenerPreferences: me.rerere.rikkahub.data.notifications.NotificationListenerPreferences,
     private val mcpManager: me.rerere.rikkahub.data.ai.mcp.McpManager,
     private val externalAutomationConfig: me.rerere.rikkahub.automation.ExternalAutomationConfig,
@@ -401,22 +386,7 @@ class LocalTools(
             tools.add(sshDownloadTool(context, sshHostRepository))
             tools.add(forgetSshHostKeyTool(context))
         }
-        if (options.contains(LocalToolOption.TelegramBot)) {
-            tools.add(telegramSetTokenTool(telegramBotPreferences, telegramBotClient))
-            tools.add(telegramStatusTool(context, telegramBotPreferences, telegramBotClient))
-            tools.add(telegramEnableTool(context, telegramBotPreferences))
-            tools.add(telegramDisableTool(context, telegramBotPreferences))
-            tools.add(telegramAddWhitelistTool(telegramBotPreferences))
-            tools.add(telegramRemoveWhitelistTool(telegramBotPreferences))
-            tools.add(telegramSetDefaultChatTool(telegramBotPreferences))
-            tools.add(telegramSetAssistantTool(telegramBotPreferences))
-            tools.add(telegramSendMessageTool(telegramBotPreferences, telegramBotClient))
-            tools.add(telegramSendPhotoTool(telegramBotPreferences, telegramBotClient))
-            tools.add(telegramSendDocumentTool(telegramBotPreferences, telegramBotClient))
-            tools.add(telegramSetCommandsTool(telegramBotPreferences, telegramBotClient))
-            tools.add(telegramGetCommandsTool(telegramBotClient))
-            tools.add(telegramDeleteCommandsTool(telegramBotPreferences, telegramBotClient))
-        }
+
         if (options.contains(LocalToolOption.CronJobs)) {
             tools.add(me.rerere.rikkahub.data.ai.tools.local.scheduleJobTool(scheduledJobRepository, cronJobScheduler, settingsStore,
                 knownToolNamesProvider = { tools.map { it.name } }))
@@ -468,7 +438,7 @@ class LocalTools(
             tools.add(dismissNotificationTool())
             tools.add(notificationActionClickTool())
             tools.add(notificationReplyTool())
-            tools.add(notificationStatusTool(notificationListenerPreferences, telegramBotPreferences))
+            tools.add(notificationStatusTool(notificationListenerPreferences))
         }
         if (options.contains(LocalToolOption.Files)) {
             tools.add(listFilesTool())

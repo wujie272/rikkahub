@@ -18,7 +18,6 @@ import me.rerere.rikkahub.data.db.dao.ScheduledJobDao
 import me.rerere.rikkahub.data.db.dao.ScheduledJobRunDao
 import me.rerere.rikkahub.data.db.dao.GroupDao
 import me.rerere.rikkahub.data.db.dao.SshHostDao
-import me.rerere.rikkahub.data.db.dao.TelegramChatDao
 import me.rerere.rikkahub.data.db.dao.WorkspaceDAO
 import me.rerere.rikkahub.data.db.entity.ConversationEntity
 import me.rerere.rikkahub.data.db.entity.FavoriteEntity
@@ -29,7 +28,6 @@ import me.rerere.rikkahub.data.db.entity.MessageNodeEntity
 import me.rerere.rikkahub.data.db.entity.ScheduledJobEntity
 import me.rerere.rikkahub.data.db.entity.ScheduledJobRunEntity
 import me.rerere.rikkahub.data.db.entity.SshHostEntity
-import me.rerere.rikkahub.data.db.entity.TelegramChatEntity
 import me.rerere.rikkahub.data.db.entity.GroupEntity
 import me.rerere.rikkahub.data.db.entity.GroupMemberEntity
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
@@ -57,7 +55,6 @@ import me.rerere.rikkahub.workflow.db.WorkflowRunEntity
         ScheduledJobEntity::class,
         ScheduledJobRunEntity::class,
         SshHostEntity::class,
-        TelegramChatEntity::class,
         WorkflowEntity::class,
         WorkflowRunEntity::class,
         AgentRun::class,
@@ -116,7 +113,6 @@ abstract class AppDatabase : RoomDatabase() {
 
     abstract fun sshHostDao(): SshHostDao
 
-    abstract fun telegramChatDao(): TelegramChatDao
 
     abstract fun workflowDao(): WorkflowDao
 

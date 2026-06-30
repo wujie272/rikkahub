@@ -1171,8 +1171,7 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="assistant_page_local_tools_mic_recorder_title">マイク録音</string>
   <string name="assistant_page_local_tools_notification_desc">ユーザーに代わって Android 通知を投稿します。</string>
   <string name="assistant_page_local_tools_notification_title">通知</string>
-  <string name="assistant_page_local_tools_notifications_desc">LLM が他のアプリからの受信通知を読み取れるようにします。ホワイトリストのアプリはデフォルトの Telegram チャットにも自動転送されます。設定 -&gt; 通知 で構成してください。</string>
-  <string name="assistant_page_local_tools_notifications_title">通知認識</string>
+    <string name="assistant_page_local_tools_notifications_title">通知認識</string>
   <string name="assistant_page_local_tools_perm_denied_toast">%1$s の権限が拒否されました</string>
   <string name="assistant_page_local_tools_perm_needed">権限が必要です — タップして付与</string>
   <string name="assistant_page_local_tools_perm_special_dialog_message">このツールはシステムアクセスが必要です。付与のためにシステム設定ページに移動します。完了したらここに戻ってください。</string>
@@ -1210,11 +1209,7 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="assistant_page_local_tools_sub_agents_title">サブエージェント</string>
   <string name="assistant_page_local_tools_system_intents_desc">アシスタントが最終確認用にシステムアプリを事前入力できます：カレンダー予定、新規連絡先、メール作成、SMS 作成、WiFi 設定、地図。宛先アプリでのあなたのタップなしには、何も保存も送信もされません。</string>
   <string name="assistant_page_local_tools_system_intents_title">システムインテント</string>
-  <string name="assistant_page_local_tools_telegram_desc">アシスタントを Telegram ボットとして実行 — メッセージやファイルの送受信、/コマンドの管理。すべてツールで設定（トークン、ホワイトリスト、デフォルトチャットを設定してから有効化）。フォアグラウンドサービスがロングポーリングを処理します。</string>
-  <string name="assistant_page_local_tools_telegram_notoken_message">トグルはオンですが、まだボットトークンが設定されていません。\n\n簡単な方法：チャットでアシスタントに頼む — &quot;Telegram ボットをセットアップして、私のトークンは … 、私のユーザー ID は … 、私をデフォルトチャットに設定して、有効化して。&quot;\n\n手動の方法：Telegram で @BotFather に /newbot を送ってトークンを取得し、@userinfobot に /start を送って数値ユーザー ID を取得します。その後アシスタントに頼むか、設定 → Telegram ボット に貼り付けてください。</string>
-  <string name="assistant_page_local_tools_telegram_notoken_title">Telegram ボットにはトークンが必要</string>
-  <string name="assistant_page_local_tools_telegram_title">Telegram ボット</string>
-  <string name="assistant_page_local_tools_telephony_desc">SIM とネットワーク情報（キャリア、ネットワークタイプ）を読み取ります。READ_PHONE_STATE が必要です。</string>
+          <string name="assistant_page_local_tools_telephony_desc">SIM とネットワーク情報（キャリア、ネットワークタイプ）を読み取ります。READ_PHONE_STATE が必要です。</string>
   <string name="assistant_page_local_tools_telephony_title">テレフォニー情報</string>
   <string name="assistant_page_local_tools_termux_postgrant_command">mkdir -p ~/.termux &amp;&amp; echo \'allow-external-apps=true\' &gt;&gt; ~/.termux/termux.properties</string>
   <string name="assistant_page_local_tools_termux_postgrant_copied">コマンドをコピーしました — Termux に貼り付けてください。</string>
@@ -1414,10 +1409,7 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_page_notifications_action_ago_hours">%1$d 時間前</string>
   <string name="setting_page_notifications_action_ago_minutes">%1$d 分前</string>
   <string name="setting_page_notifications_action_ago_seconds">%1$d 秒前</string>
-  <string name="setting_page_notifications_default_chat_set">デフォルトの Telegram チャット：%1$s</string>
-  <string name="setting_page_notifications_default_chat_unset">デフォルトの Telegram チャット：未設定（自動ルーティング無効）</string>
-  <string name="setting_page_notifications_desc">通知アクセスのステータス、最近のアクティビティログ、Telegram に自動転送するアプリごとのホワイトリスト。</string>
-  <string name="setting_page_notifications_open_settings">通知アクセス設定を開く</string>
+        <string name="setting_page_notifications_open_settings">通知アクセス設定を開く</string>
   <string name="setting_page_notifications_recent_empty">まだ通知をキャプチャしていません。</string>
   <string name="setting_page_notifications_recent_section">最近のアクティビティ</string>
   <string name="setting_page_notifications_status_connected">サービス：接続済み</string>
@@ -1485,26 +1477,7 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_page_scheduled_jobs_subtitle_never_run">未発火</string>
   <string name="setting_page_scheduled_jobs_subtitle_ran">前回の発火 %1$s</string>
   <string name="setting_page_scheduled_jobs_subtitle_when">タイミング：%1$s</string>
-  <string name="setting_page_telegram">Telegram ボット</string>
-  <string name="setting_page_telegram_battery_already_ok">バッテリー最適化のホワイトリストに登録済みです。</string>
-  <string name="setting_page_telegram_battery_desc">画面が消えると、積極的な OEM ROM（Xiaomi、OPPO、OnePlus、Vivo）は未登録アプリのネットワークを遮断します。ボットはたまのメンテナンス時間にしか配信できません。タップして RikkaHub をホワイトリストに登録してください。</string>
-  <string name="setting_page_telegram_battery_needed">バッテリー最適化：未登録 - タップして修正</string>
-  <string name="setting_page_telegram_battery_ok">バッテリー最適化：ホワイトリスト登録済み</string>
-  <string name="setting_page_telegram_boot_note">開始すると、ボットはデバイス起動時にも自動的に起動します。</string>
-  <string name="setting_page_telegram_default_chat">デフォルトチャット</string>
-  <string name="setting_page_telegram_default_chat_desc">LLM が chat_id を省略したとき（例：cron ジョブの通知）に送信メッセージが届く先。あなたの Telegram 数値ユーザー ID を使用してください。</string>
-  <string name="setting_page_telegram_desc">LLM を Telegram ボットとして実行 — 任意のデバイスからリモートでチャットできます。</string>
-  <string name="setting_page_telegram_no_token_toast">先にボットトークンを設定してください。</string>
-  <string name="setting_page_telegram_start">開始</string>
-  <string name="setting_page_telegram_status_running">実行中</string>
-  <string name="setting_page_telegram_status_starting">起動中…</string>
-  <string name="setting_page_telegram_status_stopped">停止済み</string>
-  <string name="setting_page_telegram_stop">停止</string>
-  <string name="setting_page_telegram_token">ボットトークン</string>
-  <string name="setting_page_telegram_token_desc">@BotFather から取得。編集にはボットを停止する必要があります。</string>
-  <string name="setting_page_telegram_whitelist">許可されたチャット ID</string>
-  <string name="setting_page_telegram_whitelist_desc">カンマ区切り。空 = 誰も許可しない。@userinfobot で自分の ID を確認できます。</string>
-  <string name="setting_page_tool_approvals">ツール承認</string>
+                                        <string name="setting_page_tool_approvals">ツール承認</string>
   <string name="setting_page_tool_approvals_desc">「常に許可」で恒久的に許可したツール。いつでも取り消せます。</string>
   <string name="setting_page_tool_approvals_empty">まだ「常に許可」が付与されたツールはありません。ボットは副作用のあるツールを実行する前に確認します。</string>
   <string name="setting_page_tool_approvals_header">以下のツールはこのデバイスで一切確認なしに実行されます。モデルにこの機能を任せることを信頼できなくなった場合は取り消してください。</string>

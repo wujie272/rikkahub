@@ -130,7 +130,6 @@ import me.rerere.rikkahub.ui.pages.setting.SettingSearchDetailPage
 import me.rerere.rikkahub.ui.pages.setting.SettingSearchPage
 import me.rerere.rikkahub.ui.pages.setting.SettingTTSPage
 import me.rerere.rikkahub.ui.pages.setting.SettingSpeechPage
-import me.rerere.rikkahub.ui.pages.setting.SettingTelegramPage
 import me.rerere.rikkahub.ui.pages.setting.SettingSshPage
 import me.rerere.rikkahub.ui.pages.setting.SettingWebPage
 import me.rerere.rikkahub.ui.pages.share.handler.ShareHandlerPage
@@ -512,9 +511,7 @@ class RouteActivity : ComponentActivity() {
                                 SettingSshPage()
                             }
 
-                            entry<Screen.SettingTelegram> {
-                                SettingTelegramPage()
-                            }
+
 
                             entry<Screen.SettingWorkflows> {
                                 me.rerere.rikkahub.workflow.ui.WorkflowsScreen()
@@ -793,9 +790,6 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object SettingSsh : Screen
-
-    @Serializable
-    data object SettingTelegram : Screen
 
     @Serializable
     data object SettingWorkflows : Screen

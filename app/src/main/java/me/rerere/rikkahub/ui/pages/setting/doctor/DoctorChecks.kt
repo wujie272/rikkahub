@@ -18,8 +18,6 @@ import me.rerere.rikkahub.data.db.AppDatabase
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.ScheduledJobRepository
 import me.rerere.rikkahub.data.repository.ScheduledJobRunRepository
-import me.rerere.rikkahub.data.telegram.TelegramBotPreferences
-import me.rerere.rikkahub.service.TelegramBotService
 import me.rerere.rikkahub.workflow.repository.WorkflowRepository
 import me.rerere.rikkahub.browser.BrowserPreferences
 import me.rerere.rikkahub.browser.BrowserToolDefaults
@@ -39,7 +37,6 @@ import java.io.File
 private object Capability {
     val Notifications: Set<LocalToolOption> = setOf(
         LocalToolOption.Notification,        // post_notification tool
-        LocalToolOption.TelegramBot,         // FGS notification
         LocalToolOption.CronJobs,            // CronJobWorker FGS notification
         LocalToolOption.Workflows,           // WorkflowTimeCronWorker FGS notification
     )
@@ -61,7 +58,6 @@ private object Capability {
         LocalToolOption.Ssh,                 // ssh_exec calls into termux ssh
     )
     val BatteryWhitelist: Set<LocalToolOption> = setOf(
-        LocalToolOption.TelegramBot,         // long-poll loop
         LocalToolOption.CronJobs,            // worker fires
         LocalToolOption.Workflows,           // trigger receivers + cron worker
     )
@@ -108,7 +104,6 @@ private fun LocalToolOption.shortName(): String = when (this) {
     LocalToolOption.Termux -> "Termux"
     LocalToolOption.SpeechToText -> "Speech-to-text"
     LocalToolOption.Ssh -> "SSH"
-    LocalToolOption.TelegramBot -> "Telegram bot"
     LocalToolOption.CronJobs -> "Cron jobs"
     LocalToolOption.Workflows -> "Workflows"
     LocalToolOption.Notification -> "Notification"
@@ -137,7 +132,6 @@ private fun LocalToolOption.shortName(): String = when (this) {
 class DoctorChecks(
     private val context: Context,
     private val settingsStore: SettingsStore,
-    private val telegramPrefs: TelegramBotPreferences,
     private val workflowRepository: WorkflowRepository,
     private val scheduledJobRepository: ScheduledJobRepository,
     private val scheduledJobRunRepository: ScheduledJobRunRepository,
@@ -461,50 +455,6 @@ class DoctorChecks(
     // ----- Background services ---------------------------------------------------------
 
     private suspend fun serviceChecks(enabled: Set<LocalToolOption>): List<DoctorCheck> = buildList {
-        val tg = telegramPrefs.current()
-        // Telegram bot: token, enabled flag, FGS state should agree.
-        if (tg.enabled) {
-            add(
-                DoctorCheck(
-                    id = "service.telegram_token",
-                    category = DoctorCategory.Services,
-                    label = "Telegram bot token",
-                    // Don't render any portion of the token — Telegram bot tokens are
-                    // formatted "<bot_id>:<secret>" and even the first 6 chars reveal the
-                    // bot id, which an attacker could use to enumerate bot endpoints.
-                    detail = if (tg.token.isNotBlank()) "Token configured (${tg.token.length} chars, hidden)."
-                    else "Telegram bot is enabled but no token is set — the service will fail at startup.",
-                    severity = if (tg.token.isNotBlank()) Severity.OK else Severity.FAIL,
-                    fix = if (tg.token.isBlank())
-                        FixAction.OpenAppRoute("Open Telegram settings", AppRouteKey.SettingTelegram)
-                    else null,
-                )
-            )
-            add(
-                DoctorCheck(
-                    id = "service.telegram_running",
-                    category = DoctorCategory.Services,
-                    label = "Telegram bot foreground service",
-                    detail = if (TelegramBotService.isRunning) "Service is running."
-                    else "Service is stopped. Telegram messages won't reach the assistant. The watchdog will retry on the next 30-min health pass.",
-                    severity = when {
-                        TelegramBotService.isRunning -> Severity.OK
-                        tg.token.isBlank() -> Severity.INFO  // token issue covers this
-                        else -> Severity.FAIL
-                    },
-                )
-            )
-        } else {
-            add(
-                DoctorCheck(
-                    id = "service.telegram_off",
-                    category = DoctorCategory.Services,
-                    label = "Telegram bot",
-                    detail = "Disabled — that's fine if you don't use Telegram.",
-                    severity = Severity.INFO,
-                )
-            )
-        }
         // AccessibilityService binding — only flagged if a tool that needs it is enabled.
         val accNeeders = requirersOf(Capability.Accessibility, enabled)
         if (accNeeders.isNotEmpty()) {
@@ -589,7 +539,7 @@ class DoctorChecks(
                     else
                         "\"${defaultAssistant.name.ifBlank { "(unnamed)" }}\" " +
                         "(id: ${defaultAssistant.id.toString().take(8)}…). " +
-                        "Used for new chats, cron jobs, and Telegram when no override is set.",
+                        "Used for new chats and cron jobs.",
                     severity = if (assistants.isEmpty()) Severity.WARN else Severity.INFO,
                     fix = FixAction.OpenAppRoute("Open Assistants", AppRouteKey.Assistant),
                 )
@@ -606,36 +556,6 @@ class DoctorChecks(
                     fix = FixAction.OpenAppRoute("Open Assistants", AppRouteKey.Assistant),
                 )
             )
-
-            // Row 3: Telegram-bot assistant override (if set)
-            val tg = telegramPrefs.current()
-            if (tg.enabled && tg.assistantId != null) {
-                val tgAssistant = tg.assistantId.let { id ->
-                    runCatching {
-                        val uuid = kotlin.uuid.Uuid.parse(id)
-                        assistants.find { it.id == uuid }
-                    }.getOrNull()
-                }
-                add(
-                    DoctorCheck(
-                        id = "assistant.telegram_override",
-                        category = DoctorCategory.AssistantInfo,
-                        label = "Telegram bot assistant override",
-                        detail = when {
-                            tgAssistant != null ->
-                                "Telegram inbound messages route to \"${tgAssistant.name.ifBlank { "(unnamed)" }}\" " +
-                                "(id: ${tgAssistant.id.toString().take(8)}…) — overriding the global default."
-                            else ->
-                                "Telegram assistant override is set (id: ${tg.assistantId.take(8)}…) but no matching " +
-                                "assistant was found. Messages will fall back to the global default."
-                        },
-                        severity = if (tgAssistant != null) Severity.INFO else Severity.WARN,
-                        fix = if (tgAssistant == null)
-                            FixAction.OpenAppRoute("Open Telegram settings", AppRouteKey.SettingTelegram)
-                        else null,
-                    )
-                )
-            }
         }
     }
 
