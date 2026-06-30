@@ -236,7 +236,7 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                     )
                     item(
                         onClick = { navController.navigate(Screen.MemoryManager) },
-                        leadingContent = { Icon(HugeIcons.Brain02, null) },
+                        leadingContent = { Icon(HugeIcons.Book03, null) },
                         supportingContent = { Text("管理所有记忆、重新计算向量") },
                         headlineContent = { Text("记忆管理") },
                     )
@@ -326,7 +326,7 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                     )
                     item(
                         onClick = { navController.navigate(Screen.SettingSsh) },
-                        leadingContent = { Icon(HugeIcons.Connect, null) },
+                        leadingContent = { Icon(HugeIcons.Console, null) },
                         supportingContent = { Text(stringResource(R.string.setting_page_ssh_desc)) },
                         headlineContent = { Text(stringResource(R.string.setting_page_ssh)) },
                     )
