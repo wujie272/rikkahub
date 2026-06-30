@@ -122,6 +122,7 @@ import me.rerere.rikkahub.ui.pages.setting.SettingDonatePage
 import me.rerere.rikkahub.ui.pages.setting.SettingFilesPage
 import me.rerere.rikkahub.ui.pages.setting.SettingMcpPage
 import me.rerere.rikkahub.ui.pages.setting.SettingModelPage
+import me.rerere.rikkahub.ui.pages.setting.memory.MemoryManagerPage
 import me.rerere.rikkahub.ui.pages.setting.SettingPage
 import me.rerere.rikkahub.ui.pages.setting.SettingProviderDetailPage
 import me.rerere.rikkahub.ui.pages.setting.SettingProviderPage
@@ -502,6 +503,11 @@ class RouteActivity : ComponentActivity() {
                                 SettingWebPage()
                             }
 
+                            entry<Screen.MemoryManager> {
+                                MemoryManagerPage()
+                            }
+
+                            
                             entry<Screen.SettingSsh> {
                                 SettingSshPage()
                             }
@@ -781,6 +787,9 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object SettingWeb : Screen
+
+    @Serializable
+    data object MemoryManager : Screen
 
     @Serializable
     data object SettingSsh : Screen

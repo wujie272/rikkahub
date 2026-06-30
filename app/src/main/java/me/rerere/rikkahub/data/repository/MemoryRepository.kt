@@ -90,6 +90,10 @@ class MemoryRepository(
         memoryDAO.deleteMemory(id)
     }
 
+    suspend fun togglePin(id: Int, pinned: Boolean) {
+        memoryDAO.updatePin(id, pinned)
+    }
+
     /**
      * 检测当前 embedding 模型是否与库中记忆的模型不一致。
      */
@@ -196,6 +200,26 @@ class MemoryRepository(
                 }
             }
             progressCallback?.invoke(index + 1, allMemories.size)
+        }
+    }
+
+    suspend fun getAllMemoriesSorted(): List<AssistantMemory> {
+        return memoryDAO.getAllMemoriesSorted().map { it.toModel() }
+    }
+
+    suspend fun searchMemories(query: String): List<AssistantMemory> {
+        return memoryDAO.searchMemories(query).map { it.toModel() }
+    }
+
+    /**
+     * 检查多少条带有 embedding 的记忆的模型版本与当前不一致。
+     */
+    suspend fun countModelMismatch(): Int {
+        val current = currentModelVersion()
+        if (current == MODEL_VERSION_UNSET) return 0
+        return memoryDAO.getAllMemories().count {
+            it.embedding != null && it.embeddingModelId != null &&
+                it.embeddingModelId != current && it.embeddingModelId != MODEL_VERSION_UNSET
         }
     }
 

@@ -41,4 +41,13 @@ interface MemoryDAO {
 
     @Query("SELECT embedding_model_id FROM memoryentity WHERE embedding IS NOT NULL AND embedding_model_id IS NOT NULL LIMIT :limit")
     suspend fun getMemoriesWithModelIds(limit: Int = 1): List<String?>
+
+    @Query("UPDATE memoryentity SET pinned = :pinned WHERE id = :id")
+    suspend fun updatePin(id: Int, pinned: Boolean)
+
+    @Query("SELECT * FROM memoryentity WHERE content LIKE '%' || :query || '%' ORDER BY pinned DESC, id DESC")
+    suspend fun searchMemories(query: String): List<MemoryEntity>
+
+    @Query("SELECT * FROM memoryentity ORDER BY pinned DESC, id DESC")
+    suspend fun getAllMemoriesSorted(): List<MemoryEntity>
 }
