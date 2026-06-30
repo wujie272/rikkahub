@@ -36,7 +36,7 @@ import me.rerere.rikkahub.data.db.migrations.Migration_20_21
 import me.rerere.rikkahub.data.db.migrations.Migration_21_22
 import me.rerere.rikkahub.data.db.migrations.Migration_22_23
 import me.rerere.rikkahub.data.db.migrations.Migration_27_28
-import me.rerere.rikkahub.data.db.migrations.Migration_28_29
+import me.rerere.rikkahub.data.db.migrations.Migration_29_30
 import me.rerere.rikkahub.data.db.migrations.Migration_8_9
 import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.rikkahub.workflow.db.WorkflowDao
@@ -62,7 +62,7 @@ import me.rerere.rikkahub.workflow.db.WorkflowRunEntity
         GroupMemberEntity::class,
         WorkspaceEntity::class,
     ],
-    version = 29,
+    version = 30,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),
@@ -90,6 +90,7 @@ import me.rerere.rikkahub.workflow.db.WorkflowRunEntity
         AutoMigration(from = 26, to = 27),
         // 27→28: group round-robin index (manual — see addMigrations below)
         // 28→29: vector memory columns (manual — see addMigrations below)
+        // 29→30: drop telegram_chat table (manual — see addMigrations below)
 
     ]
 )
