@@ -154,7 +154,8 @@ fun SettingProviderDetailPage(id: Uuid, vm: SettingVM = koinViewModel()) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     val navController = LocalNavController.current
     val provider = settings.providers.find { it.id == id } ?: return
-    val pager = rememberPagerState { 3 }
+    val tabCount = if (provider.hasKeyPage) 3 else 2
+    val pager = rememberPagerState { tabCount }
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
     val context = LocalContext.current
@@ -226,18 +227,21 @@ fun SettingProviderDetailPage(id: Uuid, vm: SettingVM = koinViewModel()) {
                         }
                     }
                 )
-                NavigationBarItem(
-                    selected = pager.currentPage == 1,
-                    label = { Text(stringResource(R.string.setting_provider_page_keys)) },
-                    icon = { Icon(HugeIcons.Key01, null) },
-                    onClick = {
-                        scope.launch {
-                            pager.animateScrollToPage(1)
+                if (provider.hasKeyPage) {
+                    NavigationBarItem(
+                        selected = pager.currentPage == 1,
+                        label = { Text(stringResource(R.string.setting_provider_page_keys)) },
+                        icon = { Icon(HugeIcons.Key01, null) },
+                        onClick = {
+                            scope.launch {
+                                pager.animateScrollToPage(1)
+                            }
                         }
-                    }
-                )
+                    )
+                }
+                val modelsTabIndex = if (provider.hasKeyPage) 2 else 1
                 NavigationBarItem(
-                    selected = pager.currentPage == 2,
+                    selected = pager.currentPage == modelsTabIndex,
                     label = { Text(stringResource(id = R.string.setting_provider_page_models)) },
                     icon = { Icon(HugeIcons.Package01, null) },
                     onClick = {
@@ -273,13 +277,20 @@ fun SettingProviderDetailPage(id: Uuid, vm: SettingVM = koinViewModel()) {
                 }
 
                 1 -> {
-                    SettingProviderKeyPage(
-                        provider = provider,
-                        settings = settings,
-                        onEdit = onEdit,
-                        vm = vm,
-                        scope = scope,
-                    )
+                    if (provider.hasKeyPage) {
+                        SettingProviderKeyPage(
+                            provider = provider,
+                            settings = settings,
+                            onEdit = onEdit,
+                            vm = vm,
+                            scope = scope,
+                        )
+                    } else {
+                        SettingProviderModelPage(
+                            provider = provider,
+                            onEdit = onEdit
+                        )
+                    }
                 }
 
                 2 -> {

@@ -38,6 +38,8 @@ sealed class ProviderSetting {
     abstract val balanceOption: BalanceOption
     abstract val fallbackConfig: FallbackConfig
 
+    /** 此 Provider 是否需要独立的 API Key 配置页（本地/设备端 Provider 不需要） */
+    open val hasKeyPage: Boolean get() = true
     abstract val builtIn: Boolean
     abstract val description: @Composable() () -> Unit
     abstract val shortDescription: @Composable() () -> Unit
@@ -170,6 +172,7 @@ sealed class ProviderSetting {
         override var models: List<Model> = AICORE_DEFAULT_MODELS,
         override val balanceOption: BalanceOption = BalanceOption(),
         override val fallbackConfig: FallbackConfig = FallbackConfig(),
+        override val hasKeyPage: Boolean = false,
         @Transient override val builtIn: Boolean = true,
         @Transient override val description: @Composable (() -> Unit) = {},
         @Transient override val shortDescription: @Composable (() -> Unit) = {},
@@ -199,6 +202,7 @@ sealed class ProviderSetting {
         override var models: List<Model> = emptyList(),
         override val balanceOption: BalanceOption = BalanceOption(),
         override val fallbackConfig: FallbackConfig = FallbackConfig(),
+        override val hasKeyPage: Boolean = false,
         @Transient override val builtIn: Boolean = true,
         @Transient override val description: @Composable (() -> Unit) = {},
         @Transient override val shortDescription: @Composable (() -> Unit) = {},
