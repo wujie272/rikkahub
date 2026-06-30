@@ -89,3 +89,9 @@ jobs:
           prerelease: false
           files: |
             app/build/outputs/apk/release/*.apk
+
+      - name: Upload APK as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rikkahub-release-apk
+          path: app/build/outputs/apk/release/*.apk
