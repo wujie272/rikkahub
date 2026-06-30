@@ -54,6 +54,14 @@ val appModule = module {
     single { me.rerere.rikkahub.data.preferences.TermuxPreferences(get()) }
 
 
+    // Pass 3 — NoOp implementations for headless screenshot streaming. The real
+    // Telegram-backed implementations were removed; these fallbacks silently no-op.
+    single<me.rerere.rikkahub.browser.BrowserScreenshotStreamer> {
+        me.rerere.rikkahub.browser.BrowserScreenshotStreamer.NoOp
+    }
+    single<InteractiveToolStreamer> {
+        InteractiveToolStreamer.NoOp
+    }
     single { me.rerere.rikkahub.data.preferences.ToolApprovalPreferences(get()) }
     single { NotificationListenerPreferences(get()) }
 
