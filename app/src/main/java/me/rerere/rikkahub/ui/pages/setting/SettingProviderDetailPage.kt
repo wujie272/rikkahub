@@ -451,7 +451,6 @@ private fun SettingProviderKeyPage(
     var internalProvider by remember(provider) { mutableStateOf(provider) }
     val context = LocalContext.current
     val keyRoulette = remember { KeyRoulette.lru(context) }
-    var showRawKeys by remember { mutableStateOf(false) }
     var showAddKeyDialog by remember { mutableStateOf(false) }
     var showAdvanced by remember { mutableStateOf(false) }
 
@@ -503,59 +502,6 @@ private fun SettingProviderKeyPage(
         contentPadding = PaddingValues(vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        // --- API Key 输入区域（折叠） ---
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                onClick = { showRawKeys = !showRawKeys }
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "API Keys",
-                            style = MaterialTheme.typography.titleSmall
-                        )
-                        Text(
-                            text = "${keys.size} 个 Key · 长按拖拽排序",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Icon(
-                        if (showRawKeys) HugeIcons.ArrowDown01 else HugeIcons.ArrowRight01,
-                        contentDescription = null
-                    )
-                }
-            }
-        }
-
-        // 编辑模式
-        if (showRawKeys) {
-            item {
-                OutlinedTextField(
-                    value = currentApiKey,
-                    onValueChange = { newKey ->
-                        internalProvider = when (internalProvider) {
-                            is ProviderSetting.OpenAI -> (internalProvider as ProviderSetting.OpenAI).copy(apiKey = newKey)
-                            is ProviderSetting.Google -> (internalProvider as ProviderSetting.Google).copy(apiKey = newKey)
-                            is ProviderSetting.Claude -> (internalProvider as ProviderSetting.Claude).copy(apiKey = newKey)
-                            else -> internalProvider
-                        }
-                    },
-                    label = { Text(stringResource(R.string.search_detail_api_key)) },
-                    placeholder = { Text("每行一个 Key") },
-                    modifier = Modifier.fillMaxWidth(),
-                    maxLines = 6,
-                )
-            }
-        }
-
         // --- Key 状态列表（可拖拽排序） ---
         items(keys, key = { it }) { key ->
             val index = keys.indexOf(key)
