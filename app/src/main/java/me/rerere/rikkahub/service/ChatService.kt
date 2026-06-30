@@ -1976,15 +1976,15 @@ class ChatService(
             // 正在执行工具
             lastTool != null && !lastTool.isExecuted -> {
                 // MCP tools are exposed as `mcp__<serverSlug>_<serverName>__<toolName>`; strip
-                // both the prefix and the server segment so the notification shows the bare tool
-                // name. Non-MCP tool names (no `mcp__` prefix) fall through unchanged via the
-                // missingDelimiterValue, instead of being truncated at an embedded `__`.
-                val toolName = lastTool.toolName
-                    .removePrefix("mcp__")
-                    .substringAfter("__", missingDelimiterValue = lastTool.toolName.removePrefix("mcp__"))
+                // the prefix and hash for notification display: `ServerName · toolName`.
+                // Non-MCP tool names (no `mcp__` prefix) fall through unchanged.
+                val beautified = Regex("""^mcp__[0-9a-f]{8}_(.+)__(.+)$""")
+                    .find(lastTool.toolName)
+                    ?.let { "${it.groupValues[1]} · ${it.groupValues[2]}" }
+                    ?: lastTool.toolName.removePrefix("mcp__")
                 Triple(
                     context.getString(R.string.notification_live_update_chip_tool),
-                    context.getString(R.string.notification_live_update_tool, toolName),
+                    context.getString(R.string.notification_live_update_tool, beautified),
                     lastTool.input.take(100)
                 )
             }

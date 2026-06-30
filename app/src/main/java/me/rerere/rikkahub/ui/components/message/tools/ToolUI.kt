@@ -83,6 +83,27 @@ interface ToolUIRenderer {
 /** 未注册工具使用的默认渲染器, 全部行为来自 [ToolUIRenderer] 的默认实现 */
 private object DefaultToolUIRenderer : ToolUIRenderer {
     override val toolName: String get() = ""
+
+    @Composable
+    override fun title(context: ToolUIContext): String {
+        val displayName = beautifyToolName(context.tool.toolName)
+        return stringResource(R.string.chat_message_tool_call_generic, displayName)
+    }
+}
+
+/**
+ * 美化工具名用于 UI 展示:
+ * - MCP 工具: `mcp__ce6ddd8c_ServerName__toolName` → `ServerName · toolName`
+ * - 其他工具: 原样返回
+ */
+internal fun beautifyToolName(name: String): String {
+    // mcp__<8位hex>_<server名称>__<工具名>
+    val mcpRegex = Regex("""^mcp__[0-9a-f]{8}_(.+)__(.+)$""")
+    return mcpRegex.find(name)?.let { match ->
+        val serverName = match.groupValues[1]
+        val toolName = match.groupValues[2]
+        "$serverName · $toolName"
+    } ?: name
 }
 
 /**
