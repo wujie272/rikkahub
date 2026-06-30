@@ -10,16 +10,20 @@ import kotlin.uuid.Uuid
 /**
  * 通过已有 Provider 体系调线上 embedding API。
  * 复用用户已配置的 API key，不额外花钱。
- *
- * Fallback 链：
- * 1. 用户为助手/全局指定了 embedding 模型 → 用它
- * 2. 取 OpenAI provider 的第一个 model → 调它的 embedding 接口
- * 3. 全都不可用 → 返回空（调用方降级为关键词检索或全量注入）
  */
 class EmbeddingService(
     private val providerManager: ProviderManager,
     private val settingsStore: SettingsStore,
 ) {
+    /**
+     * 当前用户指定的 embedding 模型 ID。未配置时返回 null。
+     */
+    val currentModelId: Uuid?
+        get() {
+            val id = settingsStore.settingsFlow.value.embeddingModelId
+            return if (id != Uuid.random()) id else null
+        }
+
     /**
      * 将单段文本转为 embedding 向量。
      * @return 向量列表，失败时返回空列表（调用方自行降级）

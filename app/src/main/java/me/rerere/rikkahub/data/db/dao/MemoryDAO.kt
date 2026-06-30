@@ -35,4 +35,10 @@ interface MemoryDAO {
 
     @Query("DELETE FROM memoryentity WHERE assistant_id = :assistantId")
     suspend fun deleteMemoriesOfAssistant(assistantId: String)
+
+    @Query("UPDATE memoryentity SET embedding = :embedding, embedding_model_id = :modelId WHERE id = :id")
+    suspend fun updateEmbedding(id: Int, embedding: String?, modelId: String?)
+
+    @Query("SELECT embedding_model_id FROM memoryentity WHERE embedding IS NOT NULL AND embedding_model_id IS NOT NULL LIMIT :limit")
+    suspend fun getMemoriesWithModelIds(limit: Int = 1): List<String?>
 }
