@@ -12,9 +12,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.PushPin
-import androidx.compose.material.icons.outlined.PushPin
+import me.rerere.hugeicons.stroke.FavouriteCircle
+import me.rerere.hugeicons.stroke.Favourite
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -268,7 +267,7 @@ private fun MemoryItemCard(
                     if (memory.pinned) {
                         Spacer(Modifier.width(6.dp))
                         Icon(
-                            Icons.Filled.PushPin,
+                            imageVector = HugeIcons.FavouriteCircle,
                             contentDescription = "已固定",
                             modifier = Modifier.height(14.dp),
                             tint = MaterialTheme.colorScheme.primary,
@@ -293,7 +292,7 @@ private fun MemoryItemCard(
             }
             IconButton(onClick = onTogglePin) {
                 Icon(
-                    if (memory.pinned) Icons.Outlined.PushPin else Icons.Filled.PushPin,
+                    if (memory.pinned) HugeIcons.FavouriteCircle else HugeIcons.Favourite,
                     contentDescription = if (memory.pinned) "取消固定" else "固定",
                 )
             }
