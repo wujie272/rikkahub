@@ -4,6 +4,7 @@ import android.content.Context
 import me.rerere.rikkahub.data.files.FileFolders
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.files.SkillManager
+import me.rerere.rikkahub.data.ai.rag.EmbeddingService
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.FavoriteRepository
 import me.rerere.rikkahub.data.repository.FilesRepository
@@ -24,7 +25,11 @@ val repositoryModule = module {
     }
 
     single {
-        MemoryRepository(get())
+        EmbeddingService(get(), get())
+    }
+
+    single {
+        MemoryRepository(get(), get())
     }
 
     single {

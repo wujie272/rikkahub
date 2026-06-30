@@ -28,6 +28,8 @@ import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.TokenUsage
 import me.rerere.ai.provider.BuiltInTools
+import me.rerere.ai.provider.EmbeddingGenerationParams
+import me.rerere.ai.provider.EmbeddingGenerationResult
 import me.rerere.ai.provider.ImageGenerationParams
 import me.rerere.ai.provider.Modality
 import me.rerere.ai.provider.Model
@@ -806,6 +808,132 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
             totalTokens = totalTokens,
             cachedTokens = cachedTokens
         )
+    }
+
+    override suspend fun generateEmbedding(
+        providerSetting: ProviderSetting.Google,
+        params: EmbeddingGenerationParams,
+    ): EmbeddingGenerationResult = withContext(Dispatchers.IO) {
+        require(params.input.isNotEmpty()) { "Embedding input cannot be empty" }
+
+        val apiKey = keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
+
+        // Gemini embedding API: single or batch
+        if (params.input.size == 1) {
+            val requestBody = buildJsonObject {
+                put("model", JsonPrimitive("models/${params.model.modelId}"))
+                put("content", buildJsonObject {
+                    putJsonArray("parts") {
+                        add(buildJsonObject {
+                            put("text", params.input.first())
+                        })
+                    }
+                })
+            }
+
+            val url = buildUrl(
+                providerSetting = providerSetting,
+                path = if (providerSetting.vertexAI) {
+                    "publishers/google/models/${params.model.modelId}:embedContent"
+                } else {
+                    "models/${params.model.modelId}:embedContent"
+                }
+            )
+
+            val request = transformRequest(
+                providerSetting = providerSetting,
+                request = Request.Builder()
+                    .url(url)
+                    .post(
+                        json.encodeToString(requestBody).toRequestBody("application/json".toMediaType())
+                    )
+                    .build(),
+                keyOverride = apiKey,
+            )
+
+            val response = client.newCall(request).await()
+            if (!response.isSuccessful) {
+                val code = response.code
+                val body = response.body.string()
+                if (code in COOLDOWN_STATUS_CODES) {
+                    keyRoulette.reportFailure(apiKey, providerSetting.id.toString(),
+                        providerSetting.fallbackConfig.cooldownSeconds * 1000L)
+                }
+                throw Exception("Google embedding failed: $code $body")
+            }
+            keyRoulette.reportSuccess(apiKey, providerSetting.id.toString())
+
+            val bodyJson = json.parseToJsonElement(response.body.string()).jsonObject
+            val values = bodyJson["embedding"]?.jsonObject?.get("values")?.jsonArray
+                ?: error("No embedding values in response")
+            val embedding = values.map { it.jsonPrimitive.content.toFloat() }
+
+            EmbeddingGenerationResult(
+                model = params.model.modelId,
+                embeddings = listOf(embedding),
+            )
+        } else {
+            // Batch: POST batchEmbedContents
+            val requestBody = buildJsonObject {
+                putJsonArray("requests") {
+                    params.input.forEach { text ->
+                        add(buildJsonObject {
+                            put("model", JsonPrimitive("models/${params.model.modelId}"))
+                            put("content", buildJsonObject {
+                                putJsonArray("parts") {
+                                    add(buildJsonObject { put("text", text) })
+                                }
+                            })
+                        })
+                    }
+                }
+            }
+
+            val url = buildUrl(
+                providerSetting = providerSetting,
+                path = if (providerSetting.vertexAI) {
+                    "publishers/google/models/${params.model.modelId}:batchEmbedContents"
+                } else {
+                    "models/${params.model.modelId}:batchEmbedContents"
+                }
+            )
+
+            val request = transformRequest(
+                providerSetting = providerSetting,
+                request = Request.Builder()
+                    .url(url)
+                    .post(
+                        json.encodeToString(requestBody).toRequestBody("application/json".toMediaType())
+                    )
+                    .build(),
+                keyOverride = apiKey,
+            )
+
+            val response = client.newCall(request).await()
+            if (!response.isSuccessful) {
+                val code = response.code
+                val body = response.body.string()
+                if (code in COOLDOWN_STATUS_CODES) {
+                    keyRoulette.reportFailure(apiKey, providerSetting.id.toString(),
+                        providerSetting.fallbackConfig.cooldownSeconds * 1000L)
+                }
+                throw Exception("Google batch embedding failed: $code $body")
+            }
+            keyRoulette.reportSuccess(apiKey, providerSetting.id.toString())
+
+            val bodyJson = json.parseToJsonElement(response.body.string()).jsonObject
+            val embeddings = bodyJson["embeddings"]?.jsonArray
+                ?: error("No embeddings in batch response")
+
+            EmbeddingGenerationResult(
+                model = params.model.modelId,
+                embeddings = embeddings.map { entry ->
+                    entry.jsonObject["values"]?.jsonArray
+                        ?.map { it.jsonPrimitive.content.toFloat() }
+                        ?: error("No values in embedding entry")
+                },
+            )
+        }
     }
 
     override suspend fun generateImage(

@@ -37,6 +37,8 @@ import me.rerere.rikkahub.data.db.migrations.Migration_16_17
 import me.rerere.rikkahub.data.db.migrations.Migration_20_21
 import me.rerere.rikkahub.data.db.migrations.Migration_21_22
 import me.rerere.rikkahub.data.db.migrations.Migration_22_23
+import me.rerere.rikkahub.data.db.migrations.Migration_27_28
+import me.rerere.rikkahub.data.db.migrations.Migration_28_29
 import me.rerere.rikkahub.data.db.migrations.Migration_8_9
 import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.rikkahub.workflow.db.WorkflowDao
@@ -63,7 +65,7 @@ import me.rerere.rikkahub.workflow.db.WorkflowRunEntity
         GroupMemberEntity::class,
         WorkspaceEntity::class,
     ],
-    version = 28,
+    version = 29,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),
@@ -89,6 +91,8 @@ import me.rerere.rikkahub.workflow.db.WorkflowRunEntity
         // fork users never had it, so Room auto-creates the table on this step.
         AutoMigration(from = 25, to = 26),
         AutoMigration(from = 26, to = 27),
+        // 27→28: group round-robin index (manual — see addMigrations below)
+        // 28→29: vector memory columns (manual — see addMigrations below)
 
     ]
 )

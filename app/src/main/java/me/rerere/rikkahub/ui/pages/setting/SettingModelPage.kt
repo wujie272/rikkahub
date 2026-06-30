@@ -167,7 +167,74 @@ private fun ModelSettingsPage(settings: Settings, vm: SettingVM, contentPadding:
                 onSelect = { vm.updateSettings(settings.copy(compressModelId = it.id)) },
             )
         }
+        item {
+            EmbeddingModelSettingItem(
+                settings = settings,
+                vm = vm,
+            )
+        }
     }
+}
+
+@Composable
+private fun EmbeddingModelSettingItem(
+    settings: Settings,
+    vm: SettingVM,
+) {
+    val title = "Embedding Model"
+    val desc = "Model used to compute memory embeddings for semantic search. " +
+            "Must be set explicitly; memory will fall back to full injection if unconfigured."
+    val state = rememberModelListState(
+        modelId = settings.embeddingModelId,
+        providers = settings.providers,
+        type = ModelType.EMBEDDING,
+    )
+
+    Column {
+        CardGroup(title = { Text(title) }) {
+            item(
+                onClick = { state.open() },
+                headlineContent = { Text(title) },
+                trailingContent = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Text(
+                            text = state.currentModel?.displayName
+                                ?: stringResource(R.string.model_list_select_model),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        if (state.currentModel != null) {
+                            IconButton(
+                                onClick = { vm.updateSettings(settings.copy(embeddingModelId = Uuid.random())) },
+                                modifier = Modifier.size(20.dp),
+                            ) {
+                                Icon(HugeIcons.Cancel01, contentDescription = null, modifier = Modifier.size(14.dp))
+                            }
+                        } else {
+                            Icon(
+                                HugeIcons.ArrowRight01,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                            )
+                        }
+                    }
+                },
+            )
+        }
+        Text(
+            text = desc,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
+        )
+    }
+
+    ModelListSheet(state = state, onSelect = { vm.updateSettings(settings.copy(embeddingModelId = it.id)) })
 }
 
 @Composable
