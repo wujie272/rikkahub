@@ -743,6 +743,15 @@ private fun KeyStatusCard(
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                IconButton(
+                    onClick = {
+                        scope.launch {
+                            swipeState.reset()
+                        }
+                    }
+                ) {
+                    Icon(HugeIcons.Cancel01, contentDescription = "取消")
+                }
                 FilledIconButton(
                     onClick = {
                         scope.launch {
