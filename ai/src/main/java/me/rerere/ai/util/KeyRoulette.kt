@@ -138,7 +138,7 @@ private class LruKeyRoulette(
                 // 所有 key 都在冷却中，选最早结束冷却的
                 val earliestKey = providerCache.minByOrNull { it.value.cooldownUntil }?.key
                     ?: keyList.first()
-                providerCache[earliestKey] = KeyEntry(
+                providerCache[earliestKey] = (providerCache[earliestKey] ?: KeyEntry(lastUsed = now)).copy(
                     lastUsed = now,
                     cooldownUntil = providerCache[earliestKey]?.cooldownUntil ?: 0,
                 )
@@ -147,7 +147,10 @@ private class LruKeyRoulette(
                 return earliestKey
             }
 
-            providerCache[selected] = KeyEntry(lastUsed = now, cooldownUntil = 0)
+            providerCache[selected] = (providerCache[selected] ?: KeyEntry(lastUsed = now)).copy(
+                lastUsed = now,
+                cooldownUntil = 0,
+            )
             allCache[providerId] = providerCache
 
             // 清理其他 provider 的过期记录

@@ -799,32 +799,31 @@ private fun KeyStatusCard(
                         }
                     }
 
-                    // 状态标签
-                    Surface(
-                        shape = RoundedCornerShape(4.dp),
-                        color = when {
-                            disabled -> MaterialTheme.colorScheme.surfaceVariant
-                            isCooling -> MaterialTheme.colorScheme.errorContainer
-                            state != null -> MaterialTheme.colorScheme.primaryContainer
-                            else -> MaterialTheme.colorScheme.surfaceVariant
+                    // 冷却状态标签（仅冷却/禁用时显示）
+                    if (disabled) {
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant
+                        ) {
+                            Text(
+                                text = "⛔ 已禁用",
+                                style = MaterialTheme.typography.labelSmall,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
-                    ) {
-                        Text(
-                            text = when {
-                                disabled -> "⛔ 已禁用"
-                                isCooling -> "⏳ ${remainingSec}s"
-                                state != null -> "✅ 活跃"
-                                else -> "⚪ 未使用"
-                            },
-                            style = MaterialTheme.typography.labelSmall,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            color = when {
-                                disabled -> MaterialTheme.colorScheme.onSurfaceVariant
-                                isCooling -> MaterialTheme.colorScheme.onErrorContainer
-                                state != null -> MaterialTheme.colorScheme.onPrimaryContainer
-                                else -> MaterialTheme.colorScheme.onSurfaceVariant
-                            }
-                        )
+                    } else if (isCooling) {
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = MaterialTheme.colorScheme.errorContainer
+                        ) {
+                            Text(
+                                text = "⏳ ${remainingSec}s",
+                                style = MaterialTheme.typography.labelSmall,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                        }
                     }
                 }
 
