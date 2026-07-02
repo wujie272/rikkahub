@@ -43,6 +43,7 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.preferences.ToolApprovalPreferences
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
+import me.rerere.rikkahub.ui.components.message.tools.beautifyToolName
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.plus
 import org.koin.compose.koinInject
@@ -198,7 +199,7 @@ fun SettingToolApprovalsPage() {
                     ) {
                         granted.sorted().forEach { toolName ->
                             item(
-                                headlineContent = { Text(toolName) },
+                                headlineContent = { Text(beautifyToolName(toolName)) },
                                 trailingContent = {
                                     IconButton(onClick = {
                                         scope.launch { prefs.revoke(toolName) }
