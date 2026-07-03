@@ -44,6 +44,7 @@ class GroveIndexService(
     suspend fun index(
         vaultPath: String,
         ignoreFolders: String = "",
+        ignoreExtensions: String = "",
         progressCallback: ((IndexProgress) -> Unit)? = null,
     ) {
         withContext(Dispatchers.IO) {
@@ -58,12 +59,23 @@ class GroveIndexService(
                 .map { it.trim() }
                 .filter { it.isNotEmpty() }
                 .toSet()
+            val ignoreExtSet = ignoreExtensions.split(",")
+                .map { it.trim().lowercase().removePrefix(".") }
+                .filter { it.isNotEmpty() }
+                .toSet()
             val mdFiles = vaultDir.walkTopDown()
                 .filter { file ->
                     // 跳过忽略目录中的文件
                     if (ignoreSet.isNotEmpty()) {
                         val parentName = file.parentFile?.name ?: ""
                         !ignoreSet.contains(parentName)
+                    } else true
+                }
+                .filter { file ->
+                    // 跳过忽略后缀名的文件
+                    if (ignoreExtSet.isNotEmpty()) {
+                        val ext = file.extension.lowercase()
+                        ext !in ignoreExtSet
                     } else true
                 }
                 .filter { it.isFile && it.extension.lowercase() == "md" }

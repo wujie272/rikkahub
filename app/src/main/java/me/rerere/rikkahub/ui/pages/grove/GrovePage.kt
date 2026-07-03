@@ -98,6 +98,7 @@ fun GrovePage() {
             onSelectFolder = { vm.selectFolder(it) },
             onPathChange = { vm.updateVaultPath(it) },
             onIgnoreChange = { vm.updateIgnoreFolders(it) },
+            onIgnoreExtensionsChange = { vm.updateIgnoreExtensions(it) },
         )
     }
 }
@@ -111,6 +112,7 @@ private fun GroveContent(
     onSelectFolder: (String?) -> Unit,
     onPathChange: (String) -> Unit,
     onIgnoreChange: (String) -> Unit,
+    onIgnoreExtensionsChange: (String) -> Unit,
 ) {
     LazyColumn(
         modifier = modifier
@@ -505,9 +507,40 @@ private fun GroveVaultPathInput(
 }
 
 @Composable
+private fun GroveIgnoreExtensionsInput(
+    ignoreExtensions: String,
+    onIgnoreExtensionsChange: (String) -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CustomColors.cardColorsOnSurfaceContainer,
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = "忽略后缀名（逗号分隔）",
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Text(
+                text = "这些后缀名的文件不会被索引",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            OutlinedTextField(
+                value = ignoreExtensions,
+                onValueChange = onIgnoreExtensionsChange,
+                placeholder = { Text("输入要跳过的后缀名，如 png, jpg, pdf") },
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                singleLine = true,
+            )
+        }
+    }
+}
+
+@Composable
 private fun GroveIgnoreFoldersInput(
     ignoreFolders: String,
     onIgnoreChange: (String) -> Unit,
+    onIgnoreExtensionsChange: (String) -> Unit,
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),

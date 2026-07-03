@@ -196,6 +196,7 @@ class SettingsStore(
         // Grove
         val GROVE_VAULT_PATH = stringPreferencesKey("grove_vault_path")
         val GROVE_IGNORE_FOLDERS = stringPreferencesKey("grove_ignore_folders")
+        val GROVE_IGNORE_EXTENSIONS = stringPreferencesKey("grove_ignore_extensions")
     }
 
     private val dataStore = context.settingsStore
@@ -234,6 +235,7 @@ class SettingsStore(
                 compressPrompt = preferences[COMPRESS_PROMPT] ?: DEFAULT_COMPRESS_PROMPT,
                 groveVaultPath = preferences[GROVE_VAULT_PATH] ?: "",
                 groveIgnoreFolders = preferences[GROVE_IGNORE_FOLDERS] ?: "",
+                groveIgnoreExtensions = preferences[GROVE_IGNORE_EXTENSIONS] ?: "",
                 assistantId = preferences[SELECT_ASSISTANT]?.let { Uuid.parse(it) }
                     ?: DEFAULT_ASSISTANT_ID,
                 assistantTags = preferences[ASSISTANT_TAGS]?.let {
@@ -500,6 +502,7 @@ class SettingsStore(
             preferences[COMPRESS_PROMPT] = settings.compressPrompt
             preferences[GROVE_VAULT_PATH] = settings.groveVaultPath
             preferences[GROVE_IGNORE_FOLDERS] = settings.groveIgnoreFolders
+            preferences[GROVE_IGNORE_EXTENSIONS] = settings.groveIgnoreExtensions
 
             preferences[PROVIDERS] = JsonInstant.encodeToString(settings.providers)
             preferences[DELETED_BUILTIN_PROVIDER_IDS] = JsonInstant.encodeToString(
@@ -658,6 +661,7 @@ data class Settings(
     val compressPrompt: String = DEFAULT_COMPRESS_PROMPT,
     val groveVaultPath: String = "",
     val groveIgnoreFolders: String = "",
+    val groveIgnoreExtensions: String = "",
     val assistantId: Uuid = DEFAULT_ASSISTANT_ID,
     val providers: List<ProviderSetting> = DEFAULT_PROVIDERS,
     /**

@@ -35,6 +35,7 @@ class GroveVM(
         val snackbar: String? = null,
         val vaultPath: String = "",
         val ignoreFolders: String = "",
+        val ignoreExtensions: String = "",
         val folderFileCounts: List<FolderStat> = emptyList(),
     )
 
@@ -60,6 +61,7 @@ class GroveVM(
                     folders = folders,
                     vaultPath = settings.groveVaultPath,
                     ignoreFolders = settings.groveIgnoreFolders,
+                    ignoreExtensions = settings.groveIgnoreExtensions,
                     folderFileCounts = stats.folderFileCounts,
                     hasEmbeddingModel = settings.embeddingModelId.toString() != "00000000-0000-0000-0000-000000000000",
                 )
@@ -83,6 +85,13 @@ class GroveVM(
         }
     }
 
+    fun updateIgnoreExtensions(extensions: String) {
+        _uiState.value = _uiState.value.copy(ignoreExtensions = extensions)
+        viewModelScope.launch {
+            settingsStore.update { it.copy(groveIgnoreExtensions = extensions) }
+        }
+    }
+
     fun startIndex() {
         val vaultPath = _uiState.value.vaultPath
         if (vaultPath.isBlank()) {
@@ -97,6 +106,7 @@ class GroveVM(
             groveRepository.indexService.index(
                 vaultPath = vaultPath,
                 ignoreFolders = _uiState.value.ignoreFolders,
+                ignoreExtensions = _uiState.value.ignoreExtensions,
                 progressCallback = { progress ->
                     _uiState.value = _uiState.value.copy(
                         isIndexing = progress.isRunning,
