@@ -97,6 +97,7 @@ fun GrovePage() {
             onStartIndex = { vm.startIndex() },
             onSelectFolder = { vm.selectFolder(it) },
             onPathChange = { vm.updateVaultPath(it) },
+            onIgnoreChange = { vm.updateIgnoreFolders(it) },
         )
     }
 }
