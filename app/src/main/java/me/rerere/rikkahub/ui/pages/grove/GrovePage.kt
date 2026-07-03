@@ -109,6 +109,7 @@ private fun GroveContent(
     onStartIndex: () -> Unit,
     onSelectFolder: (String?) -> Unit,
     onPathChange: (String) -> Unit,
+    onIgnoreChange: (String) -> Unit,
 ) {
     LazyColumn(
         modifier = modifier
@@ -133,6 +134,14 @@ private fun GroveContent(
                 isReady = uiState.isReady,
                 isIndexing = uiState.isIndexing,
                 indexProgress = uiState.indexProgress,
+            )
+        }
+
+        // 忽略目录设置
+        item("ignore") {
+            GroveIgnoreFoldersInput(
+                ignoreFolders = uiState.ignoreFolders,
+                onIgnoreChange = onIgnoreChange,
             )
         }
 
