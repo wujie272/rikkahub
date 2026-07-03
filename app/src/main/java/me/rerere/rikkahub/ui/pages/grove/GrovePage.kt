@@ -448,24 +448,29 @@ private fun GroveVaultPathInput(
         }
     }
 
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        OutlinedTextField(
-            value = path,
-            onValueChange = onPathChange,
-            placeholder = { Text("/storage/emulated/0/Documents/你的笔记库") },
-            modifier = Modifier.weight(1f),
-            singleLine = true,
-            readOnly = false,
-        )
-        Spacer(modifier = Modifier.width(8.dp))
-        FilledTonalButton(
-            onClick = { launcher.launch(null) },
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(HugeIcons.Folder01, null, modifier = Modifier.padding(end = 4.dp))
-            Text("选择")
+            Text(
+                text = if (path.isEmpty()) "未选择笔记库" else path,
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (path.isEmpty())
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                else
+                    MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            FilledTonalButton(
+                onClick = { launcher.launch(null) },
+            ) {
+                Icon(HugeIcons.Folder01, null, modifier = Modifier.padding(end = 4.dp))
+                Text("选择")
+            }
         }
     }
 }
