@@ -601,65 +601,7 @@ class McpManager(
         return syncingStatus.map { it[config.id] ?: McpStatus.Idle }
     }
 
-/**
- * Build a one-line summary of an MCP config that's safe to log. Uses the shared header
- * redactor so secret values never reach logcat. Logging the full data class via toString
- * (which is what `$mcpServerConfigs` would do) leaks every Authorization / X-Api-Key
- * value verbatim — addressed in the Phase 10 audit pass.
- */
-/**
- * True when two same-id configs differ in any field that affects the live transport
- * connection (transport subclass, url, request headers). Tool list / enable / name changes
- * are deliberately ignored: they don't require tearing down the connection. Drives the
- * settings collector's reconnect-on-edit path so editing an enabled server's url/transport/
- * headers takes effect without an app restart.
- */
-internal fun connectionFieldsDiffer(old: McpServerConfig, new: McpServerConfig): Boolean {
-    if (old::class != new::class) return true
-    val oldUrl = when (old) {
-        is McpServerConfig.SseTransportServer -> old.url
-        is McpServerConfig.StreamableHTTPServer -> old.url
-    }
-    val newUrl = when (new) {
-        is McpServerConfig.SseTransportServer -> new.url
-        is McpServerConfig.StreamableHTTPServer -> new.url
-    }
-    if (oldUrl != newUrl) return true
-    return old.commonOptions.headers != new.commonOptions.headers
-}
 
-private fun redactConfigForLog(config: McpServerConfig): String {
-    val transport = when (config) {
-        is McpServerConfig.SseTransportServer -> "sse"
-        is McpServerConfig.StreamableHTTPServer -> "streamable_http"
-    }
-    val url = when (config) {
-        is McpServerConfig.SseTransportServer -> config.url
-        is McpServerConfig.StreamableHTTPServer -> config.url
-    }
-    val redactedHeaders = me.rerere.rikkahub.data.ai.mcp.control.McpHeaderRedactor
-        .redactHeaders(config.commonOptions.headers)
-    return buildString {
-        append("McpServer(id=").append(config.id)
-        append(", name='").append(config.commonOptions.name).append('\'')
-        append(", transport=").append(transport)
-        append(", url=").append(url)
-        append(", enabled=").append(config.commonOptions.enable)
-        append(", tools=").append(config.commonOptions.tools.size)
-        append(", headers=[").append(redactedHeaders.joinToString { "${it.first}=${it.second}" }).append("]")
-        append(")")
-    }
-}
-
-internal val McpJson: Json by lazy {
-    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
-    Json {
-        ignoreUnknownKeys = true
-        encodeDefaults = true
-        isLenient = true
-        classDiscriminatorMode = ClassDiscriminatorMode.NONE
-        explicitNulls = false
-    // =====================================================================
     // OAuth 2.1 授权 (MCP 规范 2025-11-25)
     // =====================================================================
 
@@ -901,6 +843,70 @@ internal val McpJson: Json by lazy {
             message.contains("invalid_token") ||
             message.contains("invalid access token") ||
             message.contains("missing or invalid")    }
+}
+
+}
+
+
+/**
+ * Build a one-line summary of an MCP config that's safe to log. Uses the shared header
+ * redactor so secret values never reach logcat. Logging the full data class via toString
+ * (which is what `$mcpServerConfigs` would do) leaks every Authorization / X-Api-Key
+ * value verbatim — addressed in the Phase 10 audit pass.
+ */
+/**
+ * True when two same-id configs differ in any field that affects the live transport
+ * connection (transport subclass, url, request headers). Tool list / enable / name changes
+ * are deliberately ignored: they don't require tearing down the connection. Drives the
+ * settings collector's reconnect-on-edit path so editing an enabled server's url/transport/
+ * headers takes effect without an app restart.
+ */
+internal fun connectionFieldsDiffer(old: McpServerConfig, new: McpServerConfig): Boolean {
+    if (old::class != new::class) return true
+    val oldUrl = when (old) {
+        is McpServerConfig.SseTransportServer -> old.url
+        is McpServerConfig.StreamableHTTPServer -> old.url
+    }
+    val newUrl = when (new) {
+        is McpServerConfig.SseTransportServer -> new.url
+        is McpServerConfig.StreamableHTTPServer -> new.url
+    }
+    if (oldUrl != newUrl) return true
+    return old.commonOptions.headers != new.commonOptions.headers
+}
+
+private fun redactConfigForLog(config: McpServerConfig): String {
+    val transport = when (config) {
+        is McpServerConfig.SseTransportServer -> "sse"
+        is McpServerConfig.StreamableHTTPServer -> "streamable_http"
+    }
+    val url = when (config) {
+        is McpServerConfig.SseTransportServer -> config.url
+        is McpServerConfig.StreamableHTTPServer -> config.url
+    }
+    val redactedHeaders = me.rerere.rikkahub.data.ai.mcp.control.McpHeaderRedactor
+        .redactHeaders(config.commonOptions.headers)
+    return buildString {
+        append("McpServer(id=").append(config.id)
+        append(", name='").append(config.commonOptions.name).append('\'')
+        append(", transport=").append(transport)
+        append(", url=").append(url)
+        append(", enabled=").append(config.commonOptions.enable)
+        append(", tools=").append(config.commonOptions.tools.size)
+        append(", headers=[").append(redactedHeaders.joinToString { "${it.first}=${it.second}" }).append("]")
+        append(")")
+    }
+}
+
+internal val McpJson: Json by lazy {
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+    Json {
+        ignoreUnknownKeys = true
+        encodeDefaults = true
+        isLenient = true
+        classDiscriminatorMode = ClassDiscriminatorMode.NONE
+        explicitNulls = false
+    }
 }
 
 private fun ToolSchema.toSchema(): InputSchema {
