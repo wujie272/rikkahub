@@ -46,6 +46,10 @@ import org.koin.androidx.compose.koinViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.platform.LocalContext
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 
 @Composable
 fun GardenKnowledgePage() {
@@ -98,7 +102,6 @@ private fun GardenKnowledgeContent(
             .padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        // 状态卡片
         // 路径设置
         item("path") {
             GardenVaultPathInput(
@@ -413,22 +416,43 @@ private fun GardenVaultPathInput(
     path: String,
     onPathChange: (String) -> Unit,
 ) {
-    Card(
+    val context = LocalContext.current
+    val launcher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree(),
+    ) { uri ->
+        if (uri != null) {
+            // 从 content:// URI 解析文件路径
+            // SAF 返回的格式: content://com.android.externalstorage.documents/tree/primary%3ADocuments%2F...
+            val pathStr = uri.toString()
+            val decodedPath = try {
+                val encoded = pathStr.substringAfter("tree/")
+                java.net.URLDecoder.decode(encoded, "UTF-8")
+                    .replace("primary:", "/storage/emulated/0/")
+            } catch (e: Exception) {
+                pathStr
+            }
+            onPathChange(decodedPath)
+        }
+    }
+
+    Row(
         modifier = Modifier.fillMaxWidth(),
-        colors = CustomColors.cardColorsOnSurfaceContainer,
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = "笔记库路径",
-                style = MaterialTheme.typography.titleSmall,
-            )
-            OutlinedTextField(
-                value = path,
-                onValueChange = onPathChange,
-                placeholder = { Text("/storage/emulated/0/Documents/你的笔记库") },
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                singleLine = true,
-            )
+        OutlinedTextField(
+            value = path,
+            onValueChange = onPathChange,
+            placeholder = { Text("/storage/emulated/0/Documents/你的笔记库") },
+            modifier = Modifier.weight(1f),
+            singleLine = true,
+            readOnly = false,
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        FilledTonalButton(
+            onClick = { launcher.launch(null) },
+        ) {
+            Icon(HugeIcons.Folder01, null, modifier = Modifier.padding(end = 4.dp))
+            Text("选择")
         }
     }
 }
