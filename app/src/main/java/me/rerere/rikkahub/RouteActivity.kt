@@ -269,6 +269,7 @@ class RouteActivity : ComponentActivity() {
                 when (event) {
                     is AppEvent.Speak -> tts.speak(event.text)
                     is AppEvent.OpenUsageAccessSettings -> this@RouteActivity.openUsageAccessSettings()
+                    is AppEvent.McpOAuthCallback -> { /* handled by McpManager.authorizeInternal */ }
                 }
             }
         }

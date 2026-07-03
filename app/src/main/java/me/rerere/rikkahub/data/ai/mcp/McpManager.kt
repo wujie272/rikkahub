@@ -845,8 +845,6 @@ class McpManager(
             message.contains("missing or invalid")    }
 }
 
-}
-
 
 /**
  * Build a one-line summary of an MCP config that's safe to log. Uses the shared header
