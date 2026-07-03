@@ -77,6 +77,8 @@ import me.rerere.rikkahub.data.ai.transformers.TemplateTransformer
 import me.rerere.rikkahub.data.ai.transformers.ThinkTagTransformer
 import me.rerere.rikkahub.data.ai.transformers.TimeReminderTransformer
 import me.rerere.rikkahub.data.ai.transformers.WorkspaceReminderTransformer
+import me.rerere.rikkahub.data.ai.transformers.GroveInjectionTransformer
+import me.rerere.rikkahub.data.grove.GroveSearchService
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.Settings
@@ -174,9 +176,11 @@ class ChatService(
     private val groupTurnOrchestrator: GroupTurnOrchestrator,
     private val groupRepository: GroupRepository,
     private val folderRepository: FolderRepository,
+    private val groveSearchService: GroveSearchService,
 ) {
     // workspace 系统提示注入 (依赖 workspaceRepository, 故在类内构造)
     private val workspaceReminderTransformer = WorkspaceReminderTransformer(workspaceRepository)
+    private val groveInjectionTransformer by lazy { GroveInjectionTransformer(groveSearchService) }
 
     // 统一会话管理
     private val sessions = ConcurrentHashMap<Uuid, ConversationSession>()
@@ -904,6 +908,9 @@ class ChatService(
                     addAll(inputTransformers)
                     add(templateTransformer)
                     add(workspaceReminderTransformer)
+                    if (settings.groveInjectionEnabled) {
+                        add(groveInjectionTransformer)
+                    }
                 },
                 outputTransformers = outputTransformers,
                 tools = buildList {
@@ -1423,6 +1430,9 @@ class ChatService(
                 addAll(inputTransformers)
                 add(templateTransformer)
                 add(workspaceReminderTransformer)
+                if (settings.groveInjectionEnabled) {
+                    add(groveInjectionTransformer)
+                }
             },
             outputTransformers = outputTransformers,
             tools = buildList {
@@ -1579,6 +1589,9 @@ class ChatService(
                 addAll(inputTransformers)
                 add(templateTransformer)
                 add(workspaceReminderTransformer)
+                if (settings.groveInjectionEnabled) {
+                    add(groveInjectionTransformer)
+                }
             },
             outputTransformers = outputTransformers,
             tools = buildList {

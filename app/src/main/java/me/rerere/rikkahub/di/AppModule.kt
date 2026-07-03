@@ -244,7 +244,8 @@ val appModule = module {
             workspaceRepository = get(),
             groupTurnOrchestrator = get(),
             groupRepository = get(),
-            folderRepository = get()
+            folderRepository = get(),
+            groveSearchService = get()
         )
     }
 

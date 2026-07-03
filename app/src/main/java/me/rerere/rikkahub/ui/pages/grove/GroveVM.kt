@@ -36,6 +36,7 @@ class GroveVM(
         val vaultPath: String = "",
         val ignoreFolders: String = "",
         val ignoreExtensions: String = "",
+        val injectionEnabled: Boolean = false,
         val folderFileCounts: List<FolderStat> = emptyList(),
     )
 
@@ -62,6 +63,7 @@ class GroveVM(
                     vaultPath = settings.groveVaultPath,
                     ignoreFolders = settings.groveIgnoreFolders,
                     ignoreExtensions = settings.groveIgnoreExtensions,
+                    injectionEnabled = settings.groveInjectionEnabled,
                     folderFileCounts = stats.folderFileCounts,
                     hasEmbeddingModel = settings.embeddingModelId.toString() != "00000000-0000-0000-0000-000000000000",
                 )
@@ -89,6 +91,13 @@ class GroveVM(
         _uiState.value = _uiState.value.copy(ignoreExtensions = extensions)
         viewModelScope.launch {
             settingsStore.update { it.copy(groveIgnoreExtensions = extensions) }
+        }
+    }
+
+    fun updateInjectionEnabled(enabled: Boolean) {
+        _uiState.value = _uiState.value.copy(injectionEnabled = enabled)
+        viewModelScope.launch {
+            settingsStore.update { it.copy(groveInjectionEnabled = enabled) }
         }
     }
 

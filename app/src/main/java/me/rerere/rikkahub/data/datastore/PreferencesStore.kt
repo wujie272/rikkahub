@@ -197,6 +197,7 @@ class SettingsStore(
         val GROVE_VAULT_PATH = stringPreferencesKey("grove_vault_path")
         val GROVE_IGNORE_FOLDERS = stringPreferencesKey("grove_ignore_folders")
         val GROVE_IGNORE_EXTENSIONS = stringPreferencesKey("grove_ignore_extensions")
+        val GROVE_INJECTION_ENABLED = booleanPreferencesKey("grove_injection_enabled")
     }
 
     private val dataStore = context.settingsStore
@@ -236,6 +237,7 @@ class SettingsStore(
                 groveVaultPath = preferences[GROVE_VAULT_PATH] ?: "",
                 groveIgnoreFolders = preferences[GROVE_IGNORE_FOLDERS] ?: "",
                 groveIgnoreExtensions = preferences[GROVE_IGNORE_EXTENSIONS] ?: "",
+                groveInjectionEnabled = preferences[GROVE_INJECTION_ENABLED] ?: false,
                 assistantId = preferences[SELECT_ASSISTANT]?.let { Uuid.parse(it) }
                     ?: DEFAULT_ASSISTANT_ID,
                 assistantTags = preferences[ASSISTANT_TAGS]?.let {
@@ -503,6 +505,7 @@ class SettingsStore(
             preferences[GROVE_VAULT_PATH] = settings.groveVaultPath
             preferences[GROVE_IGNORE_FOLDERS] = settings.groveIgnoreFolders
             preferences[GROVE_IGNORE_EXTENSIONS] = settings.groveIgnoreExtensions
+            preferences[GROVE_INJECTION_ENABLED] = settings.groveInjectionEnabled
 
             preferences[PROVIDERS] = JsonInstant.encodeToString(settings.providers)
             preferences[DELETED_BUILTIN_PROVIDER_IDS] = JsonInstant.encodeToString(
@@ -662,6 +665,7 @@ data class Settings(
     val groveVaultPath: String = "",
     val groveIgnoreFolders: String = "",
     val groveIgnoreExtensions: String = "",
+    val groveInjectionEnabled: Boolean = false,
     val assistantId: Uuid = DEFAULT_ASSISTANT_ID,
     val providers: List<ProviderSetting> = DEFAULT_PROVIDERS,
     /**

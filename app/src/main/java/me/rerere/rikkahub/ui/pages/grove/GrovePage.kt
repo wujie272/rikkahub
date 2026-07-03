@@ -99,6 +99,7 @@ fun GrovePage() {
             onPathChange = { vm.updateVaultPath(it) },
             onIgnoreChange = { vm.updateIgnoreFolders(it) },
             onIgnoreExtensionsChange = { vm.updateIgnoreExtensions(it) },
+            onInjectionEnabledChange = { vm.updateInjectionEnabled(it) },
         )
     }
 }
@@ -113,6 +114,7 @@ private fun GroveContent(
     onPathChange: (String) -> Unit,
     onIgnoreChange: (String) -> Unit,
     onIgnoreExtensionsChange: (String) -> Unit,
+    onInjectionEnabledChange: (Boolean) -> Unit,
 ) {
     LazyColumn(
         modifier = modifier
@@ -145,6 +147,14 @@ private fun GroveContent(
             GroveIgnoreFoldersInput(
                 ignoreFolders = uiState.ignoreFolders,
                 onIgnoreChange = onIgnoreChange,
+            )
+        }
+
+        // Grove 注入开关
+        item("injection") {
+            GroveInjectionToggle(
+                enabled = uiState.injectionEnabled,
+                onEnabledChange = onInjectionEnabledChange,
             )
         }
 
@@ -510,6 +520,7 @@ private fun GroveVaultPathInput(
 private fun GroveIgnoreExtensionsInput(
     ignoreExtensions: String,
     onIgnoreExtensionsChange: (String) -> Unit,
+    onInjectionEnabledChange: (Boolean) -> Unit,
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -537,10 +548,43 @@ private fun GroveIgnoreExtensionsInput(
 }
 
 @Composable
+@Composable
+private fun GroveInjectionToggle(
+    enabled: Boolean,
+    onEnabledChange: (Boolean) -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CustomColors.cardColorsOnSurfaceContainer,
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "对话时自动检索笔记",
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Text(
+                    text = "聊天时根据用户消息自动检索相关笔记内容并注入上下文",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Switch(
+                checked = enabled,
+                onCheckedChange = onEnabledChange,
+            )
+        }
+    }
+}
+
 private fun GroveIgnoreFoldersInput(
     ignoreFolders: String,
     onIgnoreChange: (String) -> Unit,
     onIgnoreExtensionsChange: (String) -> Unit,
+    onInjectionEnabledChange: (Boolean) -> Unit,
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
