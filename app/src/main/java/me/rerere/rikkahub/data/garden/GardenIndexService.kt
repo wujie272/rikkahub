@@ -172,7 +172,7 @@ class GardenIndexService(
             }
 
             progressCallback?.invoke(progress.copy(isRunning = false))
-            Log.i(TAG, "Index complete: $totalFiles files, ${newChunks.size} new chunks")
+            Log.i(TAG, "Index complete: $totalFiles files, ${progress.newChunks} new chunks")
         }
     }
 
