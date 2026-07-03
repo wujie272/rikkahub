@@ -526,7 +526,7 @@ private fun GroveIgnoreFoldersInput(
             OutlinedTextField(
                 value = ignoreFolders,
                 onValueChange = onIgnoreChange,
-                placeholder = { Text("Example, Template, Daily Notes, copilot, Excalidraw") },
+                placeholder = { Text("输入要跳过的目录名称，如 .obsidian, .trash") },
                 modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                 singleLine = true,
             )
