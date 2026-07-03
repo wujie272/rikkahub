@@ -20,6 +20,11 @@ import me.rerere.workspace.RootfsInstaller
 import me.rerere.workspace.WorkspaceBindMount
 import me.rerere.workspace.WorkspaceManager
 import org.koin.dsl.module
+import androidx.room.Room
+import me.rerere.rikkahub.data.garden.GardenDatabase
+import me.rerere.rikkahub.data.garden.GardenIndexService
+import me.rerere.rikkahub.data.garden.GardenRepository
+import me.rerere.rikkahub.data.garden.GardenSearchService
 import java.io.File
 
 val repositoryModule = module {
@@ -94,4 +99,29 @@ val repositoryModule = module {
     single {
         SkillManager(get(), get())
     }
+
+    single {
+        Room.databaseBuilder(
+            get<android.content.Context>(),
+            GardenDatabase::class.java,
+            "rikka_hub_garden"
+        ).build()
+    }
+
+    single {
+        get<GardenDatabase>().documentDao()
+    }
+
+    single {
+        GardenIndexService(get(), get())
+    }
+
+    single {
+        GardenSearchService(get(), get())
+    }
+
+    single {
+        GardenRepository(get(), get())
+    }
+
 }
