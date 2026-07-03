@@ -200,13 +200,12 @@ class GardenIndexService(
 
                 if (isHeading) {
                     hasAnyHeading = true
-                    // 保存上一个 chunk
                     flushChunkBuilder(currentChunk, chunks)
                 }
                 currentChunk.appendLine(l)
 
-                // 没标题时：按长度自动截断
-                if (!hasAnyHeading && currentChunk.length >= CHUNK_MAX_CHARS) {
+                // 无论有无标题，超过长度都要截断，防止两个标题间大段文字撑爆内存
+                if (currentChunk.length >= CHUNK_MAX_CHARS) {
                     flushChunkBuilder(currentChunk, chunks)
                 }
             }
@@ -254,32 +253,6 @@ class GardenIndexService(
             if (pos >= text.length) break
             pos -= CHUNK_OVERLAP_CHARS
         }
-    }
-
-    /**
-     * 按固定长度切分文本，带重叠。
-     */
-    private fun chunkByLength(text: String): List<String> {
-        val chunks = mutableListOf<String>()
-        var start = 0
-        while (start < text.length) {
-            val end = minOf(start + CHUNK_MAX_CHARS, text.length)
-            val cutEnd = if (end < text.length) {
-                val searchStart = maxOf(start, end - 200)
-                val segment = text.substring(searchStart, end)
-                val localIndex = segment.lastIndexOfAny(
-                    charArrayOf('。', '.', '\n', '！', '？', '!', '?'),
-                )
-                val lastPeriod = if (localIndex >= 0) searchStart + localIndex else -1
-                if (lastPeriod > start) lastPeriod + 1 else end
-            } else {
-                end
-            }
-            chunks.add(text.substring(start, cutEnd).trim())
-            start = cutEnd - CHUNK_OVERLAP_CHARS
-            if (start >= text.length) break
-        }
-        return chunks.filter { it.isNotEmpty() }
     }
 
     /**
