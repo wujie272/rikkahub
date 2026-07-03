@@ -29,7 +29,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
+
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.style.TextOverflow
@@ -467,7 +467,6 @@ private fun SearchResultCard(
     }
 }
 
-
 @Composable
 private fun GroveVaultPathInput(
     path: String,
@@ -581,6 +580,7 @@ private fun GroveInjectionToggle(
     }
 }
 
+@Composable
 private fun GroveIgnoreFoldersInput(
     ignoreFolders: String,
     onIgnoreChange: (String) -> Unit,
