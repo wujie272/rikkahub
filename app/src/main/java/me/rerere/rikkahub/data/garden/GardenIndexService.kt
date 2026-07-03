@@ -181,9 +181,8 @@ class GardenIndexService(
      * 策略：按 ## 或 ### 标题切分，长段落二次裁切。
      */
     private fun chunkFile(file: File): List<String> {
-        // 流式读取，避免大文件 OOM
+        // 流式读取，永远不 readText() 整个文件
         if (!file.exists() || file.length() == 0L) return emptyList()
-        // 跳过超过 50MB 的文件
         if (file.length() > 50 * 1024 * 1024) {
             Log.w(TAG, "Skipping oversized file: ${file.absolutePath} (${file.length() / 1024 / 1024}MB)")
             return emptyList()
@@ -191,51 +190,70 @@ class GardenIndexService(
 
         val chunks = mutableListOf<String>()
         val currentChunk = StringBuilder()
-        var headingCount = 0
+        var hasAnyHeading = false
 
         file.bufferedReader(Charsets.UTF_8).use { reader ->
             var line: String?
             while (reader.readLine().also { line = it } != null) {
                 val l = line!!
-                // 检测 ## 或 ### 标题
-                if ((l.startsWith("## ") || l.startsWith("### ")) && currentChunk.isNotEmpty()) {
+                val isHeading = l.startsWith("## ") || l.startsWith("### ")
+
+                if (isHeading) {
+                    hasAnyHeading = true
                     // 保存上一个 chunk
-                    val chunk = currentChunk.toString().trim()
-                    if (chunk.isNotEmpty()) {
-                        if (chunk.length > CHUNK_MAX_CHARS) {
-                            chunks.addAll(chunkByLength(chunk))
-                        } else {
-                            chunks.add(chunk)
-                        }
-                    }
-                    currentChunk.clear()
-                    headingCount++
+                    flushChunkBuilder(currentChunk, chunks)
                 }
                 currentChunk.appendLine(l)
+
+                // 没标题时：按长度自动截断
+                if (!hasAnyHeading && currentChunk.length >= CHUNK_MAX_CHARS) {
+                    flushChunkBuilder(currentChunk, chunks)
+                }
             }
         }
 
         // 最后一个 chunk
-        val lastChunk = currentChunk.toString().trim()
-        if (lastChunk.isNotEmpty()) {
-            if (lastChunk.length > CHUNK_MAX_CHARS) {
-                chunks.addAll(chunkByLength(lastChunk))
-            } else {
-                chunks.add(lastChunk)
-            }
-        }
-
-        // 完全没有标题时，按长度切分整个文件
-        if (headingCount == 0 && chunks.isEmpty()) {
-            file.bufferedReader(Charsets.UTF_8).use { reader ->
-                val content = reader.readText()
-                if (content.isNotBlank()) {
-                    return chunkByLength(content)
-                }
-            }
-        }
+        flushChunkBuilder(currentChunk, chunks)
 
         return chunks
+    }
+
+    /**
+     * 将 StringBuilder 中的内容刷出为一个 chunk，然后清空 builder。
+     * 如果内容超过 CHUNK_MAX_CHARS，会在内部按长度二次切分（也是流式，不复制大字符串）。
+     */
+    private fun flushChunkBuilder(builder: StringBuilder, output: MutableList<String>) {
+        if (builder.isEmpty()) return
+        val text = builder.toString().trim()
+        builder.clear()
+        if (text.isEmpty()) return
+
+        if (text.length <= CHUNK_MAX_CHARS) {
+            output.add(text)
+            return
+        }
+
+        // 长文本：原地二次切分，不用 substring 复制整串
+        var pos = 0
+        while (pos < text.length) {
+            val end = minOf(pos + CHUNK_MAX_CHARS, text.length)
+            // 尽量在句尾断开
+            val cutPos = if (end < text.length) {
+                val searchStart = maxOf(pos, end - 200.coerceAtMost(end - pos))
+                val segment = text.substring(searchStart, end)
+                val localIdx = segment.lastIndexOfAny(
+                    charArrayOf('\u3002', '.', '\n', '\uff01', '\uff1f', '!', '?'),
+                )
+                if (localIdx >= 0) searchStart + localIdx + 1 else end
+            } else {
+                end
+            }
+            val chunk = if (cutPos > pos) text.substring(pos, cutPos).trim() else ""
+            if (chunk.isNotEmpty()) output.add(chunk)
+            pos = cutPos.coerceAtLeast(pos + 1)
+            if (pos >= text.length) break
+            pos -= CHUNK_OVERLAP_CHARS
+        }
     }
 
     /**
