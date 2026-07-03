@@ -10,6 +10,7 @@ import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.garden.GardenIndexService
 import me.rerere.rikkahub.data.garden.GardenRepository
 import me.rerere.rikkahub.data.garden.GardenSearchService
+import me.rerere.rikkahub.data.garden.FolderStat
 
 class GardenKnowledgeVM(
     private val gardenRepository: GardenRepository,
@@ -30,8 +31,10 @@ class GardenKnowledgeVM(
         val folders: List<String> = emptyList(),
         val selectedFolder: String? = null,
         val error: String? = null,
+        val snackbar: String? = null,
         val vaultPath: String = "",
         val ignoreFolders: String = "",
+        val folderFileCounts: List<FolderStat> = emptyList(),
     )
 
     private val _uiState = MutableStateFlow(UiState())
@@ -56,6 +59,7 @@ class GardenKnowledgeVM(
                     folders = folders,
                     vaultPath = settings.gardenVaultPath,
                     ignoreFolders = settings.gardenIgnoreFolders,
+                    folderFileCounts = stats.folderFileCounts,
                 )
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(error = e.message)
@@ -99,7 +103,11 @@ class GardenKnowledgeVM(
                 },
             )
             refresh()
-            _uiState.value = _uiState.value.copy(isIndexing = false)
+            val s = _uiState.value
+            _uiState.value = _uiState.value.copy(
+                isIndexing = false,
+                snackbar = "索引完成: ${s.totalFiles} 文件, ${s.totalChunks} 分块",
+            )
         }
     }
 
@@ -133,6 +141,10 @@ class GardenKnowledgeVM(
                 )
             }
         }
+    }
+
+    fun clearSnackbar() {
+        _uiState.value = _uiState.value.copy(snackbar = null)
     }
 
     fun selectFolder(folder: String?) {

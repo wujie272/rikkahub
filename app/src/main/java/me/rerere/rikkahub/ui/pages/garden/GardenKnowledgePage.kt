@@ -49,6 +49,9 @@ import java.util.Locale
 import androidx.compose.foundation.layout.width
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.runtime.LaunchedEffect
 
 @Composable
 fun GardenKnowledgePage() {
@@ -56,7 +59,17 @@ fun GardenKnowledgePage() {
     val uiState by vm.uiState.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(uiState.snackbar) {
+        uiState.snackbar?.let {
+            snackbarHostState.showSnackbar(it)
+            vm.clearSnackbar()
+        }
+    }
+
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             LargeFlexibleTopAppBar(
                 title = { Text("数字花园") },

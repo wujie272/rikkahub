@@ -54,4 +54,15 @@ interface DocumentDAO {
     // 按文件夹过滤
     @Query("SELECT * FROM document WHERE source_folder = :folder AND embedding IS NOT NULL")
     suspend fun getByFolderWithEmbedding(folder: String): List<DocumentEntity>
+
+    // 按文件夹统计文件数量
+    @Query("SELECT source_folder, COUNT(DISTINCT file_path) AS file_count FROM document GROUP BY source_folder ORDER BY file_count DESC")
+    suspend fun getFolderFileCounts(): List<FolderStat>
 }
+
+
+
+data class FolderStat(
+    val source_folder: String,
+    val file_count: Int,
+)

@@ -299,12 +299,14 @@ class GardenIndexService(
         val files = documentDAO.countFiles()
         val folders = documentDAO.getDistinctFolders()
         val recent = documentDAO.getRecent(5)
+        val folderStats = documentDAO.getFolderFileCounts()
         return IndexStats(
             totalChunks = total,
             totalFiles = files,
             folderCount = folders.size,
             recentFiles = recent.map { it.filePath },
             lastUpdated = recent.maxOfOrNull { it.updatedAt } ?: 0,
+            folderFileCounts = folderStats,
         )
     }
 
@@ -314,6 +316,7 @@ class GardenIndexService(
         val folderCount: Int,
         val recentFiles: List<String>,
         val lastUpdated: Long,
+        val folderFileCounts: List<FolderStat> = emptyList(),
     )
 
     /**
