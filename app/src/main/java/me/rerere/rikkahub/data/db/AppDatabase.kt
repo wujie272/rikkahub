@@ -10,6 +10,7 @@ import me.rerere.rikkahub.data.agentrun.AgentRun
 import me.rerere.rikkahub.data.agentrun.AgentRunDao
 import me.rerere.rikkahub.data.db.dao.ConversationDAO
 import me.rerere.rikkahub.data.db.dao.FavoriteDAO
+import me.rerere.rikkahub.data.db.dao.FolderDAO
 import me.rerere.rikkahub.data.db.dao.GenMediaDAO
 import me.rerere.rikkahub.data.db.dao.ManagedFileDAO
 import me.rerere.rikkahub.data.db.dao.MemoryDAO
@@ -21,6 +22,7 @@ import me.rerere.rikkahub.data.db.dao.SshHostDao
 import me.rerere.rikkahub.data.db.dao.WorkspaceDAO
 import me.rerere.rikkahub.data.db.entity.ConversationEntity
 import me.rerere.rikkahub.data.db.entity.FavoriteEntity
+import me.rerere.rikkahub.data.db.entity.FolderEntity
 import me.rerere.rikkahub.data.db.entity.GenMediaEntity
 import me.rerere.rikkahub.data.db.entity.ManagedFileEntity
 import me.rerere.rikkahub.data.db.entity.MemoryEntity
@@ -61,6 +63,7 @@ import me.rerere.rikkahub.workflow.db.WorkflowRunEntity
         GroupEntity::class,
         GroupMemberEntity::class,
         WorkspaceEntity::class,
+        FolderEntity::class,
     ],
     version = 30,
     autoMigrations = [
@@ -91,7 +94,6 @@ import me.rerere.rikkahub.workflow.db.WorkflowRunEntity
         // 27→28: group round-robin index (manual — see addMigrations below)
         // 28→29: vector memory columns (manual — see addMigrations below)
         // 29→30: drop telegram_chat table (manual — see addMigrations below)
-
     ]
 )
 @TypeConverters(TokenUsageConverter::class)
@@ -124,6 +126,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun groupDao(): GroupDao
 
     abstract fun workspaceDao(): WorkspaceDAO
+
+    abstract fun folderDao(): FolderDAO
 }
 
 object TokenUsageConverter {

@@ -152,6 +152,10 @@ val dataSourceModule = module {
     }
 
     single {
+        get<AppDatabase>().folderDao()
+    }
+
+    single {
         MessageFtsManager(get())
     }
 
@@ -162,7 +166,7 @@ val dataSourceModule = module {
     single { AgentRunRepository(get()) }
     single { AgentRunBootRecovery(context = get(), repository = get()) }
 
-    single { McpManager(context = get(), settingsStore = get(), appScope = get(), filesManager = get()) }
+    single { McpManager(context = get(), settingsStore = get(), appScope = get(), filesManager = get(), appEventBus = get()) }
 
     single {
         GenerationHandler(

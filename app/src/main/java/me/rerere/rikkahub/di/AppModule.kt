@@ -243,7 +243,8 @@ val appModule = module {
             toolApprovalPreferences = get(),
             workspaceRepository = get(),
             groupTurnOrchestrator = get(),
-            groupRepository = get()
+            groupRepository = get(),
+            folderRepository = get()
         )
     }
 

@@ -200,8 +200,9 @@
       </intent-filter>
     </activity>
     <activity
-      android:name=".ui.activity.CodexOAuthRedirectActivity"
+      android:name=".ui.activity.McpOAuthCallbackActivity"
       android:exported="true"
+      android:launchMode="singleTask"
       android:theme="@android:style/Theme.Translucent.NoTitleBar">
       <intent-filter>
         <action android:name="android.intent.action.VIEW" />
@@ -210,8 +211,7 @@
         <category android:name="android.intent.category.BROWSABLE" />
 
         <data
-          android:host="codex"
-          android:path="/oauth"
+          android:host="mcp-oauth-callback"
           android:scheme="rikkahub" />
       </intent-filter>
     </activity>
