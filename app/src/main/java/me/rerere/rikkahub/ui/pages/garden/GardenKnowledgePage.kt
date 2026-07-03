@@ -456,3 +456,33 @@ private fun GardenVaultPathInput(
         }
     }
 }
+
+@Composable
+private fun GardenIgnoreFoldersInput(
+    ignoreFolders: String,
+    onIgnoreChange: (String) -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CustomColors.cardColorsOnSurfaceContainer,
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = "忽略目录（逗号分隔）",
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Text(
+                text = "这些目录中的 .md 文件不会被索引",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            OutlinedTextField(
+                value = ignoreFolders,
+                onValueChange = onIgnoreChange,
+                placeholder = { Text("Example, Template, Daily Notes, copilot, Excalidraw") },
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                singleLine = true,
+            )
+        }
+    }
+}

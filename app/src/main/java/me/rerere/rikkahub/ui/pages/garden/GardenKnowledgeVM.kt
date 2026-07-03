@@ -31,6 +31,7 @@ class GardenKnowledgeVM(
         val selectedFolder: String? = null,
         val error: String? = null,
         val vaultPath: String = "",
+        val ignoreFolders: String = "",
     )
 
     private val _uiState = MutableStateFlow(UiState())
@@ -54,6 +55,7 @@ class GardenKnowledgeVM(
                     lastUpdated = stats.lastUpdated,
                     folders = folders,
                     vaultPath = settings.gardenVaultPath,
+                    ignoreFolders = settings.gardenIgnoreFolders,
                 )
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(error = e.message)
@@ -65,6 +67,13 @@ class GardenKnowledgeVM(
         _uiState.value = _uiState.value.copy(vaultPath = path)
         viewModelScope.launch {
             settingsStore.update { it.copy(gardenVaultPath = path) }
+        }
+    }
+
+    fun updateIgnoreFolders(ignore: String) {
+        _uiState.value = _uiState.value.copy(ignoreFolders = ignore)
+        viewModelScope.launch {
+            settingsStore.update { it.copy(gardenIgnoreFolders = ignore) }
         }
     }
 
@@ -81,6 +90,7 @@ class GardenKnowledgeVM(
         viewModelScope.launch {
             gardenRepository.indexService.index(
                 vaultPath = vaultPath,
+                ignoreFolders = _uiState.value.ignoreFolders,
                 progressCallback = { progress ->
                     _uiState.value = _uiState.value.copy(
                         isIndexing = progress.isRunning,

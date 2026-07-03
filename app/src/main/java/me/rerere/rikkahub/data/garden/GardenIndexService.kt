@@ -43,6 +43,7 @@ class GardenIndexService(
      */
     suspend fun index(
         vaultPath: String,
+        ignoreFolders: String = "",
         progressCallback: ((IndexProgress) -> Unit)? = null,
     ) {
         withContext(Dispatchers.IO) {
@@ -53,7 +54,18 @@ class GardenIndexService(
             }
 
             // 收集所有 .md 文件
+            val ignoreSet = ignoreFolders.split(",")
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+                .toSet()
             val mdFiles = vaultDir.walkTopDown()
+                .filter { file ->
+                    // 跳过忽略目录中的文件
+                    if (ignoreSet.isNotEmpty()) {
+                        val parentName = file.parentFile?.name ?: ""
+                        !ignoreSet.contains(parentName)
+                    } else true
+                }
                 .filter { it.isFile && it.extension.lowercase() == "md" }
                 .toList()
 
