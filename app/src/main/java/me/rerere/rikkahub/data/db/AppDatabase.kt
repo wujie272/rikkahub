@@ -39,6 +39,7 @@ import me.rerere.rikkahub.data.db.migrations.Migration_21_22
 import me.rerere.rikkahub.data.db.migrations.Migration_22_23
 import me.rerere.rikkahub.data.db.migrations.Migration_27_28
 import me.rerere.rikkahub.data.db.migrations.Migration_29_30
+import me.rerere.rikkahub.data.db.migrations.Migration_30_31
 import me.rerere.rikkahub.data.db.migrations.Migration_8_9
 import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.rikkahub.workflow.db.WorkflowDao
@@ -65,7 +66,7 @@ import me.rerere.rikkahub.workflow.db.WorkflowRunEntity
         WorkspaceEntity::class,
         FolderEntity::class,
     ],
-    version = 30,
+    version = 32,
     autoMigrations = [
         // v1→v23: Using auto-migrations for early versions (no manual migrations overlap)
         AutoMigration(from = 1, to = 2),
@@ -85,7 +86,7 @@ import me.rerere.rikkahub.workflow.db.WorkflowRunEntity
         AutoMigration(from = 20, to = 21, spec = Migration_20_21::class),
         AutoMigration(from = 21, to = 22, spec = Migration_21_22::class),
         AutoMigration(from = 22, to = 23, spec = Migration_22_23::class),
-        // v24→v30: Using manual migrations instead of auto, because Room's KSP cannot
+        // v24→v32: Using manual migrations instead of auto, because Room's KSP cannot
         // validate auto-migrations when later versions use manual migrations (it can't
         // compute intermediate entity states). See addMigrations() below.
     ]
