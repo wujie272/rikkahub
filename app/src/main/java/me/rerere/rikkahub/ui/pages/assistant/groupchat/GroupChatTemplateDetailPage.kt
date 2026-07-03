@@ -18,12 +18,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.Delete
-import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -288,7 +282,7 @@ fun GroupChatTemplateDetailPage(id: String) {
     // ── Add member bottom sheet ──
     if (showAddMemberSheet) {
         val sheetState = rememberModalBottomSheetState()
-        val existingAssistantIds = currentTemplate?.seats?.map { it.assistantId }?.toSet() ?: emptySet()
+        val existingAssistantIds = template?.seats?.map { seat -> seat.assistantId }?.toSet() ?: emptySet()
         val availableAssistants = settings.assistants.filter { it.id !in existingAssistantIds }
 
         ModalBottomSheet(

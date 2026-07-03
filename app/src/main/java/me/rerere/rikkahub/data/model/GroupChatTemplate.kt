@@ -59,7 +59,7 @@ data class GroupChatSeatOverrides(
     val maxTokens: Int? = null,
     val searchEnabled: Boolean = false,
     val memoryEnabled: Boolean = false,
-    val searchMode: AssistantSearchMode = AssistantSearchMode.Off,
+    val searchMode: Int = 0, // 0=Off, 1=BuiltIn, 2=Provider
     val preferBuiltInSearch: Boolean = false,
     val mcpServerIds: Set<Uuid> = emptySet(),
 )
