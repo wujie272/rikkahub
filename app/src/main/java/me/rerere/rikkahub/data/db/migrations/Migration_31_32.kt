@@ -7,19 +7,40 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 private const val TAG = "Migration_31_32"
 
 /**
- * v31 → v32 (Refresh schema hash after FolderEntity addition).
+ * v31 → v32 (Add folder_id column to ConversationEntity).
  *
- * This is a no-op migration that exists solely to bump the database version
- * and let Room re-compute its identity hash. The actual schema change
- * (adding the `conversation_folder` table) was done in Migration_30_31.
+ * Handles two upgrade paths:
+ * 1. v30 → v31 → v32: Migration_30_31 already added folder_id, skip.
+ * 2. v31 → v32 (direct): Databases created via fallbackToDestructiveMigration
+ *    at v31 don't have folder_id because FolderEntity was added to the entity
+ *    list after the destructive fallback. This migration adds the missing column.
  *
- * Without this bump, Room's identity hash check would fail on databases
- * that were already at v31 (e.g. created via fallbackToDestructiveMigration)
- * but whose entity list has since changed (FolderEntity was added).
+ * Uses PRAGMA table_info to check column existence before ALTER TABLE,
+ * because SQLite throws an error if you ADD COLUMN on an existing column.
  */
 val Migration_31_32 = object : Migration(31, 32) {
     override fun migrate(db: SupportSQLiteDatabase) {
-        Log.i(TAG, "migrate: no-op hash refresh 31→32")
-        // No schema changes — just bumping version to refresh Room's identity hash.
+        Log.i(TAG, "migrate: start 31→32")
+
+        // Check if folder_id column already exists
+        val cursor = db.query("PRAGMA table_info('ConversationEntity')")
+        var hasFolderId = false
+        while (cursor.moveToNext()) {
+            val colName = cursor.getString(cursor.getColumnIndexOrThrow("name"))
+            if (colName == "folder_id") {
+                hasFolderId = true
+                break
+            }
+        }
+        cursor.close()
+
+        if (hasFolderId) {
+            Log.i(TAG, "folder_id already exists, skipping ALTER TABLE")
+        } else {
+            Log.i(TAG, "adding folder_id column to ConversationEntity")
+            db.execSQL("ALTER TABLE `ConversationEntity` ADD COLUMN `folder_id` TEXT NOT NULL DEFAULT ''")
+        }
+
+        Log.i(TAG, "migrate: migration 31→32 success")
     }
 }

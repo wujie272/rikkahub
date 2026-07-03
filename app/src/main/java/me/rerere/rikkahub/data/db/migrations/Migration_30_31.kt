@@ -18,28 +18,22 @@ private const val TAG = "Migration_30_31"
 val Migration_30_31 = object : Migration(30, 31) {
     override fun migrate(db: SupportSQLiteDatabase) {
         Log.i(TAG, "migrate: start creating conversation_folder table + folder_id column")
-        db.beginTransaction()
-        try {
-            // 1. Create conversation_folder table
-            db.execSQL("""
-                CREATE TABLE IF NOT EXISTS `conversation_folder` (
-                    `id` TEXT NOT NULL,
-                    `assistant_id` TEXT NOT NULL,
-                    `name` TEXT NOT NULL,
-                    `sort_index` INTEGER NOT NULL DEFAULT 0,
-                    `create_at` INTEGER NOT NULL,
-                    PRIMARY KEY(`id`)
-                )
-            """.trimIndent())
-            db.execSQL("CREATE INDEX IF NOT EXISTS `index_conversation_folder_assistant_id` ON `conversation_folder` (`assistant_id`)")
+        // 1. Create conversation_folder table
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS `conversation_folder` (
+                `id` TEXT NOT NULL,
+                `assistant_id` TEXT NOT NULL,
+                `name` TEXT NOT NULL,
+                `sort_index` INTEGER NOT NULL DEFAULT 0,
+                `create_at` INTEGER NOT NULL,
+                PRIMARY KEY(`id`)
+            )
+        """.trimIndent())
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_conversation_folder_assistant_id` ON `conversation_folder` (`assistant_id`)")
 
-            // 2. Add folder_id column to ConversationEntity
-            db.execSQL("ALTER TABLE `ConversationEntity` ADD COLUMN `folder_id` TEXT NOT NULL DEFAULT ''")
+        // 2. Add folder_id column to ConversationEntity
+        db.execSQL("ALTER TABLE `ConversationEntity` ADD COLUMN `folder_id` TEXT NOT NULL DEFAULT ''")
 
-            db.setTransactionSuccessful()
-            Log.i(TAG, "migrate: migration 30→31 success")
-        } finally {
-            db.endTransaction()
-        }
+        Log.i(TAG, "migrate: migration 30→31 success")
     }
 }

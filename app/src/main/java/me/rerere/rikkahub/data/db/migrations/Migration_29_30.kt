@@ -15,13 +15,7 @@ private const val TAG = "Migration_29_30"
 val Migration_29_30 = object : Migration(29, 30) {
     override fun migrate(db: SupportSQLiteDatabase) {
         Log.i(TAG, "migrate: start dropping telegram_chat table")
-        db.beginTransaction()
-        try {
-            db.execSQL("DROP TABLE IF EXISTS `telegram_chat`")
-            db.setTransactionSuccessful()
-            Log.i(TAG, "migrate: migration 29→30 success")
-        } finally {
-            db.endTransaction()
-        }
+        db.execSQL("DROP TABLE IF EXISTS `telegram_chat`")
+        Log.i(TAG, "migrate: migration 29→30 success")
     }
 }
