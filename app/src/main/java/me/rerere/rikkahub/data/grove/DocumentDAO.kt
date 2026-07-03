@@ -41,6 +41,9 @@ interface DocumentDAO {
     @Query("SELECT DISTINCT file_path FROM document")
     suspend fun getAllFilePaths(): List<String>
 
+    @Query("SELECT COUNT(*) FROM document WHERE embedding IS NOT NULL")
+    suspend fun countWithEmbedding(): Int
+
     @Query("DELETE FROM document")
     suspend fun deleteAll()
 

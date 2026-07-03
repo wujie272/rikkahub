@@ -183,7 +183,8 @@ class GroveIndexService(
             }
 
             progressCallback?.invoke(progress.copy(isRunning = false))
-            Log.i(TAG, "Index complete: $totalFiles files, ${progress.newChunks} new chunks")
+            val withEmbedding = runCatching { documentDAO.countWithEmbedding() }.getOrElse { -1 }
+            Log.i(TAG, "Index complete: $totalFiles files, ${progress.newChunks} new chunks, $withEmbedding have embedding")
         }
     }
 
@@ -317,6 +318,11 @@ class GroveIndexService(
         val lastUpdated: Long,
         val folderFileCounts: List<FolderStat> = emptyList(),
     )
+
+    /**
+     * embedding 模型是否已配置可用
+     */
+    suspend fun isEmbeddingConfigured(): Boolean = embeddingService.isConfigured()
 
     /**
      * 处理一批 DocumentEntity：生成 embedding 并写入数据库。

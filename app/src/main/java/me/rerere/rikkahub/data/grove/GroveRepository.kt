@@ -9,6 +9,11 @@ class GroveRepository(
     val searchService: GroveSearchService,
 ) {
     /**
+     * embedding 模型是否已配置
+     */
+    suspend fun isEmbeddingConfigured(): Boolean = indexService.isEmbeddingConfigured()
+
+    /**
      * 是否已初始化（有数据）
      */
     suspend fun isReady(): Boolean = searchService.isReady()

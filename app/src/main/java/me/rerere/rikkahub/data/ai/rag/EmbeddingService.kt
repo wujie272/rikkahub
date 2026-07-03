@@ -20,9 +20,18 @@ class EmbeddingService(
      */
     val currentModelId: Uuid?
         get() {
-            val id = settingsStore.settingsFlow.value.embeddingModelId
-            return if (id != Uuid.random()) id else null
+            val settings = settingsStore.settingsFlow.value
+            val id = settings.embeddingModelId
+            return if (settings.findModelById(id) != null) id else null
         }
+
+    /**
+     * 检查 embedding 模型是否已配置可用。
+     */
+    suspend fun isConfigured(): Boolean {
+        val settings = settingsStore.settingsFlow.value
+        return settings.findModelById(settings.embeddingModelId) != null
+    }
 
     /**
      * 将单段文本转为 embedding 向量。
@@ -50,7 +59,6 @@ class EmbeddingService(
 
         // 只用用户明确指定的模型，不做自动发现
         val effectiveModelId = modelId ?: settings.embeddingModelId
-        if (effectiveModelId == Uuid.random()) return emptyList()
         val model = settings.findModelById(effectiveModelId) ?: return emptyList()
         val providerSetting = model.findProvider(settings.providers) ?: return emptyList()
         val provider = runCatching { providerManager.getProviderByType(providerSetting) }.getOrNull() ?: return emptyList()
