@@ -83,6 +83,7 @@ fun GardenKnowledgePage() {
             onSearch = { vm.search(it) },
             onStartIndex = { vm.startIndex() },
             onSelectFolder = { vm.selectFolder(it) },
+            onPathChange = { vm.updateVaultPath(it) },
         )
     }
 }
@@ -94,6 +95,7 @@ private fun GardenKnowledgeContent(
     onSearch: (String) -> Unit,
     onStartIndex: () -> Unit,
     onSelectFolder: (String?) -> Unit,
+    onPathChange: (String) -> Unit,
 ) {
     LazyColumn(
         modifier = modifier
@@ -105,7 +107,7 @@ private fun GardenKnowledgeContent(
         item("path") {
             GardenVaultPathInput(
                 path = uiState.vaultPath,
-                onPathChange = { vm.updateVaultPath(it) },
+                onPathChange = onPathChange,
             )
         }
 
