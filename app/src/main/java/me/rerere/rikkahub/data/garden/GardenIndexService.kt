@@ -223,13 +223,14 @@ class GardenIndexService(
         var start = 0
         while (start < text.length) {
             val end = minOf(start + CHUNK_MAX_CHARS, text.length)
-            // 尽量在句号或换行处断开
             val cutEnd = if (end < text.length) {
                 val searchStart = maxOf(start, end - 200)
-                val lastPeriod = text.lastIndexOfAny(
-                    charArrayOf('。', '.', '\n', '！', '？', '!', '?'),
-                    end, searchStart
+                val segment = text.substring(searchStart, end)
+                val localIndex = segment.lastIndexOfAny(
+                    charArrayOf('。', '.', '
+', '！', '？', '!', '?'),
                 )
+                val lastPeriod = if (localIndex >= 0) searchStart + localIndex else -1
                 if (lastPeriod > start) lastPeriod + 1 else end
             } else {
                 end
