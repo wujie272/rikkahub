@@ -6,12 +6,14 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.garden.GardenIndexService
 import me.rerere.rikkahub.data.garden.GardenRepository
 import me.rerere.rikkahub.data.garden.GardenSearchService
 
 class GardenKnowledgeVM(
     private val gardenRepository: GardenRepository,
+    private val settingsStore: SettingsStore,
 ) : ViewModel() {
 
     data class UiState(
@@ -28,6 +30,7 @@ class GardenKnowledgeVM(
         val folders: List<String> = emptyList(),
         val selectedFolder: String? = null,
         val error: String? = null,
+        val vaultPath: String = "",
     )
 
     private val _uiState = MutableStateFlow(UiState())
@@ -40,6 +43,7 @@ class GardenKnowledgeVM(
     fun refresh() {
         viewModelScope.launch {
             try {
+                val settings = settingsStore.settingsFlow.value
                 val stats = gardenRepository.getStats()
                 val folders = gardenRepository.getFolders()
                 _uiState.value = _uiState.value.copy(
@@ -49,6 +53,7 @@ class GardenKnowledgeVM(
                     folderCount = stats.folderCount,
                     lastUpdated = stats.lastUpdated,
                     folders = folders,
+                    vaultPath = settings.gardenVaultPath,
                 )
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(error = e.message)
@@ -56,7 +61,19 @@ class GardenKnowledgeVM(
         }
     }
 
-    fun startIndex(vaultPath: String) {
+    fun updateVaultPath(path: String) {
+        _uiState.value = _uiState.value.copy(vaultPath = path)
+        viewModelScope.launch {
+            settingsStore.update { it.copy(gardenVaultPath = path) }
+        }
+    }
+
+    fun startIndex() {
+        val vaultPath = _uiState.value.vaultPath
+        if (vaultPath.isBlank()) {
+            _uiState.value = _uiState.value.copy(error = "请先设置笔记库路径")
+            return
+        }
         if (_uiState.value.isIndexing) return
 
         _uiState.value = _uiState.value.copy(isIndexing = true, error = null)

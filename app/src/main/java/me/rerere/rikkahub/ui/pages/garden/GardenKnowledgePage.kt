@@ -60,8 +60,8 @@ fun GardenKnowledgePage() {
                 navigationIcon = { BackButton() },
                 actions = {
                     FilledTonalButton(
-                        onClick = { vm.startIndex("/storage/emulated/0/Documents/Jayeの数字花园") },
-                        enabled = !uiState.isIndexing,
+                        onClick = { vm.startIndex() },
+                        enabled = !uiState.isIndexing && uiState.vaultPath.isNotBlank(),
                     ) {
                         Icon(HugeIcons.Refresh01, null, modifier = Modifier.padding(end = 4.dp))
                         Text(if (uiState.isIndexing) "索引中..." else "重新索引")
@@ -78,7 +78,7 @@ fun GardenKnowledgePage() {
             modifier = Modifier.padding(innerPadding),
             uiState = uiState,
             onSearch = { vm.search(it) },
-            onStartIndex = { vm.startIndex("/storage/emulated/0/Documents/Jayeの数字花园") },
+            onStartIndex = { vm.startIndex() },
             onSelectFolder = { vm.selectFolder(it) },
         )
     }
@@ -99,6 +99,14 @@ private fun GardenKnowledgeContent(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         // 状态卡片
+        // 路径设置
+        item("path") {
+            GardenVaultPathInput(
+                path = uiState.vaultPath,
+                onPathChange = { vm.updateVaultPath(it) },
+            )
+        }
+
         item("stats") {
             StatsCard(
                 totalFiles = uiState.totalFiles,
@@ -233,7 +241,7 @@ private fun GardenKnowledgeContent(
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         FilledTonalButton(onClick = onStartIndex) {
-                            Text("开始索引")
+                            Text("设置路径并开始索引")
                         }
                     }
                 }
@@ -394,6 +402,32 @@ private fun SearchResultCard(
                 style = MaterialTheme.typography.bodyMedium,
                 maxLines = 4,
                 overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+
+@Composable
+private fun GardenVaultPathInput(
+    path: String,
+    onPathChange: (String) -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CustomColors.cardColorsOnSurfaceContainer,
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = "笔记库路径",
+                style = MaterialTheme.typography.titleSmall,
+            )
+            OutlinedTextField(
+                value = path,
+                onValueChange = onPathChange,
+                placeholder = { Text("/storage/emulated/0/Documents/你的笔记库") },
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                singleLine = true,
             )
         }
     }

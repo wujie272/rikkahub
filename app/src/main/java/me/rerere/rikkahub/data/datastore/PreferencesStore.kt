@@ -192,6 +192,9 @@ class SettingsStore(
 
         // 赞助提醒
         val SPONSOR_ALERT_DISMISSED_AT = intPreferencesKey("sponsor_alert_dismissed_at")
+
+        // 数字花园
+        val GARDEN_VAULT_PATH = stringPreferencesKey("garden_vault_path")
     }
 
     private val dataStore = context.settingsStore
@@ -228,6 +231,7 @@ class SettingsStore(
                 ocrPrompt = preferences[OCR_PROMPT] ?: DEFAULT_OCR_PROMPT,
                 compressModelId = preferences[COMPRESS_MODEL]?.let { Uuid.parse(it) } ?: DEFAULT_AUTO_MODEL_ID,
                 compressPrompt = preferences[COMPRESS_PROMPT] ?: DEFAULT_COMPRESS_PROMPT,
+                gardenVaultPath = preferences[GARDEN_VAULT_PATH] ?: "",
                 assistantId = preferences[SELECT_ASSISTANT]?.let { Uuid.parse(it) }
                     ?: DEFAULT_ASSISTANT_ID,
                 assistantTags = preferences[ASSISTANT_TAGS]?.let {
@@ -492,6 +496,7 @@ class SettingsStore(
             preferences[OCR_PROMPT] = settings.ocrPrompt
             preferences[COMPRESS_MODEL] = settings.compressModelId.toString()
             preferences[COMPRESS_PROMPT] = settings.compressPrompt
+            preferences[GARDEN_VAULT_PATH] = settings.gardenVaultPath
 
             preferences[PROVIDERS] = JsonInstant.encodeToString(settings.providers)
             preferences[DELETED_BUILTIN_PROVIDER_IDS] = JsonInstant.encodeToString(
@@ -648,6 +653,7 @@ data class Settings(
     val embeddingModelId: Uuid = Uuid.random(),
     val compressModelId: Uuid = Uuid.random(),
     val compressPrompt: String = DEFAULT_COMPRESS_PROMPT,
+    val gardenVaultPath: String = "",
     val assistantId: Uuid = DEFAULT_ASSISTANT_ID,
     val providers: List<ProviderSetting> = DEFAULT_PROVIDERS,
     /**

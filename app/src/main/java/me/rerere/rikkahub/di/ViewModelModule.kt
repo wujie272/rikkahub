@@ -122,7 +122,7 @@ val viewModelModule = module {
     viewModelOf(::DoctorViewModel)
     viewModelOf(::SettingBrowserViewModel)
     viewModelOf(::SettingTermuxViewModel)
-    viewModelOf(::GardenKnowledgeVM)
+    viewModel<GardenKnowledgeVM> { GardenKnowledgeVM(get(), get()) }
 
     // Phase 22A: parameterised by LocalRuntime — one VM instance per provider tile.
     viewModel<SettingLocalLlmViewModel> { params ->
