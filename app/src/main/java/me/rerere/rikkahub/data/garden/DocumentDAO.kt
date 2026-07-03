@@ -38,6 +38,9 @@ interface DocumentDAO {
     @Query("DELETE FROM document WHERE file_path IN (:paths)")
     suspend fun deleteByFilePaths(paths: List<String>)
 
+    @Query("SELECT DISTINCT file_path FROM document")
+    suspend fun getAllFilePaths(): List<String>
+
     @Query("DELETE FROM document")
     suspend fun deleteAll()
 

@@ -75,9 +75,8 @@ class GardenIndexService(
                 return@withContext
             }
 
-            // 获取已索引的文件路径集合
-            val indexedPaths = documentDAO.getAll()
-                .map { it.filePath }
+            // 获取已索引的文件路径集合（轻量查询，只拉路径，不拉大字段）
+            val indexedPaths = documentDAO.getAllFilePaths()
                 .toSet()
 
             var progress = IndexProgress(totalFiles = totalFiles, isRunning = true)
