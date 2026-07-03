@@ -48,6 +48,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Add01
 import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.Settings03
 import me.rerere.rikkahub.R
@@ -169,7 +170,7 @@ fun GroupChatTemplateDetailPage(id: String) {
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text(
-                                text = hostModel?.name ?: "未选择（使用默认路由）",
+                                text = hostModel?.displayName?.ifBlank { hostModel?.modelId } ?: "未选择（使用默认路由）",
                                 modifier = Modifier.weight(1f),
                             )
                             TextButton(onClick = { /* TODO: model picker */ }) {
@@ -403,7 +404,7 @@ private fun SeatCard(
                     ) {
                         Text("覆写模型：", style = MaterialTheme.typography.bodySmall)
                         Text(
-                            text = model?.name ?: "使用助手默认模型",
+                            text = model?.displayName?.ifBlank { model?.modelId } ?: "使用助手默认模型",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
