@@ -518,14 +518,14 @@ object BrowserController {
                 val canvas = Canvas(bitmap)
                 webView.draw(canvas)
                 val cacheDir = File(context.cacheDir, STREAM_CACHE_SUBDIR).apply { mkdirs() }
-                val out = File(cacheDir, "stream-${System.currentTimeMillis()}.png")
+                val out = File(cacheDir, "stream-${System.currentTimeMillis()}.webp")
                 // Recycle in a finally block so a FileOutputStream failure doesn't leak
                 // the ~8 MB native backing. Without this, any IO error mid-capture leaves
                 // the bitmap alive until the next GC (the outer runCatching swallows
                 // the exception before the bitmap variable goes out of scope).
                 try {
                     FileOutputStream(out).use { os ->
-                        bitmap.compress(Bitmap.CompressFormat.PNG, 100, os)
+                        bitmap.compress(Bitmap.CompressFormat.WEBP, 85, os)
                     }
                 } finally {
                     bitmap.recycle()

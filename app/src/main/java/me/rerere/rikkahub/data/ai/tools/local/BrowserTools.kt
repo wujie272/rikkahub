@@ -130,13 +130,26 @@ private fun jsString(s: String): String = JsonPrimitive(s).toString()
 
 fun browserOpenTool(context: Context, invocationContext: ToolInvocationContext? = null): Tool = Tool(
     name = BrowserToolDefaults.OPEN,
-    description = "Navigate the in-app browser to a URL. Launches the browser if it isn't open. Returns {success, current_url, title}. Resets the per-task 5-minute timer.$TELEGRAM_HEADLESS_CUE",
+    description = "Navigate the in-app browser to a URL. Launches the browser if it isn't open. Returns {success, current_url, title}. Resets the per-task 5-minute timer. " +
+        "mode parameter: auto (default)=assistant chooses, foreground=open visible browser activity, headless=browse in background (no UI). " +
+        "Use mode='headless' when the user just wants information from a page. " +
+        "Use mode='foreground' when user interaction may be needed (login, CAPTCHA, forms)." +
+        "$TELEGRAM_HEADLESS_CUE",
     parameters = {
         InputSchema.Obj(
             properties = buildJsonObject {
                 put("url", buildJsonObject {
                     put("type", "string")
                     put("description", "The full URL to navigate to (https://...)")
+                })
+                put("mode", buildJsonObject {
+                    put("type", "string")
+                    put("enum", buildJsonArray {
+                        add("auto")
+                        add("foreground")
+                        add("headless")
+                    })
+                    put("description", "Browse mode: auto=assistant chooses (default), foreground=visible browser, headless=background (no UI)")
                 })
             },
             required = listOf("url"),
@@ -172,7 +185,13 @@ fun browserOpenTool(context: Context, invocationContext: ToolInvocationContext? 
                 // fall back to the foreground BrowserActivity (the only tool that can
                 // launch it).
                 val callerConvId = invocationContext?.callerConversationId
-                val headless = isHeadlessInvocation(invocationContext)
+                // mode parameter overrides the default headless detection
+                val modeParam = input.jsonObject["mode"]?.jsonPrimitive?.contentOrNull
+                val headless = when (modeParam) {
+                    "headless" -> true
+                    "foreground" -> false
+                    else -> isHeadlessInvocation(invocationContext) // auto = original logic
+                }
 
                 if (headless && callerConvId != null) {
                     // Peek BEFORE allocating: getOrCreate + start() spin up a ~30 MB WebView,
@@ -311,14 +330,14 @@ fun browserScreenshotTool(context: Context): Tool = Tool(
                     val canvas = Canvas(bitmap)
                     webView.draw(canvas)
                     val cacheDir = File(context.cacheDir, SCREENSHOT_CACHE_SUBDIR).apply { mkdirs() }
-                    val out = File(cacheDir, "screenshot-${System.currentTimeMillis()}.png")
+                    val out = File(cacheDir, "screenshot-${System.currentTimeMillis()}.webp")
                     // Recycle unconditionally in a finally block so the bitmap is freed
                     // exactly once regardless of whether compress() succeeds or throws.
                     // The prior pattern called recycle() in onFailure AND then again
                     // unconditionally — a double-recycle causes IllegalStateException.
                     try {
                         FileOutputStream(out).use { os ->
-                            bitmap.compress(Bitmap.CompressFormat.PNG, 100, os)
+                            bitmap.compress(Bitmap.CompressFormat.WEBP, 85, os)
                         }
                     } finally {
                         bitmap.recycle()

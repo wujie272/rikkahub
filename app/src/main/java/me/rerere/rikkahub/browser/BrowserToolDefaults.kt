@@ -37,6 +37,11 @@ object BrowserToolDefaults {
      * click side carries the same trust footprint as plain browser_click.
      */
     const val CLICK_AND_READ = "browser_click_and_read"
+    // --- Browse modes ---
+    const val MODE_AUTO = "auto"
+    const val MODE_FOREGROUND = "foreground"
+    const val MODE_HEADLESS = "headless"
+
 
     // --- Loop control (default ON) -----------------------------------------------------------
     const val DONE = "browser_done"
