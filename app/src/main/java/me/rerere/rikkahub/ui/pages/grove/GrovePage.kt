@@ -173,7 +173,7 @@ private fun GroveContent(
                         query = it
                         onSearch(it)
                     },
-                    placeholder = { Text("搜索你的笔记...") },
+                    placeholder = { Text("搜索笔记...") },
                     leadingIcon = { Icon(HugeIcons.Search01, null) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
@@ -245,7 +245,7 @@ private fun GroveContent(
                             }
                         } else {
                             Text(
-                                text = "输入关键词搜索你的笔记库，支持语义匹配",
+                                text = "输入关键词搜索笔记，支持语义匹配",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -278,7 +278,7 @@ private fun GroveContent(
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "点击「重新索引」扫描你的 1,141 篇笔记\n建立语义搜索索引",
+                            text = "点击「重新索引」扫描笔记库${if (uiState.totalFiles > 0) "（${uiState.totalFiles} 篇）" else ""}\n建立语义搜索索引",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
