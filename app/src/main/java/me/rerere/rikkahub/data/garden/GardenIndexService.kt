@@ -202,9 +202,25 @@ class GardenIndexService(
                     hasAnyHeading = true
                     flushChunkBuilder(currentChunk, chunks)
                 }
-                currentChunk.appendLine(l)
 
-                // 无论有无标题，超过长度都要截断，防止两个标题间大段文字撑爆内存
+                // 单行超长 → 读一点就 flush，不积累
+                if (l.length > CHUNK_MAX_CHARS) {
+                    if (currentChunk.isNotEmpty()) {
+                        flushChunkBuilder(currentChunk, chunks)
+                    }
+                    // 直接用原字符串的字符数组遍历，避免 substring 反复复制
+                    var pos = 0
+                    while (pos < l.length) {
+                        val end = minOf(pos + CHUNK_MAX_CHARS, l.length)
+                        currentChunk.append(l, pos, end)
+                        flushChunkBuilder(currentChunk, chunks)
+                        pos = end
+                    }
+                } else {
+                    currentChunk.appendLine(l)
+                }
+
+                // 无论有无标题，超过长度都要截断
                 if (currentChunk.length >= CHUNK_MAX_CHARS) {
                     flushChunkBuilder(currentChunk, chunks)
                 }
@@ -223,6 +239,14 @@ class GardenIndexService(
      */
     private fun flushChunkBuilder(builder: StringBuilder, output: MutableList<String>) {
         if (builder.isEmpty()) return
+
+        // 安全阀：builder 超过 50KB 直接丢弃（不太可能是有效文本）
+        if (builder.length > 50 * 1024) {
+            Log.w(TAG, "Builder too large (${builder.length} chars), discarding")
+            builder.clear()
+            return
+        }
+
         val text = builder.toString().trim()
         builder.clear()
         if (text.isEmpty()) return
