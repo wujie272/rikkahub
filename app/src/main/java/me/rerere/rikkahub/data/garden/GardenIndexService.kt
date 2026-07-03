@@ -71,24 +71,22 @@ class GardenIndexService(
             var progress = IndexProgress(totalFiles = totalFiles, isRunning = true)
             progressCallback?.invoke(progress)
 
-            // 第一步：处理变更/新增文件
-            val newChunks = mutableListOf<DocumentEntity>()
+            val modelVersion = embeddingService.currentModelId?.toString() ?: ""
+            val batchSize = 5
             val changedFiles = mutableListOf<File>()
 
+            // 第一步：找出变更文件
             mdFiles.forEachIndexed { index, file ->
                 val relPath = file.absolutePath
                 val existingHash = documentDAO.getFileHash(relPath)
                 val currentHash = file.sha256()
 
                 if (existingHash == null) {
-                    // 新文件
                     changedFiles.add(file)
                 } else if (existingHash != currentHash) {
-                    // 文件已修改 → 删除旧记录
                     documentDAO.deleteByFilePath(relPath)
                     changedFiles.add(file)
                 } else {
-                    // 文件没变 → 跳过
                     progress = progress.copy(
                         processedFiles = index + 1,
                         skippedFiles = progress.skippedFiles + 1,
@@ -97,19 +95,34 @@ class GardenIndexService(
                 }
             }
 
-            // 第二步：切分变更文件
+            if (changedFiles.isEmpty() && indexedPaths.isNotEmpty()) {
+                // 只有已删除文件需要清理
+                val currentPaths = mdFiles.map { it.absolutePath }.toSet()
+                val stalePaths = indexedPaths.filter { it !in currentPaths }
+                if (stalePaths.isNotEmpty()) {
+                    documentDAO.deleteByFilePaths(stalePaths)
+                    progress = progress.copy(deletedChunks = stalePaths.size)
+                }
+            }
+
+            // 第二步：边切分边 embedding 边入库（流式，避免 OOM）
+            var processedChunks = 0
+            val pendingBatch = mutableListOf<DocumentEntity>()
+
             for (file in changedFiles) {
                 try {
                     val chunks = chunkFile(file)
                     val folder = file.parentFile?.name ?: ""
+                    val fileHash = file.sha256()
+                    val fileModifiedAt = file.lastModified()
                     val now = System.currentTimeMillis()
 
-                    chunks.forEachIndexed { i, chunkText ->
-                        newChunks.add(
+                    for ((i, chunkText) in chunks.withIndex()) {
+                        pendingBatch.add(
                             DocumentEntity(
                                 filePath = file.absolutePath,
-                                fileModifiedAt = file.lastModified(),
-                                fileHash = file.sha256(),
+                                fileModifiedAt = fileModifiedAt,
+                                fileHash = fileHash,
                                 chunkIndex = i,
                                 chunkText = chunkText,
                                 sourceFolder = folder,
@@ -117,53 +130,45 @@ class GardenIndexService(
                                 updatedAt = now,
                             )
                         )
+
+                        // 凑够一批就 embed + 入库
+                        if (pendingBatch.size >= batchSize) {
+                            processBatch(pendingBatch, modelVersion)
+                            processedChunks += pendingBatch.size
+                            pendingBatch.clear()
+
+                            // 给 GC 喘口气
+                            if (processedChunks % 50 == 0) {
+                                System.gc()
+                            }
+                        }
+
+                        progress = progress.copy(
+                            processedFiles = progress.processedFiles + 1,
+                        )
+                        progressCallback?.invoke(progress)
                     }
                 } catch (e: Exception) {
-                    Log.e(TAG, "Failed to chunk file: ${file.absolutePath}", e)
+                    Log.e(TAG, "Failed to process file: ${file.absolutePath}", e)
                     progress = progress.copy(errors = progress.errors + 1)
                 }
             }
 
-            // 第三步：批量生成 embedding（一次最多 20 条）
-            val modelVersion = embeddingService.currentModelId?.toString() ?: ""
-            val batchSize = 20
-
-            for (i in newChunks.indices.step(batchSize)) {
-                val batch = newChunks.subList(i, minOf(i + batchSize, newChunks.size))
-                val texts = batch.map { it.chunkText.take(2048) }
-
-                val embeddings = try {
-                    embeddingService.embedBatch(texts)
-                } catch (e: Exception) {
-                    Log.e(TAG, "Embedding batch failed at index $i", e)
-                    List(texts.size) { emptyList<Float>() }
-                }
-
-                for (j in batch.indices) {
-                    if (j < embeddings.size && embeddings[j].isNotEmpty()) {
-                        batch[j] = batch[j].copy(
-                            embedding = VectorEngine.floatsToJson(embeddings[j]),
-                            embeddingModelId = modelVersion,
-                        )
-                    }
-                }
-
-                // 写入数据库
-                documentDAO.insertAll(batch)
-
-                progress = progress.copy(
-                    processedFiles = progress.processedFiles + batch.size,
-                    newChunks = progress.newChunks + batch.size,
-                )
-                progressCallback?.invoke(progress)
+            // 处理尾部批次
+            if (pendingBatch.isNotEmpty()) {
+                processBatch(pendingBatch, modelVersion)
+                processedChunks += pendingBatch.size
+                pendingBatch.clear()
             }
 
-            // 第四步：清理已删除的文件
-            val currentPaths = mdFiles.map { it.absolutePath }.toSet()
-            val stalePaths = indexedPaths.filter { it !in currentPaths }
-            if (stalePaths.isNotEmpty()) {
-                documentDAO.deleteByFilePaths(stalePaths)
-                progress = progress.copy(deletedChunks = stalePaths.size)
+            // 清理已删除文件
+            if (changedFiles.isNotEmpty()) {
+                val currentPaths = mdFiles.map { it.absolutePath }.toSet()
+                val stalePaths = indexedPaths.filter { it !in currentPaths }
+                if (stalePaths.isNotEmpty()) {
+                    documentDAO.deleteByFilePaths(stalePaths)
+                    progress = progress.copy(deletedChunks = stalePaths.size)
+                }
             }
 
             progressCallback?.invoke(progress.copy(isRunning = false))
@@ -176,39 +181,57 @@ class GardenIndexService(
      * 策略：按 ## 或 ### 标题切分，长段落二次裁切。
      */
     private fun chunkFile(file: File): List<String> {
-        val content = file.readText(Charsets.UTF_8)
-        if (content.isBlank()) return emptyList()
-
-        // 按 ## 或 ### 标题分割
-        val headingRegex = Regex("^#{2,3}\\s+.*$", RegexOption.MULTILINE)
-        val matches = headingRegex.findAll(content).toList()
-
-        if (matches.isEmpty()) {
-            // 没有标题，直接按长度切
-            return chunkByLength(content)
+        // 流式读取，避免大文件 OOM
+        if (!file.exists() || file.length() == 0L) return emptyList()
+        // 跳过超过 50MB 的文件
+        if (file.length() > 50 * 1024 * 1024) {
+            Log.w(TAG, "Skipping oversized file: ${file.absolutePath} (${file.length() / 1024 / 1024}MB)")
+            return emptyList()
         }
 
         val chunks = mutableListOf<String>()
-        for (i in matches.indices) {
-            val start = matches[i].range.first
-            val end = if (i + 1 < matches.size) matches[i + 1].range.first else content.length
-            val section = content.substring(start, end).trim()
+        val currentChunk = StringBuilder()
+        var headingCount = 0
 
-            if (section.length > CHUNK_MAX_CHARS) {
-                // 长段落二次裁切
-                chunks.addAll(chunkByLength(section))
-            } else if (section.isNotEmpty()) {
-                chunks.add(section)
+        file.bufferedReader(Charsets.UTF_8).use { reader ->
+            var line: String?
+            while (reader.readLine().also { line = it } != null) {
+                val l = line!!
+                // 检测 ## 或 ### 标题
+                if ((l.startsWith("## ") || l.startsWith("### ")) && currentChunk.isNotEmpty()) {
+                    // 保存上一个 chunk
+                    val chunk = currentChunk.toString().trim()
+                    if (chunk.isNotEmpty()) {
+                        if (chunk.length > CHUNK_MAX_CHARS) {
+                            chunks.addAll(chunkByLength(chunk))
+                        } else {
+                            chunks.add(chunk)
+                        }
+                    }
+                    currentChunk.clear()
+                    headingCount++
+                }
+                currentChunk.appendLine(l)
             }
         }
 
-        // 处理标题前的引言部分
-        val preamble = content.substring(0, matches.firstOrNull()?.range?.first ?: 0).trim()
-        if (preamble.isNotEmpty()) {
-            if (preamble.length > CHUNK_MAX_CHARS) {
-                chunks.addAll(0, chunkByLength(preamble))
+        // 最后一个 chunk
+        val lastChunk = currentChunk.toString().trim()
+        if (lastChunk.isNotEmpty()) {
+            if (lastChunk.length > CHUNK_MAX_CHARS) {
+                chunks.addAll(chunkByLength(lastChunk))
             } else {
-                chunks.add(0, preamble)
+                chunks.add(lastChunk)
+            }
+        }
+
+        // 完全没有标题时，按长度切分整个文件
+        if (headingCount == 0 && chunks.isEmpty()) {
+            file.bufferedReader(Charsets.UTF_8).use { reader ->
+                val content = reader.readText()
+                if (content.isNotBlank()) {
+                    return chunkByLength(content)
+                }
             }
         }
 
@@ -265,6 +288,36 @@ class GardenIndexService(
         val recentFiles: List<String>,
         val lastUpdated: Long,
     )
+
+    /**
+     * 处理一批 DocumentEntity：生成 embedding 并写入数据库。
+     */
+    private suspend fun processBatch(
+        batch: List<DocumentEntity>,
+        modelVersion: String,
+    ) {
+        val texts = batch.map { it.chunkText.take(2048) }
+        val embeddings = try {
+            embeddingService.embedBatch(texts)
+        } catch (e: Exception) {
+            Log.e(TAG, "Embedding batch failed", e)
+            List(texts.size) { emptyList<Float>() }
+        }
+
+        val entities = batch.mapIndexed { j, entity ->
+            if (j < embeddings.size && embeddings[j].isNotEmpty()) {
+                entity.copy(
+                    embedding = VectorEngine.floatsToJson(embeddings[j]),
+                    embeddingModelId = modelVersion,
+                )
+            } else {
+                entity
+            }
+        }
+
+        documentDAO.insertAll(entities)
+    }
+
 }
 
 /**
