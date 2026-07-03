@@ -28,7 +28,7 @@ import me.rerere.rikkahub.ui.pages.setting.memory.MemoryManagerVM
 import me.rerere.rikkahub.ui.pages.setting.locallm.SettingLocalLlmViewModel
 import me.rerere.rikkahub.ui.pages.share.handler.ShareHandlerVM
 import me.rerere.rikkahub.ui.pages.translator.TranslatorVM
-import me.rerere.rikkahub.ui.pages.garden.GardenKnowledgeVM
+import me.rerere.rikkahub.ui.pages.grove.GroveVM
 import me.rerere.rikkahub.ui.pages.setting.doctor.DoctorViewModel
 import me.rerere.rikkahub.ui.pages.setting.scheduledjobs.ScheduledJobsViewModel
 import me.rerere.rikkahub.workflow.ui.WorkflowsViewModel
@@ -122,7 +122,7 @@ val viewModelModule = module {
     viewModelOf(::DoctorViewModel)
     viewModelOf(::SettingBrowserViewModel)
     viewModelOf(::SettingTermuxViewModel)
-    viewModel<GardenKnowledgeVM> { GardenKnowledgeVM(get(), get()) }
+    viewModel<GroveVM> { GroveVM(get(), get()) }
 
     // Phase 22A: parameterised by LocalRuntime — one VM instance per provider tile.
     viewModel<SettingLocalLlmViewModel> { params ->

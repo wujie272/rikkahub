@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.ui.pages.garden
+package me.rerere.rikkahub.ui.pages.grove
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -39,7 +39,7 @@ import me.rerere.hugeicons.stroke.Folder01
 import me.rerere.hugeicons.stroke.Bookshelf01
 import me.rerere.hugeicons.stroke.File02
 import me.rerere.hugeicons.stroke.Refresh01
-import me.rerere.rikkahub.data.garden.GardenSearchService
+import me.rerere.rikkahub.data.grove.GroveSearchService
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.theme.CustomColors
 import org.koin.androidx.compose.koinViewModel
@@ -54,8 +54,8 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.LaunchedEffect
 
 @Composable
-fun GardenKnowledgePage() {
-    val vm: GardenKnowledgeVM = koinViewModel()
+fun GrovePage() {
+    val vm: GroveVM = koinViewModel()
     val uiState by vm.uiState.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
@@ -72,7 +72,7 @@ fun GardenKnowledgePage() {
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             LargeFlexibleTopAppBar(
-                title = { Text("数字花园") },
+                title = { Text("Grove") },
                 navigationIcon = { BackButton() },
                 actions = {
                     FilledTonalButton(
@@ -90,7 +90,7 @@ fun GardenKnowledgePage() {
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         containerColor = CustomColors.topBarColors.containerColor,
     ) { innerPadding ->
-        GardenKnowledgeContent(
+        GroveContent(
             modifier = Modifier.padding(innerPadding),
             uiState = uiState,
             onSearch = { vm.search(it) },
@@ -102,9 +102,9 @@ fun GardenKnowledgePage() {
 }
 
 @Composable
-private fun GardenKnowledgeContent(
+private fun GroveContent(
     modifier: Modifier = Modifier,
-    uiState: GardenKnowledgeVM.UiState,
+    uiState: GroveVM.UiState,
     onSearch: (String) -> Unit,
     onStartIndex: () -> Unit,
     onSelectFolder: (String?) -> Unit,
@@ -118,7 +118,7 @@ private fun GardenKnowledgeContent(
     ) {
         // 路径设置
         item("path") {
-            GardenVaultPathInput(
+            GroveVaultPathInput(
                 path = uiState.vaultPath,
                 onPathChange = onPathChange,
             )
@@ -280,7 +280,7 @@ private fun StatsCard(
     lastUpdated: Long,
     isReady: Boolean,
     isIndexing: Boolean,
-    indexProgress: me.rerere.rikkahub.data.garden.GardenIndexService.IndexProgress?,
+    indexProgress: me.rerere.rikkahub.data.grove.GroveIndexService.IndexProgress?,
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -356,7 +356,7 @@ private fun StatItem(label: String, value: String) {
 
 @Composable
 private fun SearchResultCard(
-    result: GardenSearchService.SearchResult,
+    result: GroveSearchService.SearchResult,
 ) {
     Card(
         onClick = {},
@@ -426,7 +426,7 @@ private fun SearchResultCard(
 
 
 @Composable
-private fun GardenVaultPathInput(
+private fun GroveVaultPathInput(
     path: String,
     onPathChange: (String) -> Unit,
 ) {
@@ -471,7 +471,7 @@ private fun GardenVaultPathInput(
 }
 
 @Composable
-private fun GardenIgnoreFoldersInput(
+private fun GroveIgnoreFoldersInput(
     ignoreFolders: String,
     onIgnoreChange: (String) -> Unit,
 ) {

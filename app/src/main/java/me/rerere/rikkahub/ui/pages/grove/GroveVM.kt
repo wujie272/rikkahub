@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.ui.pages.garden
+package me.rerere.rikkahub.ui.pages.grove
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -7,13 +7,13 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.datastore.SettingsStore
-import me.rerere.rikkahub.data.garden.GardenIndexService
-import me.rerere.rikkahub.data.garden.GardenRepository
-import me.rerere.rikkahub.data.garden.GardenSearchService
-import me.rerere.rikkahub.data.garden.FolderStat
+import me.rerere.rikkahub.data.grove.GroveIndexService
+import me.rerere.rikkahub.data.grove.GroveRepository
+import me.rerere.rikkahub.data.grove.GroveSearchService
+import me.rerere.rikkahub.data.grove.FolderStat
 
-class GardenKnowledgeVM(
-    private val gardenRepository: GardenRepository,
+class GroveVM(
+    private val groveRepository: GroveRepository,
     private val settingsStore: SettingsStore,
 ) : ViewModel() {
 
@@ -24,9 +24,9 @@ class GardenKnowledgeVM(
         val folderCount: Int = 0,
         val lastUpdated: Long = 0,
         val isIndexing: Boolean = false,
-        val indexProgress: GardenIndexService.IndexProgress? = null,
+        val indexProgress: GroveIndexService.IndexProgress? = null,
         val searchQuery: String = "",
-        val searchResults: List<GardenSearchService.SearchResult> = emptyList(),
+        val searchResults: List<GroveSearchService.SearchResult> = emptyList(),
         val isSearching: Boolean = false,
         val folders: List<String> = emptyList(),
         val selectedFolder: String? = null,
@@ -48,17 +48,17 @@ class GardenKnowledgeVM(
         viewModelScope.launch {
             try {
                 val settings = settingsStore.settingsFlow.value
-                val stats = gardenRepository.getStats()
-                val folders = gardenRepository.getFolders()
+                val stats = groveRepository.getStats()
+                val folders = groveRepository.getFolders()
                 _uiState.value = _uiState.value.copy(
-                    isReady = gardenRepository.isReady(),
+                    isReady = groveRepository.isReady(),
                     totalChunks = stats.totalChunks,
                     totalFiles = stats.totalFiles,
                     folderCount = stats.folderCount,
                     lastUpdated = stats.lastUpdated,
                     folders = folders,
-                    vaultPath = settings.gardenVaultPath,
-                    ignoreFolders = settings.gardenIgnoreFolders,
+                    vaultPath = settings.groveVaultPath,
+                    ignoreFolders = settings.groveIgnoreFolders,
                     folderFileCounts = stats.folderFileCounts,
                 )
             } catch (e: Exception) {
@@ -70,14 +70,14 @@ class GardenKnowledgeVM(
     fun updateVaultPath(path: String) {
         _uiState.value = _uiState.value.copy(vaultPath = path)
         viewModelScope.launch {
-            settingsStore.update { it.copy(gardenVaultPath = path) }
+            settingsStore.update { it.copy(groveVaultPath = path) }
         }
     }
 
     fun updateIgnoreFolders(ignore: String) {
         _uiState.value = _uiState.value.copy(ignoreFolders = ignore)
         viewModelScope.launch {
-            settingsStore.update { it.copy(gardenIgnoreFolders = ignore) }
+            settingsStore.update { it.copy(groveIgnoreFolders = ignore) }
         }
     }
 
@@ -92,7 +92,7 @@ class GardenKnowledgeVM(
         _uiState.value = _uiState.value.copy(isIndexing = true, error = null)
 
         viewModelScope.launch {
-            gardenRepository.indexService.index(
+            groveRepository.indexService.index(
                 vaultPath = vaultPath,
                 ignoreFolders = _uiState.value.ignoreFolders,
                 progressCallback = { progress ->
@@ -125,7 +125,7 @@ class GardenKnowledgeVM(
 
         viewModelScope.launch {
             try {
-                val results = gardenRepository.searchService.search(
+                val results = groveRepository.searchService.search(
                     query = query,
                     limit = 10,
                     folderFilter = _uiState.value.selectedFolder,

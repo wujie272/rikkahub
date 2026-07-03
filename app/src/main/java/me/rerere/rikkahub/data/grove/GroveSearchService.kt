@@ -1,13 +1,13 @@
-package me.rerere.rikkahub.data.garden
+package me.rerere.rikkahub.data.grove
 
 import me.rerere.rikkahub.data.ai.rag.EmbeddingService
 import me.rerere.rikkahub.data.ai.rag.VectorEngine
 
 /**
- * 数字花园语义搜索服务。
+ * Grove语义搜索服务。
  * 复用现有 EmbeddingService + VectorEngine。
  */
-class GardenSearchService(
+class GroveSearchService(
     private val documentDAO: DocumentDAO,
     private val embeddingService: EmbeddingService,
 ) {

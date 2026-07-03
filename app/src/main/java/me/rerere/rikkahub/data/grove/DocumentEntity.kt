@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.data.garden
+package me.rerere.rikkahub.data.grove
 
 import androidx.room.ColumnInfo
 import androidx.room.Entity

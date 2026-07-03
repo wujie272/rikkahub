@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.data.garden
+package me.rerere.rikkahub.data.grove
 
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
@@ -9,15 +9,15 @@ import java.io.File
 import java.security.MessageDigest
 
 /**
- * 数字花园索引服务。
+ * Grove索引服务。
  * 遍历笔记库、切 chunk、算 embedding、增量更新。
  */
-class GardenIndexService(
+class GroveIndexService(
     private val documentDAO: DocumentDAO,
     private val embeddingService: EmbeddingService,
 ) {
     companion object {
-        private const val TAG = "GardenIndex"
+        private const val TAG = "GroveIndex"
         private const val CHUNK_MAX_CHARS = 1500 // 单 chunk 最大字符数
         private const val CHUNK_OVERLAP_CHARS = 100 // 相邻 chunk 重叠字符数
     }

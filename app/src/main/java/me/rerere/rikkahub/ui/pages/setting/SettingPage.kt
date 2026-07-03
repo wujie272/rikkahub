@@ -240,10 +240,10 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         headlineContent = { Text("记忆管理") },
                     )
                     item(
-                        onClick = { navController.navigate(Screen.GardenKnowledge) },
+                        onClick = { navController.navigate(Screen.Grove) },
                         leadingContent = { Icon(HugeIcons.Bookshelf01, null) },
                         supportingContent = { Text("搜索你的 1,141 篇笔记") },
-                        headlineContent = { Text("数字花园") },
+                        headlineContent = { Text("Grove") },
                     )
                     item(
                         onClick = { navController.navigate(Screen.SettingProvider) },

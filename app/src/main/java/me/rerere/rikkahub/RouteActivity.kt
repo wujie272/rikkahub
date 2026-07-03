@@ -123,7 +123,7 @@ import me.rerere.rikkahub.ui.pages.setting.SettingFilesPage
 import me.rerere.rikkahub.ui.pages.setting.SettingMcpPage
 import me.rerere.rikkahub.ui.pages.setting.SettingModelPage
 import me.rerere.rikkahub.ui.pages.setting.memory.MemoryManagerPage
-import me.rerere.rikkahub.ui.pages.garden.GardenKnowledgePage
+import me.rerere.rikkahub.ui.pages.grove.GrovePage
 import me.rerere.rikkahub.ui.pages.setting.SettingPage
 import me.rerere.rikkahub.ui.pages.setting.SettingProviderDetailPage
 import me.rerere.rikkahub.ui.pages.setting.SettingProviderPage
@@ -508,8 +508,8 @@ class RouteActivity : ComponentActivity() {
                                 MemoryManagerPage()
                             }
 
-                            entry<Screen.GardenKnowledge> {
-                                GardenKnowledgePage()
+                            entry<Screen.Grove> {
+                                GrovePage()
                             }
 
                             entry<Screen.SettingSsh> {
@@ -794,7 +794,7 @@ sealed interface Screen : NavKey {
     data object MemoryManager : Screen
 
     @Serializable
-    data object GardenKnowledge : Screen
+    data object Grove : Screen
 
     @Serializable
     data object SettingSsh : Screen

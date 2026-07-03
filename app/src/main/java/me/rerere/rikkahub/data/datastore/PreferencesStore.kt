@@ -193,9 +193,9 @@ class SettingsStore(
         // 赞助提醒
         val SPONSOR_ALERT_DISMISSED_AT = intPreferencesKey("sponsor_alert_dismissed_at")
 
-        // 数字花园
-        val GARDEN_VAULT_PATH = stringPreferencesKey("garden_vault_path")
-        val GARDEN_IGNORE_FOLDERS = stringPreferencesKey("garden_ignore_folders")
+        // Grove
+        val GROVE_VAULT_PATH = stringPreferencesKey("grove_vault_path")
+        val GROVE_IGNORE_FOLDERS = stringPreferencesKey("grove_ignore_folders")
     }
 
     private val dataStore = context.settingsStore
@@ -232,8 +232,8 @@ class SettingsStore(
                 ocrPrompt = preferences[OCR_PROMPT] ?: DEFAULT_OCR_PROMPT,
                 compressModelId = preferences[COMPRESS_MODEL]?.let { Uuid.parse(it) } ?: DEFAULT_AUTO_MODEL_ID,
                 compressPrompt = preferences[COMPRESS_PROMPT] ?: DEFAULT_COMPRESS_PROMPT,
-                gardenVaultPath = preferences[GARDEN_VAULT_PATH] ?: "",
-                gardenIgnoreFolders = preferences[GARDEN_IGNORE_FOLDERS] ?: "",
+                groveVaultPath = preferences[GROVE_VAULT_PATH] ?: "",
+                groveIgnoreFolders = preferences[GROVE_IGNORE_FOLDERS] ?: "",
                 assistantId = preferences[SELECT_ASSISTANT]?.let { Uuid.parse(it) }
                     ?: DEFAULT_ASSISTANT_ID,
                 assistantTags = preferences[ASSISTANT_TAGS]?.let {
@@ -498,8 +498,8 @@ class SettingsStore(
             preferences[OCR_PROMPT] = settings.ocrPrompt
             preferences[COMPRESS_MODEL] = settings.compressModelId.toString()
             preferences[COMPRESS_PROMPT] = settings.compressPrompt
-            preferences[GARDEN_VAULT_PATH] = settings.gardenVaultPath
-            preferences[GARDEN_IGNORE_FOLDERS] = settings.gardenIgnoreFolders
+            preferences[GROVE_VAULT_PATH] = settings.groveVaultPath
+            preferences[GROVE_IGNORE_FOLDERS] = settings.groveIgnoreFolders
 
             preferences[PROVIDERS] = JsonInstant.encodeToString(settings.providers)
             preferences[DELETED_BUILTIN_PROVIDER_IDS] = JsonInstant.encodeToString(
@@ -656,8 +656,8 @@ data class Settings(
     val embeddingModelId: Uuid = Uuid.random(),
     val compressModelId: Uuid = Uuid.random(),
     val compressPrompt: String = DEFAULT_COMPRESS_PROMPT,
-    val gardenVaultPath: String = "",
-    val gardenIgnoreFolders: String = "",
+    val groveVaultPath: String = "",
+    val groveIgnoreFolders: String = "",
     val assistantId: Uuid = DEFAULT_ASSISTANT_ID,
     val providers: List<ProviderSetting> = DEFAULT_PROVIDERS,
     /**
