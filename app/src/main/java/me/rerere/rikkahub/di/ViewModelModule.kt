@@ -100,19 +100,18 @@ val viewModelModule = module {
             conversationId = kotlin.uuid.Uuid.parse(params.get<String>()),
             context = get(),
             settingsStore = get(),
-    viewModel<GroupChatTemplateDetailVM> { params ->
-        GroupChatTemplateDetailVM(
-            id = params.get<String>(),
-            settingsStore = get(),
-        )
-    }
-
             conversationRepo = get(),
             chatService = get(),
             updateChecker = get(),
             filesManager = get(),
             favoriteRepository = get(),
             groupRepository = get(),
+        )
+    }
+    viewModel<GroupChatTemplateDetailVM> { params ->
+        GroupChatTemplateDetailVM(
+            id = params.get<String>(),
+            settingsStore = get(),
         )
     }
     viewModel<WorkspaceDetailVM> {
