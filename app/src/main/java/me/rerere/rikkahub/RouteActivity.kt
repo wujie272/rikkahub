@@ -99,6 +99,8 @@ import me.rerere.rikkahub.ui.pages.extensions.skills.SkillDetailPage
 import me.rerere.rikkahub.ui.pages.group.GroupListPage
 import me.rerere.rikkahub.ui.pages.group.GroupDetailPage
 import me.rerere.rikkahub.ui.pages.group.GroupChatPage
+import me.rerere.rikkahub.ui.pages.assistant.groupchat.GroupChatTemplateDetailPage
+
 import me.rerere.rikkahub.ui.pages.extensions.skills.SkillsPage
 import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspaceDetailPage
 import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspacePage
@@ -616,6 +618,10 @@ class RouteActivity : ComponentActivity() {
                             }
 
                             entry<Screen.MessageSearch> {
+                            entry<Screen.GroupChatTemplateDetail> { key ->
+                                GroupChatTemplateDetailPage(id = key.id)
+                            }
+
                                 SearchPage()
                             }
 
@@ -867,6 +873,9 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data class GroupChat(val id: String) : Screen
+
+    @Serializable
+    data class GroupChatTemplateDetail(val id: String) : Screen
 
     @Serializable
     data object MessageSearch : Screen

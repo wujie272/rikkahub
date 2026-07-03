@@ -19,6 +19,8 @@ import me.rerere.rikkahub.ui.pages.extensions.skills.SkillsVM
 import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspaceDetailVM
 import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspaceVM
 import me.rerere.rikkahub.ui.pages.group.GroupVM
+import me.rerere.rikkahub.ui.pages.assistant.groupchat.GroupChatTemplateDetailVM
+
 import me.rerere.rikkahub.ui.pages.group.GroupDetailVM
 import me.rerere.rikkahub.ui.pages.group.GroupChatVM
 import me.rerere.rikkahub.ui.pages.setting.SettingVM
@@ -98,6 +100,13 @@ val viewModelModule = module {
             conversationId = kotlin.uuid.Uuid.parse(params.get<String>()),
             context = get(),
             settingsStore = get(),
+    viewModel<GroupChatTemplateDetailVM> { params ->
+        GroupChatTemplateDetailVM(
+            id = params.get<String>(),
+            settingsStore = get(),
+        )
+    }
+
             conversationRepo = get(),
             chatService = get(),
             updateChecker = get(),

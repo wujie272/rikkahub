@@ -83,6 +83,8 @@ import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 import kotlin.uuid.Uuid
 import androidx.compose.foundation.lazy.items as lazyItems
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Spacer
 
 @Composable
 fun AssistantPage(vm: AssistantVM = koinViewModel()) {
@@ -195,6 +197,72 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 state = lazyListState,
             ) {
+                // ── Group chat templates section ──
+                item(key = "group_chat_header") {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = "👥 群聊模板",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        TextButton(onClick = {
+                            val newId = kotlin.uuid.Uuid.random()
+                            navController.navigate(Screen.GroupChatTemplateDetail(id = newId.toString()))
+                        }) {
+                            Icon(HugeIcons.Add01, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("新建")
+                        }
+                    }
+                }
+                if (settings.groupChatTemplates.isEmpty()) {
+                    item(key = "group_chat_empty") {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = CustomColors.cardColorsOnSurfaceContainer.containerColor),
+                        ) {
+                            Text(
+                                text = "暂无群聊模板，点击上方「新建」创建",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                            )
+                        }
+                    }
+                } else {
+                    settings.groupChatTemplates.forEach { template ->
+                        item(key = "group_chat_template_${template.id}") {
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        navController.navigate(Screen.GroupChatTemplateDetail(id = template.id.toString()))
+                                    },
+                                colors = CardDefaults.cardColors(containerColor = CustomColors.cardColorsOnSurfaceContainer.containerColor),
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(
+                                        text = template.name.ifBlank { "未命名群聊" },
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    Text(
+                                        text = "${template.seats.size}位成员",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
                 lazyItems(filteredAssistants, key = { assistant -> assistant.id }) { assistant ->
                     ReorderableItem(
                         state = reorderableState,
