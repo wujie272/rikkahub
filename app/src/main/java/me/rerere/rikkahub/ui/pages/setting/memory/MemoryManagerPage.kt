@@ -20,7 +20,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -74,7 +73,6 @@ fun MemoryManagerPage() {
             onDelete = { vm.deleteMemory(it) },
             onEdit = { id, content -> vm.updateContent(id, content) },
             onTogglePin = { id, pinned -> vm.togglePin(id, pinned) },
-            onReindex = { vm.reindexAll() },
         )
     }
 }
@@ -87,7 +85,6 @@ private fun MemoryManagerContent(
     onDelete: (Int) -> Unit,
     onEdit: (Int, String) -> Unit,
     onTogglePin: (Int, Boolean) -> Unit,
-    onReindex: () -> Unit,
 ) {
     var editTarget by remember { mutableStateOf<AssistantMemory?>(null) }
     var deleteTarget by remember { mutableStateOf<AssistantMemory?>(null) }
@@ -154,14 +151,6 @@ private fun MemoryManagerContent(
             singleLine = true,
         )
 
-        // 模型状态卡片
-        ModelStatusCard(
-            mismatchCount = uiState.mismatchCount,
-            reindexing = uiState.reindexing,
-            reindexProgress = uiState.reindexProgress,
-            onReindex = onReindex,
-        )
-
         // 记忆列表
         LazyColumn(
             verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -180,65 +169,6 @@ private fun MemoryManagerContent(
     }
 }
 
-@Composable
-private fun ModelStatusCard(
-    mismatchCount: Int,
-    reindexing: Boolean,
-    reindexProgress: Pair<Int, Int>?,
-    onReindex: () -> Unit,
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CustomColors.cardColorsOnSurfaceContainer,
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "嵌入模型状态",
-                        style = MaterialTheme.typography.titleSmall,
-                    )
-                    if (mismatchCount > 0) {
-                        Text(
-                            text = "$mismatchCount 条记忆需要重新编码",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                    } else {
-                        Text(
-                            text = "全部一致",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-                if (!reindexing) {
-                    TextButton(onClick = onReindex) {
-                        Text("重新计算全部")
-                    }
-                }
-            }
-            if (reindexing) {
-                Spacer(Modifier.height(8.dp))
-                reindexProgress?.let { (current, total) ->
-                    Text(
-                        text = "正在重新编码... $current / $total",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    LinearProgressIndicator(
-                        progress = { if (total > 0) current.toFloat() / total else 0f },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-            }
-        }
-    }
-}
 
 @Composable
 private fun MemoryItemCard(
@@ -273,14 +203,7 @@ private fun MemoryItemCard(
                             tint = MaterialTheme.colorScheme.primary,
                         )
                     }
-                    if (!memory.hasEmbedding) {
-                        Spacer(Modifier.width(6.dp))
-                        Text(
-                            text = "无向量",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.outline,
-                        )
-                    }
+                    
                 }
                 Spacer(Modifier.height(4.dp))
                 Text(

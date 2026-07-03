@@ -979,17 +979,8 @@ class GenerationHandler(
                 } else {
                     assistant.id.toString()
                 }
-                val topMemories = if (searchQuery.isNotBlank() && memories.isNotEmpty()) {
-                    memoryRepo.searchSimilar(
-                        query = searchQuery,
-                        assistantId = assistantId,
-                        limit = 5,
-                        minScore = 0.35f,
-                    )
-                } else {
-                    // 无 query 或无可 embedding 的记忆 → 全量注入（向后兼容）
-                    memories
-                }
+                // 记忆已改为纯文本存储，不做语义搜索，直接全量注入
+                val topMemories = memories
                 buildMemoryPrompt(memories = topMemories)
             } else ""
             // 最近聊天引用已改为按需调用的对话工具（ConversationTools）

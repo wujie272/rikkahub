@@ -1,7 +1,6 @@
 package me.rerere.rikkahub.di
 
 import android.content.Context
-import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.data.files.FileFolders
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.files.SkillManager
@@ -41,7 +40,7 @@ val repositoryModule = module {
     }
 
     single {
-        MemoryRepository(get(), get(), get<AppScope>())
+        MemoryRepository(get())
     }
 
     single {

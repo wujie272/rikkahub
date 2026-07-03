@@ -12,9 +12,6 @@ import me.rerere.rikkahub.data.repository.MemoryRepository
 data class MemoryManagerUiState(
     val memories: List<AssistantMemory> = emptyList(),
     val query: String = "",
-    val mismatchCount: Int = 0,
-    val reindexProgress: Pair<Int, Int>? = null,
-    val reindexing: Boolean = false,
 )
 
 class MemoryManagerVM(
@@ -30,10 +27,8 @@ class MemoryManagerVM(
     fun loadMemories() {
         viewModelScope.launch {
             val all = memoryRepository.getAllMemoriesSorted()
-            val mismatch = memoryRepository.countModelMismatch()
             _uiState.value = _uiState.value.copy(
                 memories = all,
-                mismatchCount = mismatch,
             )
         }
     }
@@ -71,19 +66,5 @@ class MemoryManagerVM(
         }
     }
 
-    fun reindexAll() {
-        viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(reindexing = true)
-            memoryRepository.reindexAll { current, total ->
-                _uiState.value = _uiState.value.copy(
-                    reindexProgress = current to total,
-                )
-            }
-            _uiState.value = _uiState.value.copy(
-                reindexing = false,
-                reindexProgress = null,
-            )
-            loadMemories()
-        }
-    }
+
 }
