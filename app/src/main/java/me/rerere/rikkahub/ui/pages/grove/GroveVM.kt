@@ -28,6 +28,7 @@ class GroveVM(
         val searchQuery: String = "",
         val searchResults: List<GroveSearchService.SearchResult> = emptyList(),
         val isSearching: Boolean = false,
+        val hasEmbeddingModel: Boolean = false,
         val folders: List<String> = emptyList(),
         val selectedFolder: String? = null,
         val error: String? = null,
@@ -60,6 +61,7 @@ class GroveVM(
                     vaultPath = settings.groveVaultPath,
                     ignoreFolders = settings.groveIgnoreFolders,
                     folderFileCounts = stats.folderFileCounts,
+                    hasEmbeddingModel = settings.embeddingModelId.toString() != "00000000-0000-0000-0000-000000000000",
                 )
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(error = e.message)
@@ -117,6 +119,17 @@ class GroveVM(
                 searchQuery = "",
                 searchResults = emptyList(),
                 isSearching = false,
+            )
+            return
+        }
+
+        // 检查 embedding 模型是否配置
+        if (!_uiState.value.hasEmbeddingModel) {
+            _uiState.value = _uiState.value.copy(
+                searchQuery = query,
+                searchResults = emptyList(),
+                isSearching = false,
+                error = "未配置 embedding 模型，请在 设置 → 模型和服务 中选择一个 embedding 模型",
             )
             return
         }

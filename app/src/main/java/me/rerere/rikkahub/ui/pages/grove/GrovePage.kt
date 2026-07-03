@@ -203,8 +203,8 @@ private fun GroveContent(
                 } else if (uiState.searchResults.isEmpty()) {
                     item("noResults") {
                         Text(
-                            text = "没有找到相关笔记",
-                            style = MaterialTheme.typography.bodyLarge,
+                            text = "没有找到相关笔记，试试其他关键词",
+                            style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(16.dp),
                         )
@@ -219,12 +219,29 @@ private fun GroveContent(
             // 未搜索时显示提示
             if (uiState.searchQuery.isBlank()) {
                 item("hint") {
-                    Text(
-                        text = "输入关键词搜索你的笔记库，支持语义匹配",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 8.dp),
-                    )
+                    Column(modifier = Modifier.padding(top = 8.dp)) {
+                        if (!uiState.hasEmbeddingModel) {
+                            Card(
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                ),
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Text(
+                                    text = "⚠ 未配置 embedding 模型，搜索功能不可用。请在「设置 → 模型和服务」中选择一个 embedding 模型后重新索引。",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                    modifier = Modifier.padding(12.dp),
+                                )
+                            }
+                        } else {
+                            Text(
+                                text = "输入关键词搜索你的笔记库，支持语义匹配",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -366,48 +383,50 @@ private fun SearchResultCard(
         Column(modifier = Modifier.padding(12.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(
-                        HugeIcons.File02,
-                        null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(end = 6.dp),
-                    )
+                Icon(
+                    HugeIcons.File02,
+                    null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(end = 6.dp),
+                )
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = result.filePath.substringAfterLast("/"),
-                        style = MaterialTheme.typography.labelMedium,
+                        style = MaterialTheme.typography.titleSmall,
                         color = MaterialTheme.colorScheme.primary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
+                    if (result.sourceFolder.isNotEmpty()) {
+                        Text(
+                            text = result.sourceFolder,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                        )
+                    }
                 }
-                Text(
-                    text = "%.0f%%".format(result.score * 100),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.tertiary,
-                )
-            }
-
-            if (result.sourceFolder.isNotEmpty()) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(top = 4.dp),
-                ) {
-                    Icon(
-                        HugeIcons.Folder01,
-                        null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(end = 4.dp).then(Modifier.height(14.dp)),
-                    )
+                // 相似度进度条
+                val scorePercent = (result.score * 100).toInt()
+                val scoreColor = when {
+                    scorePercent >= 70 -> MaterialTheme.colorScheme.tertiary
+                    scorePercent >= 50 -> MaterialTheme.colorScheme.secondary
+                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                }
+                Column(horizontalAlignment = Alignment.End) {
                     Text(
-                        text = result.sourceFolder,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        text = "$scorePercent%",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = scoreColor,
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    LinearProgressIndicator(
+                        progress = { result.score.coerceIn(0f, 1f) },
+                        modifier = Modifier.width(40.dp).height(4.dp),
+                        color = scoreColor,
+                        trackColor = MaterialTheme.colorScheme.surfaceVariant,
                     )
                 }
             }
