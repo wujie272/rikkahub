@@ -134,7 +134,7 @@ object PathSafetyGuard {
         if (raw.isNullOrEmpty()) {
             return Violation("path_blocked", "Path must not be empty.")
         }
-        if (raw.contains('\0')) {
+        if (raw.contains('\u0000')) {
             return Violation("path_blocked", "Path must not contain null bytes.")
         }
 
