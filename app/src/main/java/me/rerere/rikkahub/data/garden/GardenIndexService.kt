@@ -227,8 +227,7 @@ class GardenIndexService(
                 val searchStart = maxOf(start, end - 200)
                 val segment = text.substring(searchStart, end)
                 val localIndex = segment.lastIndexOfAny(
-                    charArrayOf('。', '.', '
-', '！', '？', '!', '?'),
+                    charArrayOf('。', '.', '\n', '！', '？', '!', '?'),
                 )
                 val lastPeriod = if (localIndex >= 0) searchStart + localIndex else -1
                 if (lastPeriod > start) lastPeriod + 1 else end
