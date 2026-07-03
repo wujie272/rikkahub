@@ -24,7 +24,6 @@ import me.rerere.rikkahub.ui.pages.group.GroupChatVM
 import me.rerere.rikkahub.ui.pages.setting.SettingVM
 import me.rerere.rikkahub.ui.pages.setting.browser.SettingBrowserViewModel
 import me.rerere.rikkahub.ui.pages.setting.termux.SettingTermuxViewModel
-import me.rerere.rikkahub.ui.pages.setting.memory.MemoryManagerVM
 import me.rerere.rikkahub.ui.pages.setting.locallm.SettingLocalLlmViewModel
 import me.rerere.rikkahub.ui.pages.share.handler.ShareHandlerVM
 import me.rerere.rikkahub.ui.pages.translator.TranslatorVM
@@ -116,7 +115,6 @@ val viewModelModule = module {
     viewModelOf(::FavoriteVM)
     viewModelOf(::SearchVM)
     viewModelOf(::StatsVM)
-    viewModelOf(::MemoryManagerVM)
     viewModelOf(::WorkflowsViewModel)
     viewModelOf(::ScheduledJobsViewModel)
     viewModelOf(::DoctorViewModel)

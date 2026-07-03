@@ -23,6 +23,9 @@ interface DocumentDAO {
     @Query("SELECT file_hash FROM document WHERE file_path = :path LIMIT 1")
     suspend fun getFileHash(path: String): String?
 
+    @Query("SELECT COUNT(*) = 0 FROM document WHERE file_path = :path AND embedding IS NULL")
+    suspend fun hasValidEmbedding(path: String): Boolean
+
     @Query("SELECT COUNT(*) FROM document")
     suspend fun count(): Int
 

@@ -98,11 +98,27 @@ class GroveIndexService(
                     documentDAO.deleteByFilePath(relPath)
                     changedFiles.add(file)
                 } else {
-                    progress = progress.copy(
-                        processedFiles = index + 1,
-                        skippedFiles = progress.skippedFiles + 1,
-                    )
-                    progressCallback?.invoke(progress)
+                    // 哈希匹配但检查 embedding 是否有效
+                    // 修复：之前 OOM 导致 embedding 为 null 的数据需要重新索引
+                    val hasValidEmbedding = runCatching {
+                        documentDAO.hasValidEmbedding(relPath)
+                    }.getOrDefault(false)
+                    if (hasValidEmbedding) {
+                        // 哈希和 embedding 都有效 → 跳过
+                        progress = progress.copy(
+                            processedFiles = index + 1,
+                            skippedFiles = progress.skippedFiles + 1,
+                        )
+                        progressCallback?.invoke(progress)
+                    } else {
+                        // 哈希匹配但 embedding 缺失或无效 → 重新索引
+                        documentDAO.deleteByFilePath(relPath)
+                        changedFiles.add(file)
+                        progress = progress.copy(
+                            processedFiles = index + 1,
+                        )
+                        progressCallback?.invoke(progress)
+                    }
                 }
             }
 

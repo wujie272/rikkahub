@@ -234,12 +234,6 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         headlineContent = { Text(stringResource(R.string.setting_page_default_model)) },
                     )
                     item(
-                        onClick = { navController.navigate(Screen.MemoryManager) },
-                        leadingContent = { Icon(HugeIcons.Book03, null) },
-                        supportingContent = { Text("管理所有记忆、重新计算向量") },
-                        headlineContent = { Text("记忆管理") },
-                    )
-                    item(
                         onClick = { navController.navigate(Screen.Grove) },
                         leadingContent = { Icon(HugeIcons.Bookshelf01, null) },
                         supportingContent = { Text("搜索你的 1,141 篇笔记") },

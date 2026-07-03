@@ -83,9 +83,6 @@ data class QuickMessage(
 data class AssistantMemory(
     val id: Int,
     val content: String = "",
-    val type: Int = 0, // 0=CORE, 1=EPISODIC
-    val timestamp: Long = 0L,
-    val pinned: Boolean = false,
 )
 
 @Serializable
