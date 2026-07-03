@@ -36,6 +36,7 @@ import me.rerere.rikkahub.data.db.migrations.Migration_13_14
 import me.rerere.rikkahub.data.db.migrations.Migration_14_15
 import me.rerere.rikkahub.data.db.migrations.Migration_15_16
 import me.rerere.rikkahub.data.db.migrations.Migration_23_24
+import me.rerere.rikkahub.data.db.migrations.Migration_24_27
 import me.rerere.rikkahub.data.db.migrations.Migration_27_28
 import me.rerere.rikkahub.data.db.migrations.Migration_28_29
 import me.rerere.rikkahub.data.db.migrations.Migration_29_30
@@ -67,6 +68,7 @@ val dataSourceModule = module {
             .addMigrations(
                 Migration_6_7, Migration_11_12, Migration_13_14,
                 Migration_14_15, Migration_15_16, Migration_23_24,
+                Migration_24_27,
                 Migration_27_28, Migration_28_29, Migration_29_30,
             )
             .addCallback(object : RoomDatabase.Callback() {

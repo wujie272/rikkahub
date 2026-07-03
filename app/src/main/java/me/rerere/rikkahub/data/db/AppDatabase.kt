@@ -67,6 +67,7 @@ import me.rerere.rikkahub.workflow.db.WorkflowRunEntity
     ],
     version = 30,
     autoMigrations = [
+        // v1→v23: Using auto-migrations for early versions (no manual migrations overlap)
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),
         AutoMigration(from = 3, to = 4),
@@ -84,16 +85,9 @@ import me.rerere.rikkahub.workflow.db.WorkflowRunEntity
         AutoMigration(from = 20, to = 21, spec = Migration_20_21::class),
         AutoMigration(from = 21, to = 22, spec = Migration_21_22::class),
         AutoMigration(from = 22, to = 23, spec = Migration_22_23::class),
-        // v25: upstream 2.2.6 added conversation-level custom_system_prompt / mode_injection_ids
-        // / lorebook_ids columns (all carry defaultValue, so a plain auto-migration suffices).
-        AutoMigration(from = 24, to = 25),
-        // v26: the 2.3.1 merge brings upstream's workspaces table (WorkspaceEntity). Existing
-        // fork users never had it, so Room auto-creates the table on this step.
-        AutoMigration(from = 25, to = 26),
-        AutoMigration(from = 26, to = 27),
-        // 27→28: group round-robin index (manual — see addMigrations below)
-        // 28→29: vector memory columns (manual — see addMigrations below)
-        // 29→30: drop telegram_chat table (manual — see addMigrations below)
+        // v24→v30: Using manual migrations instead of auto, because Room's KSP cannot
+        // validate auto-migrations when later versions use manual migrations (it can't
+        // compute intermediate entity states). See addMigrations() below.
     ]
 )
 @TypeConverters(TokenUsageConverter::class)
