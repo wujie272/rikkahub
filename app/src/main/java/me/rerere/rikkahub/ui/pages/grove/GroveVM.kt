@@ -161,6 +161,8 @@ class GroveVM(
                     query = query,
                     limit = 10,
                     folderFilter = _uiState.value.selectedFolder,
+                    enableHybrid = true,
+                    expandContext = true,
                 )
                 _uiState.value = _uiState.value.copy(
                     searchResults = results,

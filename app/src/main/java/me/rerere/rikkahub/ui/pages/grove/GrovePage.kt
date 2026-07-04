@@ -399,8 +399,11 @@ private fun StatItem(label: String, value: String) {
 private fun SearchResultCard(
     result: GroveSearchService.SearchResult,
 ) {
+    var showContext by remember { mutableStateOf(false) }
+    val hasContext = result.expandedContext.isNotBlank() && result.expandedContext != result.chunkText
+
     Card(
-        onClick = {},
+        onClick = if (hasContext) {{ showContext = !showContext }} else {{}},
         modifier = Modifier.fillMaxWidth(),
         colors = CustomColors.cardColorsOnSurfaceContainer,
     ) {
@@ -458,11 +461,20 @@ private fun SearchResultCard(
             Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-                text = result.chunkText,
+                text = if (showContext && hasContext) result.expandedContext else result.chunkText,
                 style = MaterialTheme.typography.bodyMedium,
-                maxLines = 4,
+                maxLines = if (showContext) 20 else 4,
                 overflow = TextOverflow.Ellipsis,
             )
+
+            if (hasContext) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = if (showContext) "收起上下文" else "展开上下文",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
         }
     }
 }
