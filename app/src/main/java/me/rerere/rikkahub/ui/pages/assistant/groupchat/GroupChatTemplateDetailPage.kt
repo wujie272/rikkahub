@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -28,7 +27,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -41,29 +39,24 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkManager
-import androidx.work.workDataOf
 import me.rerere.ai.provider.ModelType
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Add01
 import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.Delete01
-import me.rerere.hugeicons.stroke.Brain02
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.GroupChatSeatOverrides
 import me.rerere.rikkahub.data.model.buildSeatDisplayNames
-import me.rerere.rikkahub.service.MemoryConsolidationWorker
 import me.rerere.rikkahub.ui.components.ai.McpPickerButton
 import me.rerere.rikkahub.ui.components.ai.ModelSelector
 import me.rerere.rikkahub.ui.components.ai.SearchPickerButton
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
 import me.rerere.rikkahub.ui.context.LocalNavController
+import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.ui.theme.CustomColors
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
@@ -77,9 +70,9 @@ fun GroupChatTemplateDetailPage(id: String) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     val template by vm.template.collectAsStateWithLifecycle()
     val navController = LocalNavController.current
-    val context = LocalContext.current
 
     val defaultAssistantName = "助手"
+    val currentTemplate = template
 
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showAddMemberSheet by remember { mutableStateOf(false) }
@@ -113,7 +106,6 @@ fun GroupChatTemplateDetailPage(id: String) {
             )
         }
     ) { innerPadding ->
-        val currentTemplate = template
         if (currentTemplate == null) {
             Text(
                 text = "模板加载中...",
@@ -296,94 +288,6 @@ fun GroupChatTemplateDetailPage(id: String) {
                 )
             }
 
-            // ── Memory consolidation ──
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = CustomColors.cardColorsOnSurfaceContainer.containerColor),
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text("记忆整合", style = MaterialTheme.typography.titleSmall)
-
-                        Spacer(Modifier.height(8.dp))
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                text = "整合模型：",
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            ModelSelector(
-                                modelId = currentTemplate.integrationModelId,
-                                providers = settings.providers,
-                                type = ModelType.CHAT,
-                                allowClear = true,
-                                onSelect = { model ->
-                                    if (model.displayName.isBlank() && model.modelId.isBlank()) {
-                                        vm.updateIntegrationModel(null)
-                                    } else {
-                                        vm.updateIntegrationModel(model.id)
-                                    }
-                                },
-                            )
-                        }
-
-                        Spacer(Modifier.height(12.dp))
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                        ) {
-                            Text(
-                                text = "整合延迟",
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
-                            Text(
-                                text = "${currentTemplate.consolidationDelayMinutes} 分钟",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
-                        }
-                        Text(
-                            text = "对话结束后等待多久开始整合记忆",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Slider(
-                            value = currentTemplate.consolidationDelayMinutes.toFloat(),
-                            onValueChange = { minutes ->
-                                vm.updateConsolidationDelayMinutes(minutes.toInt())
-                            },
-                            valueRange = 0f..240f,
-                            steps = 23,
-                        )
-
-                        Spacer(Modifier.height(8.dp))
-
-                        Button(
-                            onClick = {
-                                val request = OneTimeWorkRequestBuilder<MemoryConsolidationWorker>()
-                                    .setInputData(
-                                        workDataOf(
-                                            "FULL_SCAN" to true,
-                                            "GROUP_CHAT_TEMPLATE_ID" to currentTemplate.id.toString(),
-                                        )
-                                    )
-                                    .build()
-                                WorkManager.getInstance(context).enqueue(request)
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            enabled = currentTemplate.integrationModelId != null,
-                        ) {
-                            Icon(HugeIcons.Brain02, null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text("立即整合记忆")
-                        }
-                    }
-                }
             }
 
             item { Spacer(Modifier.height(32.dp)) }
