@@ -308,19 +308,19 @@ class GroveIndexService(
                 val paraIdx = segment.lastIndexOf("\n\n")
                 val sentenceIdx = segment.lastIndexOfAny(
                     charArrayOf(
-                        '\u3002', // 句号
-                        '\uff01', // 感叹号
-                        '\uff1f', // 问号
+                        '。', // 句号
+                        '！', // 感叹号
+                        '？', // 问号
                         '.', '!', '?', '\n',
-                        '\u2026\u2026', // 省略号（仅匹配第一个字符）
+                        '…', // 省略号
                     ),
                 )
                 val commaIdx = segment.lastIndexOfAny(
                     charArrayOf(
-                        '\uff0c', // 中文逗号
-                        '\u3001', // 中文顿号
-                        '\uff1b', // 中文分号
-                        '\u300a', '\u300b', // 书名号
+                        '，', // 中文逗号
+                        '、', // 中文顿号
+                        '；', // 中文分号
+                        '《', '》', // 书名号
                         ',', ';',
                     ),
                 )
