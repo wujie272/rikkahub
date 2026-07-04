@@ -236,7 +236,7 @@ class GroveIndexService(
             var line: String?
             while (reader.readLine().also { line = it } != null) {
                 val l = line!!
-                val isHeading = l.startsWith("## ") || l.startsWith("### ")
+                val isHeading = l.startsWith("#") && l.length > 1 && l[1] == ' '
 
                 if (isHeading) {
                     hasAnyHeading = true
@@ -300,14 +300,37 @@ class GroveIndexService(
         var pos = 0
         while (pos < text.length) {
             val end = minOf(pos + CHUNK_MAX_CHARS, text.length)
-            // 尽量在句尾断开
+            // 尽量在句尾断开（支持中英文混合文本）
             val cutPos = if (end < text.length) {
                 val searchStart = maxOf(pos, end - 200.coerceAtMost(end - pos))
                 val segment = text.substring(searchStart, end)
-                val localIdx = segment.lastIndexOfAny(
-                    charArrayOf('\u3002', '.', '\n', '\uff01', '\uff1f', '!', '?'),
+                // 优先级：段落 > 句子 > 逗号 > 长度截断
+                val paraIdx = segment.lastIndexOf("\n\n")
+                val sentenceIdx = segment.lastIndexOfAny(
+                    charArrayOf(
+                        '\u3002', // 句号
+                        '\uff01', // 感叹号
+                        '\uff1f', // 问号
+                        '.', '!', '?', '\n',
+                        '\u2026\u2026', // 省略号（仅匹配第一个字符）
+                    ),
                 )
-                if (localIdx >= 0) searchStart + localIdx + 1 else end
+                val commaIdx = segment.lastIndexOfAny(
+                    charArrayOf(
+                        '\uff0c', // 中文逗号
+                        '\u3001', // 中文顿号
+                        '\uff1b', // 中文分号
+                        '\u300a', '\u300b', // 书名号
+                        ',', ';',
+                    ),
+                )
+                val cutAt = when {
+                    paraIdx >= 0 -> paraIdx + 2  // \n\n → 段落后
+                    sentenceIdx >= 0 -> sentenceIdx + 1
+                    commaIdx >= 0 -> commaIdx + 1
+                    else -> -1
+                }
+                if (cutAt >= 0) searchStart + cutAt else end
             } else {
                 end
             }
