@@ -288,7 +288,6 @@ fun GroupChatTemplateDetailPage(id: String) {
                 )
             }
 
-            }
 
             item { Spacer(Modifier.height(32.dp)) }
         }
