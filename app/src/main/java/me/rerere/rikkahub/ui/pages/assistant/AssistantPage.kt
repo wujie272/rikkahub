@@ -83,11 +83,6 @@ import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 import kotlin.uuid.Uuid
 import androidx.compose.foundation.lazy.items as lazyItems
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.Box
-import androidx.compose.material3.rememberModalBottomSheetState
 
 @Composable
 fun AssistantPage(vm: AssistantVM = koinViewModel()) {
@@ -104,7 +99,6 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
     var selectedTagIds by remember { mutableStateOf(emptySet<Uuid>()) }
     // 操作菜单状态
     var actionSheetAssistant by remember { mutableStateOf<Assistant?>(null) }
-    var showCreateSheet by remember { mutableStateOf(false) }
 
     // 根据搜索关键词和选中的标签过滤助手
     val filteredAssistants = remember(settings.assistants, selectedTagIds, searchQuery) {
@@ -129,7 +123,7 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
                 actions = {
                     IconButton(
                         onClick = {
-                            showCreateSheet = true
+                            createState.open(Assistant())
                         }) {
                         Icon(HugeIcons.Add01, stringResource(R.string.assistant_page_add))
                     }
@@ -240,153 +234,11 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
                         )
                     }
                 }
-                // ── Group chat templates section ──
-                item(key = "group_chat_header") {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 4.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = "👥 群聊模板",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                        TextButton(onClick = {
-                            val newId = kotlin.uuid.Uuid.random()
-                            navController.navigate(Screen.GroupChatTemplateDetail(id = newId.toString()))
-                        }) {
-                            Icon(HugeIcons.Add01, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text("新建")
-                        }
-                    }
-                }
-                if (settings.groupChatTemplates.isEmpty()) {
-                    item(key = "group_chat_empty") {
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(containerColor = CustomColors.cardColorsOnSurfaceContainer.containerColor),
-                        ) {
-                            Text(
-                                text = "暂无群聊模板，点击上方「新建」创建",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(16.dp).fillMaxWidth(),
-                            )
-                        }
-                    }
-                } else {
-                    settings.groupChatTemplates.forEach { template ->
-                        item(key = "group_chat_template_${template.id}") {
-                            Card(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        navController.navigate(Screen.GroupChatTemplateDetail(id = template.id.toString()))
-                                    },
-                                colors = CardDefaults.cardColors(containerColor = CustomColors.cardColorsOnSurfaceContainer.containerColor),
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(16.dp).fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    Text(
-                                        text = template.name.ifBlank { "未命名群聊" },
-                                        modifier = Modifier.weight(1f),
-                                    )
-                                    Text(
-                                        text = "${template.seats.size}位成员",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-
             }
         }
     }
 
     AssistantCreationSheet(createState, vm)
-
-    if (showCreateSheet) {
-        ModalBottomSheet(
-            onDismissRequest = { showCreateSheet = false },
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text(
-                    text = "新建",
-                    style = MaterialTheme.typography.titleLarge,
-                    modifier = Modifier.padding(bottom = 8.dp),
-                )
-
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(me.rerere.rikkahub.ui.theme.AppShapes.CardMedium)
-                        .clickable {
-                            showCreateSheet = false
-                            createState.open(Assistant())
-                        },
-                    color = if (me.rerere.rikkahub.ui.theme.LocalDarkMode.current) {
-                        MaterialTheme.colorScheme.surfaceContainerLow
-                    } else {
-                        MaterialTheme.colorScheme.surfaceContainerHigh
-                    },
-                ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp).fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        Icon(HugeIcons.Add01, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                        Text(
-                            text = "新建助手",
-                            style = MaterialTheme.typography.bodyLarge,
-                        )
-                    }
-                }
-
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(me.rerere.rikkahub.ui.theme.AppShapes.CardMedium)
-                        .clickable {
-                            showCreateSheet = false
-                            val newId = kotlin.uuid.Uuid.random()
-                            navController.navigate(Screen.GroupChatTemplateDetail(id = newId.toString()))
-                        },
-                    color = if (me.rerere.rikkahub.ui.theme.LocalDarkMode.current) {
-                        MaterialTheme.colorScheme.surfaceContainerLow
-                    } else {
-                        MaterialTheme.colorScheme.surfaceContainerHigh
-                    },
-                ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp).fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        Icon(HugeIcons.Add01, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                        Text(
-                            text = "新建群聊模板",
-                            style = MaterialTheme.typography.bodyLarge,
-                        )
-                    }
-                }
-            }
-        }
-    }
-
 
     actionSheetAssistant?.let { assistant ->
         AssistantActionSheet(
