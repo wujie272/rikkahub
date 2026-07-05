@@ -471,7 +471,8 @@ private fun KeyManagementSheet(
     var showAddDialog by remember { mutableStateOf(false) }
     var editingAliasKey by remember { mutableStateOf<ProviderApiKey?>(null) }
     var aliasText by remember { mutableStateOf("") }
-    val keyRoulette = remember { KeyRoulette.lru(LocalContext.current) }
+    val sheetContext = LocalContext.current
+    val keyRoulette = remember(sheetContext) { KeyRoulette.lru(sheetContext) }
 
     // 轮询冷却状态
     var keyStates by remember { mutableStateOf<List<KeyState>>(emptyList()) }
@@ -589,10 +590,10 @@ private fun KeyManagementSheet(
 
                 // 从剪贴板导入
                 item {
+                    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
                     OutlinedCard(
                         modifier = Modifier.fillMaxWidth(),
                         onClick = {
-                            val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
                             val clipText = clipboard.getText()?.text
                             if (!clipText.isNullOrBlank()) {
                                 val newKeys = clipText.split("\n", ",")
