@@ -156,6 +156,7 @@ import me.rerere.ai.provider.pickApiKey
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.ui.theme.extendColors
 import me.rerere.rikkahub.utils.UiState
+import me.rerere.rikkahub.utils.readClipboardText
 import me.rerere.rikkahub.utils.plus
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
@@ -821,7 +822,7 @@ private fun KeyManagementSheet(
                         editingAliasKey = null
                     }
                 ) {
-                    Text(stringResource(R.string.save))
+                    Text(stringResource(R.string.setting_provider_page_save))
                 }
             },
             dismissButton = {
