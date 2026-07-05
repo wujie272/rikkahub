@@ -36,9 +36,11 @@ enum class ProviderKeyStrategy {
  */
 @Serializable
 sealed class ProviderProxy {
+    @Serializable
     @SerialName("none")
-    data object None : ProviderProxy()
+    object None : ProviderProxy()
 
+    @Serializable
     @SerialName("http")
     data class Http(
         val address: String,
