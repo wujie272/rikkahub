@@ -3,7 +3,6 @@ package me.rerere.rikkahub.ui.pages.setting.components
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -58,6 +57,8 @@ import me.rerere.ai.provider.isMultiKeyEnabled
 import me.rerere.ai.provider.normalizedProviderApiKeys
 import me.rerere.ai.provider.splitProviderApiKeys
 import me.rerere.ai.provider.syncEnabledApiKeysToLegacy
+import me.rerere.hugeicons.stroke.View
+import me.rerere.hugeicons.stroke.ViewOff
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.utils.readClipboardText
 
@@ -66,7 +67,7 @@ import me.rerere.rikkahub.utils.readClipboardText
  * Placed inside ProviderConfigure*() after the legacy apiKey field.
  */
 @Composable
-fun ColumnScope.ProviderMultiKeySection(
+fun ProviderMultiKeySection(
     provider: ProviderSetting,
     onEdit: (ProviderSetting) -> Unit,
 ) {
