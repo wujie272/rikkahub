@@ -425,7 +425,11 @@ private fun ProviderApiKeyEditDialog(
                     trailingIcon = {
                         IconButton(onClick = { visible = !visible }) {
                             Icon(
-                                imageVector = if (visible) ViewOff else View,
+                                imageVector = if (visible) {
+                                    me.rerere.hugeicons.stroke.ViewOff
+                                } else {
+                                    me.rerere.hugeicons.stroke.View
+                                },
                                 contentDescription = null,
                             )
                         }
