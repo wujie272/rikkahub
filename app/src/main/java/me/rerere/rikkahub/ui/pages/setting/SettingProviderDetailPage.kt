@@ -16,6 +16,8 @@ import me.rerere.hugeicons.stroke.Cloud
 import me.rerere.hugeicons.stroke.Copy01
 import me.rerere.hugeicons.stroke.Edit01
 import me.rerere.hugeicons.stroke.CheckmarkCircle01
+import me.rerere.hugeicons.stroke.View
+import me.rerere.hugeicons.stroke.ViewOff
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.animation.AnimatedVisibility
@@ -98,6 +100,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastFilter
@@ -471,6 +475,7 @@ private fun KeyManagementSheet(
     var showAddDialog by remember { mutableStateOf(false) }
     var editingAliasKey by remember { mutableStateOf<ProviderApiKey?>(null) }
     var aliasText by remember { mutableStateOf("") }
+    var importText by remember { mutableStateOf<String?>(null) }
     val sheetContext = LocalContext.current
     val keyRoulette = remember(sheetContext) { KeyRoulette.lru(sheetContext) }
 
@@ -588,19 +593,16 @@ private fun KeyManagementSheet(
                     }
                 }
 
-                // 从剪贴板导入
+                // 从剪贴板导入（LastChat 风格：弹出对话框预览/编辑）
                 item {
-                    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+                    var showImportDialog by remember { mutableStateOf(false) }
                     OutlinedCard(
                         modifier = Modifier.fillMaxWidth(),
                         onClick = {
-                            val clipText = clipboard.getText()?.text
-                            if (!clipText.isNullOrBlank()) {
-                                val newKeys = clipText.split("\n", ",")
-                                    .map { it.trim() }
-                                    .filter { it.isNotBlank() && internalApiKeys.none { k -> k.key == it } }
-                                    .map { ProviderApiKey(key = it) }
-                                internalApiKeys = (internalApiKeys + newKeys).toMutableList()
+                            val clipText = sheetContext.readClipboardText()
+                            if (clipText.isNotBlank()) {
+                                importText = clipText
+                                showImportDialog = true
                             }
                         }
                     ) {
@@ -615,6 +617,26 @@ private fun KeyManagementSheet(
                             Spacer(Modifier.width(8.dp))
                             Text(stringResource(R.string.setting_provider_page_paste_from_clipboard), style = MaterialTheme.typography.bodyMedium)
                         }
+                    }
+
+                    if (showImportDialog && importText != null) {
+                        ImportKeysDialog(
+                            initialText = importText!!,
+                            onDismissRequest = {
+                                showImportDialog = false
+                                importText = null
+                            },
+                            onImport = { raw ->
+                                val existingValues = internalApiKeys.map { it.key }.toSet()
+                                val newKeys = raw.split("\n", ",")
+                                    .map { it.trim() }
+                                    .filter { it.isNotBlank() && it !in existingValues }
+                                    .map { ProviderApiKey(key = it) }
+                                internalApiKeys = (internalApiKeys + newKeys).toMutableList()
+                                showImportDialog = false
+                                importText = null
+                            }
+                        )
                     }
                 }
             }
@@ -691,31 +713,53 @@ private fun KeyManagementSheet(
         )
     }
 
-    // 编辑别名弹窗
+    // 编辑 Key 弹窗（LastChat 风格：别名 + Key 值 + 眼睛切换）
     editingAliasKey?.let { editingKey ->
+        var editAlias by remember(editingKey.id) { mutableStateOf(editingKey.alias) }
+        var editValue by remember(editingKey.id) { mutableStateOf(editingKey.key) }
+        var editVisible by remember(editingKey.id) { mutableStateOf(false) }
+
         AlertDialog(
             onDismissRequest = { editingAliasKey = null },
-            title = { Text(stringResource(R.string.setting_provider_page_edit_alias)) },
+            title = { Text(stringResource(R.string.setting_provider_page_edit_key)) },
             text = {
-                OutlinedTextField(
-                    value = aliasText,
-                    onValueChange = { aliasText = it },
-                    label = { Text(stringResource(R.string.setting_provider_page_alias)) },
-                    placeholder = { Text(editingKey.key.maskApiKey()) },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(
+                        value = editAlias,
+                        onValueChange = { editAlias = it },
+                        label = { Text(stringResource(R.string.setting_provider_page_alias)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                    )
+                    OutlinedTextField(
+                        value = editValue,
+                        onValueChange = { editValue = it.trim() },
+                        label = { Text(stringResource(R.string.setting_provider_page_api_key)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = !editVisible,
+                        visualTransformation = if (editVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = { editVisible = !editVisible }) {
+                                Icon(
+                                    if (editVisible) HugeIcons.ViewOff else HugeIcons.View,
+                                    contentDescription = null
+                                )
+                            }
+                        },
+                    )
+                }
             },
             confirmButton = {
                 TextButton(
+                    enabled = editValue.isNotBlank(),
                     onClick = {
                         internalApiKeys = internalApiKeys.map { k ->
-                            if (k.id == editingKey.id) k.copy(alias = aliasText) else k
+                            if (k.id == editingKey.id) k.copy(alias = editAlias.trim(), key = editValue.trim()) else k
                         }.toMutableList()
                         editingAliasKey = null
                     }
                 ) {
-                    Text(stringResource(R.string.confirm))
+                    Text(stringResource(R.string.save))
                 }
             },
             dismissButton = {
@@ -725,6 +769,46 @@ private fun KeyManagementSheet(
             }
         )
     }
+}
+
+// ========== 导入 Key 弹窗（LastChat 风格） ==========
+
+@Composable
+private fun ImportKeysDialog(
+    initialText: String,
+    onDismissRequest: () -> Unit,
+    onImport: (String) -> Unit,
+) {
+    var text by remember(initialText) { mutableStateOf(initialText) }
+
+    AlertDialog(
+        onDismissRequest = onDismissRequest,
+        title = { Text(stringResource(R.string.setting_provider_page_import_keys)) },
+        text = {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it },
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 5,
+                maxLines = 8,
+                label = { Text(stringResource(R.string.setting_provider_page_api_keys)) },
+                supportingText = { Text(stringResource(R.string.setting_provider_page_import_keys_hint)) },
+            )
+        },
+        confirmButton = {
+            TextButton(
+                enabled = text.isNotBlank(),
+                onClick = { onImport(text) },
+            ) {
+                Text(stringResource(R.string.setting_provider_page_import_confirm))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismissRequest) {
+                Text(stringResource(R.string.cancel))
+            }
+        },
+    )
 }
 
 // ========== Key 列表卡片（Sheet 内） ==========
