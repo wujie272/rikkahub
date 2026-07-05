@@ -51,24 +51,6 @@ sealed class ProviderProxy {
 }
 
 /**
- * Migrate old comma/newline-separated apiKey to the new structured format.
- */
-fun ProviderSetting.normalizeProviderApiKeys(): List<ProviderApiKey> {
-    val raw = when (this) {
-        is ProviderSetting.OpenAI -> this.apiKey
-        is ProviderSetting.Google -> this.apiKey
-        is ProviderSetting.Claude -> this.apiKey
-        else -> ""
-    }
-    return raw.split("\n")
-        .flatMap { it.split(",") }
-        .map { it.trim() }
-        .filter { it.isNotBlank() }
-        .distinct()
-        .map { ProviderApiKey(key = it) }
-}
-
-/**
  * Sync the enabled Keys back to the legacy `apiKey` field so old
  * code (conversations, request handling) continues to work.
  */
@@ -76,16 +58,6 @@ fun ProviderSetting.syncEnabledApiKeysToLegacyField(): String {
     return this.apiKeys
         .filter { it.enabled }
         .joinToString("\n")
-}
-
-/**
- * Get active (enabled) API key values as a flat list of strings.
- * Used by the AI provider layer to feed into KeyRoulette.next().
- */
-fun ProviderSetting.activeApiKeyValuesForRequest(): List<String> {
-    return this.apiKeys
-        .filter { it.enabled }
-        .map { it.key }
 }
 
 /**
