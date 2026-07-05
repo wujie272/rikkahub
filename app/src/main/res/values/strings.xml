@@ -1939,4 +1939,24 @@
     <string name="setting_ssh_save">Save</string>
     <string name="setting_ssh_validation_required">%s is required</string>
     <string name="setting_provider_page_keys">Keys</string>
+  <string name="setting_provider_page_api_keys">API Keys</string>
+  <string name="setting_provider_page_key_strategy">Key Strategy</string>
+  <string name="setting_provider_page_add_key">Add Key</string>
+  <string name="setting_provider_page_paste_from_clipboard">Paste from Clipboard</string>
+  <string name="setting_provider_page_legacy_key_migrate">Legacy key available, click to migrate to structured management</string>
+  <string name="setting_provider_page_keys_enabled">keys enabled</string>
+  <string name="setting_provider_page_no_api_keys">No API keys configured</string>
+  <string name="setting_provider_page_edit_alias">Edit Alias</string>
+  <string name="setting_provider_page_alias">Alias</string>
+  <string name="setting_provider_page_thaw">❄️ Thaw</string>
+  <string name="setting_provider_page_requests">Requests</string>
+  <string name="setting_provider_page_success">Success</string>
+  <string name="setting_provider_page_failures">Failures</string>
+  <string name="setting_provider_page_proxy">Proxy</string>
+  <string name="setting_provider_page_proxy_desc">Configure HTTP proxy for this provider</string>
+  <string name="setting_provider_page_proxy_none">None</string>
+  <string name="setting_provider_page_proxy_address">Address</string>
+  <string name="setting_provider_page_proxy_port">Port</string>
+  <string name="setting_provider_page_proxy_username">Username</string>
+  <string name="setting_provider_page_proxy_password">Password</string>
 </resources>

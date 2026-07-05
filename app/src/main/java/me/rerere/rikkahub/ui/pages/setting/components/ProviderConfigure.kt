@@ -140,10 +140,14 @@ fun ProviderSetting.convertTo(type: KClass<out ProviderSetting>): ProviderSettin
         is ProviderSetting.OpenAI -> this.apiKey
         is ProviderSetting.Google -> this.apiKey
         is ProviderSetting.Claude -> this.apiKey
-        is ProviderSetting.AICore -> "" // on-device, no API key
-        is ProviderSetting.LiteRtLocal -> "" // on-device, no API key
-        is ProviderSetting.Codex -> "" // OAuth, no API key
+        is ProviderSetting.AICore -> ""
+        is ProviderSetting.LiteRtLocal -> ""
+        is ProviderSetting.Codex -> ""
     }
+    val sourceMultiKeyEnabled = this.multiKeyEnabled
+    val sourceApiKeys = this.apiKeys
+    val sourceKeyStrategy = this.keyStrategy
+    val sourceProxy = this.proxy
     val sourceBaseUrl = when (this) {
         is ProviderSetting.OpenAI -> this.baseUrl
         is ProviderSetting.Google -> this.baseUrl
@@ -164,19 +168,25 @@ fun ProviderSetting.convertTo(type: KClass<out ProviderSetting>): ProviderSettin
     return when (type) {
         ProviderSetting.OpenAI::class -> ProviderSetting.OpenAI(
             id = this.id, enabled = this.enabled, name = this.name, models = this.models,
-            balanceOption = this.balanceOption, fallbackConfig = this.fallbackConfig, builtIn = this.builtIn,
+            balanceOption = this.balanceOption, fallbackConfig = this.fallbackConfig,
+            multiKeyEnabled = sourceMultiKeyEnabled, apiKeys = sourceApiKeys, keyStrategy = sourceKeyStrategy,
+            proxy = sourceProxy, builtIn = this.builtIn,
             description = this.description, shortDescription = this.shortDescription,
             apiKey = apiKey, baseUrl = convertedBaseUrl
         )
         ProviderSetting.Google::class -> ProviderSetting.Google(
             id = this.id, enabled = this.enabled, name = this.name, models = this.models,
-            balanceOption = this.balanceOption, fallbackConfig = this.fallbackConfig, builtIn = this.builtIn,
+            balanceOption = this.balanceOption, fallbackConfig = this.fallbackConfig,
+            multiKeyEnabled = sourceMultiKeyEnabled, apiKeys = sourceApiKeys, keyStrategy = sourceKeyStrategy,
+            proxy = sourceProxy, builtIn = this.builtIn,
             description = this.description, shortDescription = this.shortDescription,
             apiKey = apiKey, baseUrl = convertedBaseUrl
         )
         ProviderSetting.Claude::class -> ProviderSetting.Claude(
             id = this.id, enabled = this.enabled, name = this.name, models = this.models,
-            balanceOption = this.balanceOption, fallbackConfig = this.fallbackConfig, builtIn = this.builtIn,
+            balanceOption = this.balanceOption, fallbackConfig = this.fallbackConfig,
+            multiKeyEnabled = sourceMultiKeyEnabled, apiKeys = sourceApiKeys, keyStrategy = sourceKeyStrategy,
+            proxy = sourceProxy, builtIn = this.builtIn,
             description = this.description, shortDescription = this.shortDescription,
             apiKey = apiKey, baseUrl = convertedBaseUrl
         )
@@ -188,7 +198,8 @@ fun ProviderSetting.convertTo(type: KClass<out ProviderSetting>): ProviderSettin
             models = this.models,
             balanceOption = this.balanceOption,
             fallbackConfig = this.fallbackConfig,
-            builtIn = this.builtIn,
+            multiKeyEnabled = sourceMultiKeyEnabled, apiKeys = sourceApiKeys, keyStrategy = sourceKeyStrategy,
+            proxy = sourceProxy, builtIn = this.builtIn,
             description = this.description,
             shortDescription = this.shortDescription,
         )

@@ -5,6 +5,9 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
 import kotlin.uuid.Uuid
+import me.rerere.ai.provider.ProviderApiKey
+import me.rerere.ai.provider.ProviderKeyStrategy
+import me.rerere.ai.provider.ProviderProxy
 
 @Serializable
 data class BalanceOption(
@@ -37,6 +40,10 @@ sealed class ProviderSetting {
     abstract val models: List<Model>
     abstract val balanceOption: BalanceOption
     abstract val fallbackConfig: FallbackConfig
+    abstract val multiKeyEnabled: Boolean
+    abstract val apiKeys: List<ProviderApiKey>
+    abstract val keyStrategy: ProviderKeyStrategy
+    abstract val proxy: ProviderProxy
 
     /** 此 Provider 是否需要独立的 API Key 配置页（本地/设备端 Provider 不需要） */
     open val hasKeyPage: Boolean get() = true
@@ -55,6 +62,10 @@ sealed class ProviderSetting {
         models: List<Model> = this.models,
         balanceOption: BalanceOption = this.balanceOption,
         fallbackConfig: FallbackConfig = this.fallbackConfig,
+        multiKeyEnabled: Boolean = this.multiKeyEnabled,
+        apiKeys: List<ProviderApiKey> = this.apiKeys,
+        keyStrategy: ProviderKeyStrategy = this.keyStrategy,
+        proxy: ProviderProxy = this.proxy,
         builtIn: Boolean = this.builtIn,
         description: @Composable (() -> Unit) = this.description,
         shortDescription: @Composable (() -> Unit) = this.shortDescription,
@@ -69,6 +80,10 @@ sealed class ProviderSetting {
         override var models: List<Model> = emptyList(),
         override val balanceOption: BalanceOption = BalanceOption(),
         override val fallbackConfig: FallbackConfig = FallbackConfig(),
+        override val multiKeyEnabled: Boolean = false,
+        override val apiKeys: List<ProviderApiKey> = emptyList(),
+        override val keyStrategy: ProviderKeyStrategy = ProviderKeyStrategy.LRU,
+        override val proxy: ProviderProxy = ProviderProxy.None,
         @Transient override val builtIn: Boolean = false,
         @Transient override val description: @Composable (() -> Unit) = {},
         @Transient override val shortDescription: @Composable (() -> Unit) = {},
@@ -87,11 +102,14 @@ sealed class ProviderSetting {
         override fun copyProvider(
             id: Uuid, enabled: Boolean, name: String, models: List<Model>,
             balanceOption: BalanceOption, fallbackConfig: FallbackConfig,
-            builtIn: Boolean, description: @Composable (() -> Unit), shortDescription: @Composable (() -> Unit),
+            multiKeyEnabled: Boolean, apiKeys: List<ProviderApiKey>, keyStrategy: ProviderKeyStrategy,
+            proxy: ProviderProxy, builtIn: Boolean,
+            description: @Composable (() -> Unit), shortDescription: @Composable (() -> Unit),
         ): ProviderSetting = copy(
             id = id, enabled = enabled, name = name, models = models,
             balanceOption = balanceOption, fallbackConfig = fallbackConfig,
-            builtIn = builtIn, description = description, shortDescription = shortDescription,
+            multiKeyEnabled = multiKeyEnabled, apiKeys = apiKeys, keyStrategy = keyStrategy,
+            proxy = proxy, builtIn = builtIn, description = description, shortDescription = shortDescription,
         )
     }
 
@@ -104,6 +122,10 @@ sealed class ProviderSetting {
         override var models: List<Model> = emptyList(),
         override val balanceOption: BalanceOption = BalanceOption(),
         override val fallbackConfig: FallbackConfig = FallbackConfig(),
+        override val multiKeyEnabled: Boolean = false,
+        override val apiKeys: List<ProviderApiKey> = emptyList(),
+        override val keyStrategy: ProviderKeyStrategy = ProviderKeyStrategy.LRU,
+        override val proxy: ProviderProxy = ProviderProxy.None,
         @Transient override val builtIn: Boolean = false,
         @Transient override val description: @Composable (() -> Unit) = {},
         @Transient override val shortDescription: @Composable (() -> Unit) = {},
@@ -123,11 +145,14 @@ sealed class ProviderSetting {
         override fun copyProvider(
             id: Uuid, enabled: Boolean, name: String, models: List<Model>,
             balanceOption: BalanceOption, fallbackConfig: FallbackConfig,
-            builtIn: Boolean, description: @Composable (() -> Unit), shortDescription: @Composable (() -> Unit),
+            multiKeyEnabled: Boolean, apiKeys: List<ProviderApiKey>, keyStrategy: ProviderKeyStrategy,
+            proxy: ProviderProxy, builtIn: Boolean,
+            description: @Composable (() -> Unit), shortDescription: @Composable (() -> Unit),
         ): ProviderSetting = copy(
             id = id, enabled = enabled, name = name, models = models,
             balanceOption = balanceOption, fallbackConfig = fallbackConfig,
-            builtIn = builtIn, description = description, shortDescription = shortDescription,
+            multiKeyEnabled = multiKeyEnabled, apiKeys = apiKeys, keyStrategy = keyStrategy,
+            proxy = proxy, builtIn = builtIn, description = description, shortDescription = shortDescription,
         )
     }
 
@@ -140,6 +165,10 @@ sealed class ProviderSetting {
         override var models: List<Model> = emptyList(),
         override val balanceOption: BalanceOption = BalanceOption(),
         override val fallbackConfig: FallbackConfig = FallbackConfig(),
+        override val multiKeyEnabled: Boolean = false,
+        override val apiKeys: List<ProviderApiKey> = emptyList(),
+        override val keyStrategy: ProviderKeyStrategy = ProviderKeyStrategy.LRU,
+        override val proxy: ProviderProxy = ProviderProxy.None,
         @Transient override val builtIn: Boolean = false,
         @Transient override val description: @Composable (() -> Unit) = {},
         @Transient override val shortDescription: @Composable (() -> Unit) = {},
@@ -155,11 +184,14 @@ sealed class ProviderSetting {
         override fun copyProvider(
             id: Uuid, enabled: Boolean, name: String, models: List<Model>,
             balanceOption: BalanceOption, fallbackConfig: FallbackConfig,
-            builtIn: Boolean, description: @Composable (() -> Unit), shortDescription: @Composable (() -> Unit),
+            multiKeyEnabled: Boolean, apiKeys: List<ProviderApiKey>, keyStrategy: ProviderKeyStrategy,
+            proxy: ProviderProxy, builtIn: Boolean,
+            description: @Composable (() -> Unit), shortDescription: @Composable (() -> Unit),
         ): ProviderSetting = copy(
             id = id, enabled = enabled, name = name, models = models,
             balanceOption = balanceOption, fallbackConfig = fallbackConfig,
-            builtIn = builtIn, description = description, shortDescription = shortDescription,
+            multiKeyEnabled = multiKeyEnabled, apiKeys = apiKeys, keyStrategy = keyStrategy,
+            proxy = proxy, builtIn = builtIn, description = description, shortDescription = shortDescription,
         )
     }
 
@@ -172,6 +204,10 @@ sealed class ProviderSetting {
         override var models: List<Model> = AICORE_DEFAULT_MODELS,
         override val balanceOption: BalanceOption = BalanceOption(),
         override val fallbackConfig: FallbackConfig = FallbackConfig(),
+        override val multiKeyEnabled: Boolean = false,
+        override val apiKeys: List<ProviderApiKey> = emptyList(),
+        override val keyStrategy: ProviderKeyStrategy = ProviderKeyStrategy.LRU,
+        override val proxy: ProviderProxy = ProviderProxy.None,
         override val hasKeyPage: Boolean = false,
         @Transient override val builtIn: Boolean = true,
         @Transient override val description: @Composable (() -> Unit) = {},
@@ -185,11 +221,14 @@ sealed class ProviderSetting {
         override fun copyProvider(
             id: Uuid, enabled: Boolean, name: String, models: List<Model>,
             balanceOption: BalanceOption, fallbackConfig: FallbackConfig,
-            builtIn: Boolean, description: @Composable (() -> Unit), shortDescription: @Composable (() -> Unit),
+            multiKeyEnabled: Boolean, apiKeys: List<ProviderApiKey>, keyStrategy: ProviderKeyStrategy,
+            proxy: ProviderProxy, builtIn: Boolean,
+            description: @Composable (() -> Unit), shortDescription: @Composable (() -> Unit),
         ): ProviderSetting = copy(
             id = id, enabled = enabled, name = name, models = models,
             balanceOption = balanceOption, fallbackConfig = fallbackConfig,
-            builtIn = builtIn, description = description, shortDescription = shortDescription,
+            multiKeyEnabled = multiKeyEnabled, apiKeys = apiKeys, keyStrategy = keyStrategy,
+            proxy = proxy, builtIn = builtIn, description = description, shortDescription = shortDescription,
         )
     }
 
@@ -202,6 +241,10 @@ sealed class ProviderSetting {
         override var models: List<Model> = emptyList(),
         override val balanceOption: BalanceOption = BalanceOption(),
         override val fallbackConfig: FallbackConfig = FallbackConfig(),
+        override val multiKeyEnabled: Boolean = false,
+        override val apiKeys: List<ProviderApiKey> = emptyList(),
+        override val keyStrategy: ProviderKeyStrategy = ProviderKeyStrategy.LRU,
+        override val proxy: ProviderProxy = ProviderProxy.None,
         override val hasKeyPage: Boolean = false,
         @Transient override val builtIn: Boolean = true,
         @Transient override val description: @Composable (() -> Unit) = {},
@@ -214,11 +257,14 @@ sealed class ProviderSetting {
         override fun copyProvider(
             id: Uuid, enabled: Boolean, name: String, models: List<Model>,
             balanceOption: BalanceOption, fallbackConfig: FallbackConfig,
-            builtIn: Boolean, description: @Composable (() -> Unit), shortDescription: @Composable (() -> Unit),
+            multiKeyEnabled: Boolean, apiKeys: List<ProviderApiKey>, keyStrategy: ProviderKeyStrategy,
+            proxy: ProviderProxy, builtIn: Boolean,
+            description: @Composable (() -> Unit), shortDescription: @Composable (() -> Unit),
         ): ProviderSetting = copy(
             id = id, enabled = enabled, name = name, models = models,
             balanceOption = balanceOption, fallbackConfig = fallbackConfig,
-            builtIn = builtIn, description = description, shortDescription = shortDescription,
+            multiKeyEnabled = multiKeyEnabled, apiKeys = apiKeys, keyStrategy = keyStrategy,
+            proxy = proxy, builtIn = builtIn, description = description, shortDescription = shortDescription,
         )
     }
 
@@ -231,6 +277,10 @@ sealed class ProviderSetting {
         override var models: List<Model> = emptyList(),
         override val balanceOption: BalanceOption = BalanceOption(),
         override val fallbackConfig: FallbackConfig = FallbackConfig(),
+        override val multiKeyEnabled: Boolean = false,
+        override val apiKeys: List<ProviderApiKey> = emptyList(),
+        override val keyStrategy: ProviderKeyStrategy = ProviderKeyStrategy.LRU,
+        override val proxy: ProviderProxy = ProviderProxy.None,
         @Transient override val builtIn: Boolean = true,
         @Transient override val description: @Composable (() -> Unit) = {},
         @Transient override val shortDescription: @Composable (() -> Unit) = {},
@@ -242,11 +292,14 @@ sealed class ProviderSetting {
         override fun copyProvider(
             id: Uuid, enabled: Boolean, name: String, models: List<Model>,
             balanceOption: BalanceOption, fallbackConfig: FallbackConfig,
-            builtIn: Boolean, description: @Composable (() -> Unit), shortDescription: @Composable (() -> Unit),
+            multiKeyEnabled: Boolean, apiKeys: List<ProviderApiKey>, keyStrategy: ProviderKeyStrategy,
+            proxy: ProviderProxy, builtIn: Boolean,
+            description: @Composable (() -> Unit), shortDescription: @Composable (() -> Unit),
         ): ProviderSetting = copy(
             id = id, enabled = enabled, name = name, models = models,
             balanceOption = balanceOption, fallbackConfig = fallbackConfig,
-            builtIn = builtIn, description = description, shortDescription = shortDescription,
+            multiKeyEnabled = multiKeyEnabled, apiKeys = apiKeys, keyStrategy = keyStrategy,
+            proxy = proxy, builtIn = builtIn, description = description, shortDescription = shortDescription,
         )
     }
 

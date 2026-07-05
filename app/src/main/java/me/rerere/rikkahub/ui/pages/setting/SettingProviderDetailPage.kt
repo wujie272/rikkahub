@@ -12,6 +12,10 @@ import me.rerere.hugeicons.stroke.Share01
 import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.ArrowRight01
+import me.rerere.hugeicons.stroke.Cloud
+import me.rerere.hugeicons.stroke.Copy01
+import me.rerere.hugeicons.stroke.Edit01
+import me.rerere.hugeicons.stroke.CheckmarkCircle01
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.animation.AnimatedVisibility
@@ -139,6 +143,12 @@ import me.rerere.rikkahub.ui.pages.setting.components.ProviderConnectionTester
 import me.rerere.rikkahub.ui.pages.setting.components.SettingProviderBalanceOption
 import me.rerere.rikkahub.ui.pages.setting.components.isUsingDefaultBaseUrl
 import me.rerere.rikkahub.ui.pages.setting.components.resetBaseUrlToDefault
+import me.rerere.ai.provider.ProviderApiKey
+import me.rerere.ai.provider.ProviderKeyStrategy
+import me.rerere.ai.provider.activeApiKeyValuesForRequest
+import me.rerere.ai.provider.normalizeProviderApiKeys
+import me.rerere.ai.provider.syncEnabledApiKeysToLegacyField
+import me.rerere.ai.provider.pickApiKey
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.ui.theme.extendColors
 import me.rerere.rikkahub.utils.UiState
@@ -154,6 +164,7 @@ fun SettingProviderDetailPage(id: Uuid, vm: SettingVM = koinViewModel()) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     val navController = LocalNavController.current
     val provider = settings.providers.find { it.id == id } ?: return
+    // Tab 0: 配置(含Key管理) | Tab 1: 模型 | Tab 2: 代理(仅远程Provider)
     val tabCount = if (provider.hasKeyPage) 3 else 2
     val pager = rememberPagerState { tabCount }
     val scope = rememberCoroutineScope()
@@ -221,35 +232,23 @@ fun SettingProviderDetailPage(id: Uuid, vm: SettingVM = koinViewModel()) {
                     selected = pager.currentPage == 0,
                     label = { Text(stringResource(id = R.string.setting_provider_page_configuration)) },
                     icon = { Icon(HugeIcons.Tools, null) },
-                    onClick = {
-                        scope.launch {
-                            pager.animateScrollToPage(0)
-                        }
-                    }
+                    onClick = { scope.launch { pager.animateScrollToPage(0) } }
                 )
-                if (provider.hasKeyPage) {
-                    NavigationBarItem(
-                        selected = pager.currentPage == 1,
-                        label = { Text(stringResource(R.string.setting_provider_page_keys)) },
-                        icon = { Icon(HugeIcons.Key01, null) },
-                        onClick = {
-                            scope.launch {
-                                pager.animateScrollToPage(1)
-                            }
-                        }
-                    )
-                }
-                val modelsTabIndex = if (provider.hasKeyPage) 2 else 1
+                val modelsTabIndex = if (provider.hasKeyPage) 1 else 1
                 NavigationBarItem(
                     selected = pager.currentPage == modelsTabIndex,
                     label = { Text(stringResource(id = R.string.setting_provider_page_models)) },
                     icon = { Icon(HugeIcons.Package01, null) },
-                    onClick = {
-                        scope.launch {
-                            pager.animateScrollToPage(2)
-                        }
-                    }
+                    onClick = { scope.launch { pager.animateScrollToPage(1) } }
                 )
+                if (provider.hasKeyPage) {
+                    NavigationBarItem(
+                        selected = pager.currentPage == 2,
+                        label = { Text(stringResource(R.string.setting_provider_page_proxy)) },
+                        icon = { Icon(HugeIcons.Connect, null) },
+                        onClick = { scope.launch { pager.animateScrollToPage(2) } }
+                    )
+                }
             }
         }
     ) {
@@ -277,13 +276,17 @@ fun SettingProviderDetailPage(id: Uuid, vm: SettingVM = koinViewModel()) {
                 }
 
                 1 -> {
+                    SettingProviderModelPage(
+                        provider = provider,
+                        onEdit = onEdit
+                    )
+                }
+
+                2 -> {
                     if (provider.hasKeyPage) {
-                        SettingProviderKeyPage(
+                        SettingProviderProxyPage(
                             provider = provider,
-                            settings = settings,
-                            onEdit = onEdit,
-                            vm = vm,
-                            scope = scope,
+                            onEdit = onEdit
                         )
                     } else {
                         SettingProviderModelPage(
@@ -291,13 +294,6 @@ fun SettingProviderDetailPage(id: Uuid, vm: SettingVM = koinViewModel()) {
                             onEdit = onEdit
                         )
                     }
-                }
-
-                2 -> {
-                    SettingProviderModelPage(
-                        provider = provider,
-                        onEdit = onEdit
-                    )
                 }
 
 
@@ -323,6 +319,7 @@ private fun SettingProviderConfigPage(
     }
     var internalProvider by remember(provider) { mutableStateOf(provider) }
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var showKeyManagement by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -338,6 +335,27 @@ private fun SettingProviderConfigPage(
                 internalProvider = it
             }
         )
+
+        // Key 管理入口（仅在远程 Provider 显示）
+        if (provider.hasKeyPage && internalProvider !is ProviderSetting.Codex) {
+            KeyManagementEntryCard(
+                provider = internalProvider,
+                onClick = { showKeyManagement = true }
+            )
+        }
+
+        // Key 管理 ModalBottomSheet
+        if (showKeyManagement) {
+            KeyManagementSheet(
+                show = true,
+                provider = internalProvider,
+                onDismiss = { showKeyManagement = false },
+                onSave = { updatedProvider ->
+                    internalProvider = updatedProvider
+                    showKeyManagement = false
+                },
+            )
+        }
 
         if (internalProvider is ProviderSetting.OpenAI) {
             SettingProviderBalanceOption(
@@ -383,7 +401,15 @@ private fun SettingProviderConfigPage(
 
             Button(
                 onClick = {
-                    onEdit(internalProvider)
+                    // 保存前同步结构化 Key → legacy apiKey（各子类具体字段）
+                    val legacyKey = internalProvider.syncEnabledApiKeysToLegacyField()
+                    val synced = when (internalProvider) {
+                        is ProviderSetting.OpenAI -> (internalProvider as ProviderSetting.OpenAI).copy(apiKey = legacyKey)
+                        is ProviderSetting.Google -> (internalProvider as ProviderSetting.Google).copy(apiKey = legacyKey)
+                        is ProviderSetting.Claude -> (internalProvider as ProviderSetting.Claude).copy(apiKey = legacyKey)
+                        else -> internalProvider
+                    }
+                    onEdit(synced)
                 }
             ) {
                 Text(stringResource(R.string.setting_provider_page_save))
@@ -429,6 +455,476 @@ private fun SettingProviderConfigPage(
     }
 }
 
+// ========== Key 管理 Sheet ==========
+
+@Composable
+private fun KeyManagementSheet(
+    show: Boolean,
+    provider: ProviderSetting,
+    onDismiss: () -> Unit,
+    onSave: (ProviderSetting) -> Unit,
+) {
+    if (!show) return
+
+    var internalApiKeys by remember(provider) { mutableStateOf(provider.apiKeys.toMutableList()) }
+    var internalStrategy by remember(provider) { mutableStateOf(provider.keyStrategy) }
+    var showAddDialog by remember { mutableStateOf(false) }
+    var editingAliasKey by remember { mutableStateOf<ProviderApiKey?>(null) }
+    var aliasText by remember { mutableStateOf("") }
+    val keyRoulette = remember { KeyRoulette.lru(LocalContext.current) }
+
+    // 轮询冷却状态
+    var keyStates by remember { mutableStateOf<List<KeyState>>(emptyList()) }
+    LaunchedEffect(provider.id) {
+        while (true) {
+            keyStates = keyRoulette.getKeyStates(provider.id.toString())
+            delay(1000L)
+        }
+    }
+    val keyStateMap = remember(keyStates) { keyStates.associateBy { it.key } }
+
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+    ) {
+        // Sheet 内容
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.85f)
+                .padding(horizontal = 16.dp)
+                .imePadding(),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            // 标题
+            Text(
+                text = stringResource(R.string.setting_provider_page_api_keys),
+                style = MaterialTheme.typography.titleLarge,
+            )
+
+            // 策略选择器
+            Text(
+                text = stringResource(R.string.setting_provider_page_key_strategy),
+                style = MaterialTheme.typography.titleSmall,
+            )
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                ProviderKeyStrategy.entries.forEachIndexed { index, strategy ->
+                    SegmentedButton(
+                        shape = SegmentedButtonDefaults.itemShape(index, ProviderKeyStrategy.entries.size),
+                        selected = internalStrategy == strategy,
+                        onClick = { internalStrategy = strategy },
+                        label = {
+                            Text(
+                                when (strategy) {
+                                    ProviderKeyStrategy.LRU -> "LRU"
+                                    ProviderKeyStrategy.RANDOM -> "Random"
+                                    ProviderKeyStrategy.ROUND_ROBIN -> "RoundRobin"
+                                }
+                            )
+                        }
+                    )
+                }
+            }
+
+            // 启用数量统计
+            val enabledCount = internalApiKeys.count { it.enabled }
+            Text(
+                text = "$enabledCount / ${internalApiKeys.size} 个 Key 已启用",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            HorizontalDivider()
+
+            // Key 列表
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                items(internalApiKeys, key = { it.id }) { apiKey ->
+                    val state = keyStateMap[apiKey.key]
+                    KeySheetCard(
+                        apiKey = apiKey,
+                        state = state,
+                        onToggleEnabled = {
+                            internalApiKeys = internalApiKeys.map { k ->
+                                if (k.id == apiKey.id) k.copy(enabled = !k.enabled) else k
+                            }.toMutableList()
+                            keyRoulette.setKeyEnabled(apiKey.key, provider.id.toString(), !apiKey.enabled)
+                        },
+                        onEditAlias = {
+                            editingAliasKey = apiKey
+                            aliasText = apiKey.alias
+                        },
+                        onDelete = {
+                            internalApiKeys = internalApiKeys.filter { it.id != apiKey.id }.toMutableList()
+                        },
+                        onThaw = {
+                            keyRoulette.thawKey(apiKey.key, provider.id.toString())
+                        },
+                    )
+                }
+
+                // 添加 Key 按钮
+                item {
+                    OutlinedCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = { showAddDialog = true }
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(HugeIcons.Add01, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(stringResource(R.string.setting_provider_page_add_key), style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                }
+
+                // 从剪贴板导入
+                item {
+                    OutlinedCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = {
+                            val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+                            val clipText = clipboard.getText()?.text
+                            if (!clipText.isNullOrBlank()) {
+                                val newKeys = clipText.split("\n", ",")
+                                    .map { it.trim() }
+                                    .filter { it.isNotBlank() && internalApiKeys.none { k -> k.key == it } }
+                                    .map { ProviderApiKey(key = it) }
+                                internalApiKeys = (internalApiKeys + newKeys).toMutableList()
+                            }
+                        }
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(HugeIcons.Copy01, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(stringResource(R.string.setting_provider_page_paste_from_clipboard), style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                }
+            }
+
+            HorizontalDivider()
+
+            // 底部按钮
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 24.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+            ) {
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(R.string.cancel))
+                }
+                Button(
+                    onClick = {
+                        val legacyKey = internalApiKeys.filter { it.enabled }.joinToString("\n") { it.key }
+                        val updated = provider.copyProvider(
+                            apiKeys = internalApiKeys,
+                            keyStrategy = internalStrategy,
+                            multiKeyEnabled = internalApiKeys.size > 1,
+                        )
+                        // 同步到 legacy apiKey 字段
+                        val synced = when (updated) {
+                            is ProviderSetting.OpenAI -> updated.copy(apiKey = legacyKey)
+                            is ProviderSetting.Google -> updated.copy(apiKey = legacyKey)
+                            is ProviderSetting.Claude -> updated.copy(apiKey = legacyKey)
+                            else -> updated
+                        }
+                        onSave(synced)
+                    }
+                ) {
+                    Text(stringResource(R.string.setting_provider_page_save))
+                }
+            }
+        }
+    }
+
+    // 添加 Key 弹窗
+    if (showAddDialog) {
+        var newKeyInput by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { showAddDialog = false },
+            title = { Text(stringResource(R.string.setting_provider_page_add_key)) },
+            text = {
+                OutlinedTextField(
+                    value = newKeyInput,
+                    onValueChange = { newKeyInput = it },
+                    label = { Text("Key") },
+                    placeholder = { Text("sk-...") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (newKeyInput.isNotBlank() && internalApiKeys.none { it.key == newKeyInput.trim() }) {
+                            internalApiKeys = (internalApiKeys + ProviderApiKey(key = newKeyInput.trim())).toMutableList()
+                        }
+                        showAddDialog = false
+                    }
+                ) {
+                    Text(stringResource(R.string.add))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddDialog = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
+        )
+    }
+
+    // 编辑别名弹窗
+    editingAliasKey?.let { editingKey ->
+        AlertDialog(
+            onDismissRequest = { editingAliasKey = null },
+            title = { Text(stringResource(R.string.setting_provider_page_edit_alias)) },
+            text = {
+                OutlinedTextField(
+                    value = aliasText,
+                    onValueChange = { aliasText = it },
+                    label = { Text(stringResource(R.string.setting_provider_page_alias)) },
+                    placeholder = { Text(editingKey.key.maskApiKey()) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        internalApiKeys = internalApiKeys.map { k ->
+                            if (k.id == editingKey.id) k.copy(alias = aliasText) else k
+                        }.toMutableList()
+                        editingAliasKey = null
+                    }
+                ) {
+                    Text(stringResource(R.string.confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { editingAliasKey = null }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
+        )
+    }
+}
+
+// ========== Key 列表卡片（Sheet 内） ==========
+
+@Composable
+private fun KeySheetCard(
+    apiKey: ProviderApiKey,
+    state: KeyState?,
+    onToggleEnabled: () -> Unit,
+    onEditAlias: () -> Unit,
+    onDelete: () -> Unit,
+    onThaw: () -> Unit,
+) {
+    val disabled = state?.disabled == true || !apiKey.enabled
+    val isCooling = state?.isCoolingDown == true
+    val remainingSec = if (isCooling) (state!!.remainingCooldownMs / 1000).toInt() else 0
+    val progress = state?.cooldownProgress ?: 0f
+
+    Card(
+        colors = androidx.compose.material3.CardDefaults.cardColors(
+            containerColor = if (disabled)
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            else
+                MaterialTheme.colorScheme.surface
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            // 第一行：别名/脱敏 Key + 状态标签
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    if (apiKey.alias.isNotBlank()) {
+                        Text(
+                            text = apiKey.alias,
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+                    }
+                    Text(
+                        text = apiKey.key.maskApiKey(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+
+                if (disabled) {
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                    ) {
+                        Text(
+                            text = "⛔ ${stringResource(R.string.setting_provider_page_disabled)}",
+                            style = MaterialTheme.typography.labelSmall,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        )
+                    }
+                } else if (isCooling) {
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = MaterialTheme.colorScheme.errorContainer,
+                    ) {
+                        Text(
+                            text = "⏳ ${remainingSec}s",
+                            style = MaterialTheme.typography.labelSmall,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        )
+                    }
+                }
+            }
+
+            // 第二行：操作按钮
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    IconButton(onClick = onEditAlias, modifier = Modifier.size(32.dp)) {
+                        Icon(HugeIcons.Edit01, contentDescription = stringResource(R.string.setting_provider_page_edit_alias), modifier = Modifier.size(16.dp))
+                    }
+                    IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
+                        Icon(HugeIcons.Delete01, contentDescription = stringResource(R.string.delete), modifier = Modifier.size(16.dp))
+                    }
+                }
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stringResource(R.string.setting_provider_page_enabled),
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                    Switch(
+                        checked = apiKey.enabled && !disabled,
+                        onCheckedChange = { onToggleEnabled() },
+                        modifier = Modifier.height(24.dp),
+                    )
+                    if (isCooling) {
+                        TextButton(onClick = onThaw, modifier = Modifier.height(32.dp)) {
+                            Text(stringResource(R.string.setting_provider_page_thaw), style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                }
+            }
+
+            // 冷却进度条
+            if (isCooling) {
+                LinearProgressIndicator(
+                    progress = { progress },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(4.dp),
+                    color = MaterialTheme.colorScheme.error,
+                    trackColor = MaterialTheme.colorScheme.errorContainer,
+                )
+            }
+
+            // 统计（仅非冷却时显示）
+            if (state != null && !isCooling && !disabled) {
+                Text(
+                    text = "${stringResource(R.string.setting_provider_page_requests)}: ${state.totalRequests} · ${stringResource(R.string.setting_provider_page_success)}: ${state.successfulRequests} · ${stringResource(R.string.setting_provider_page_failures)}: ${state.failedRequests}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+// ========== Key 管理入口卡片 ==========
+
+@Composable
+private fun KeyManagementEntryCard(
+    provider: ProviderSetting,
+    onClick: () -> Unit
+) {
+    val enabledCount = provider.apiKeys.count { it.enabled }
+    val totalCount = provider.apiKeys.size
+    val hasLegacy = when (provider) {
+        is ProviderSetting.OpenAI -> provider.apiKey.isNotBlank()
+        is ProviderSetting.Google -> provider.apiKey.isNotBlank()
+        is ProviderSetting.Claude -> provider.apiKey.isNotBlank()
+        else -> false
+    }
+    val showMigrationHint = hasLegacy && totalCount == 0
+
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(HugeIcons.Key01, null, tint = MaterialTheme.colorScheme.primary)
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        text = stringResource(R.string.setting_provider_page_api_keys),
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    if (showMigrationHint) {
+                        Text(
+                            text = stringResource(R.string.setting_provider_page_legacy_key_migrate),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    } else if (totalCount > 0) {
+                        Text(
+                            text = "$enabledCount / $totalCount ${stringResource(R.string.setting_provider_page_keys_enabled)} · ${provider.keyStrategy.name}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    } else {
+                        Text(
+                            text = stringResource(R.string.setting_provider_page_no_api_keys),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+            Icon(HugeIcons.ArrowRight01, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
 @Composable
 private fun SettingProviderModelPage(
     provider: ProviderSetting,
@@ -440,459 +936,16 @@ private fun SettingProviderModelPage(
     )
 }
 
-@Composable
-private fun SettingProviderKeyPage(
-    provider: ProviderSetting,
-    settings: me.rerere.rikkahub.data.datastore.Settings,
-    onEdit: (ProviderSetting) -> Unit,
-    vm: SettingVM,
-    scope: kotlinx.coroutines.CoroutineScope,
-) {
-    var internalProvider by remember(provider) { mutableStateOf(provider) }
-    val context = LocalContext.current
-    val keyRoulette = remember { KeyRoulette.lru(context) }
-    var showAddKeyDialog by remember { mutableStateOf(false) }
-    var showAdvanced by remember { mutableStateOf(false) }
+// ========== (removed) old SettingProviderKeyPage replaced by KeyManagementSheet ==========
+// ========== (removed) old KeyStatusCard replaced by KeySheetCard ==========
+// Keeping the maskApiKey utility
 
-    val currentApiKey = when (val p = internalProvider) {
-        is ProviderSetting.OpenAI -> p.apiKey
-        is ProviderSetting.Google -> p.apiKey
-        is ProviderSetting.Claude -> p.apiKey
-        else -> ""
-    }
-    val keys = remember(currentApiKey) {
-        currentApiKey.split("\n").map { it.trim() }.filter { it.isNotBlank() }.distinct()
-    }
-    val fallbackConfig = internalProvider.fallbackConfig
-
-    // 轮询 key 状态（每秒刷新冷却倒计时）
-    var keyStates by remember { mutableStateOf<List<KeyState>>(emptyList()) }
-    LaunchedEffect(provider.id) {
-        while (true) {
-            keyStates = keyRoulette.getKeyStates(provider.id.toString())
-            delay(1000L)
-        }
-    }
-    val keyStateMap = remember(keyStates) { keyStates.associateBy { it.key } }
-
-    val lazyListState = rememberLazyListState()
-    val reorderableLazyListState = rememberReorderableLazyListState(lazyListState) { from, to ->
-        // 用 key 查找索引，不依赖 LazyColumn 位置（防止 item 偏移导致 IndexOutOfBounds）
-        val fromKey = from.key as? String ?: return@rememberReorderableLazyListState
-        val toKey = to.key as? String ?: return@rememberReorderableLazyListState
-        val fromIdx = keys.indexOf(fromKey)
-        val toIdx = keys.indexOf(toKey)
-        if (fromIdx < 0 || toIdx < 0) return@rememberReorderableLazyListState
-        val newKeys = keys.toMutableList().apply { add(toIdx, removeAt(fromIdx)) }
-        val newApiKey = newKeys.joinToString("\n")
-        internalProvider = when (internalProvider) {
-            is ProviderSetting.OpenAI -> (internalProvider as ProviderSetting.OpenAI).copy(apiKey = newApiKey)
-            is ProviderSetting.Google -> (internalProvider as ProviderSetting.Google).copy(apiKey = newApiKey)
-            is ProviderSetting.Claude -> (internalProvider as ProviderSetting.Claude).copy(apiKey = newApiKey)
-            else -> internalProvider
-        }
-    }
-
-    LazyColumn(
-        state = lazyListState,
-        modifier = Modifier
-            .fillMaxSize()
-            .imePadding()
-            .padding(horizontal = 16.dp),
-        contentPadding = PaddingValues(vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        // --- Key 状态列表（可拖拽排序） ---
-        items(keys, key = { it }) { key ->
-            val index = keys.indexOf(key)
-            val state = keyStateMap[key]
-            ReorderableItem(
-                state = reorderableLazyListState,
-                key = key
-            ) { isDragging ->
-                KeyStatusCard(
-                    key = key,
-                    state = state,
-                    isPrimary = index == 0,
-                    dragHandle = { Modifier.longPressDraggableHandle() },
-                    modifier = Modifier.graphicsLayer {
-                        if (isDragging) {
-                            scaleX = 1.05f
-                            scaleY = 1.05f
-                        } else {
-                            scaleX = 1f
-                            scaleY = 1f
-                        }
-                    },
-                    onRemove = {
-                        val newKeys = keys.toMutableList().apply { removeAt(index) }
-                        val newApiKey = newKeys.joinToString("\n")
-                        internalProvider = when (internalProvider) {
-                            is ProviderSetting.OpenAI -> (internalProvider as ProviderSetting.OpenAI).copy(apiKey = newApiKey)
-                            is ProviderSetting.Google -> (internalProvider as ProviderSetting.Google).copy(apiKey = newApiKey)
-                            is ProviderSetting.Claude -> (internalProvider as ProviderSetting.Claude).copy(apiKey = newApiKey)
-                            else -> internalProvider
-                        }
-                    },
-                    onToggleEnabled = { enabled ->
-                        keyRoulette.setKeyEnabled(key, provider.id.toString(), enabled)
-                    },
-                    onThaw = {
-                        keyRoulette.thawKey(key, provider.id.toString())
-                    },
-                )
-            }
-        }
-
-        // --- 添加 Key 按钮 ---
-        item {
-            OutlinedCard(
-                modifier = Modifier.fillMaxWidth(),
-                onClick = { showAddKeyDialog = true }
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(12.dp),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(HugeIcons.Add01, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("添加 Key", style = MaterialTheme.typography.bodyMedium)
-                }
-            }
-        }
-
-        // --- 多 Key 轮询开关 ---
-        item {
-            HorizontalDivider()
-        }
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "多 Key 轮询",
-                        style = MaterialTheme.typography.titleSmall
-                    )
-                    Text(
-                        text = "按列表顺序优先使用·遇到 429 自动切下一个",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Switch(
-                    checked = fallbackConfig.enabled,
-                    onCheckedChange = { enabled ->
-                        internalProvider = internalProvider.copyProvider(
-                            fallbackConfig = fallbackConfig.copy(enabled = enabled)
-                        )
-                    }
-                )
-            }
-        }
-
-        // --- 高级配置（折叠） ---
-        if (fallbackConfig.enabled) {
-            item { HorizontalDivider() }
-            item {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { showAdvanced = !showAdvanced },
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("高级配置", style = MaterialTheme.typography.titleSmall)
-                    Icon(
-                        if (showAdvanced) HugeIcons.ArrowDown01 else HugeIcons.ArrowRight01,
-                        contentDescription = null
-                    )
-                }
-            }
-            if (showAdvanced) {
-                item {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        OutlinedTextField(
-                            value = fallbackConfig.cooldownSeconds.toString(),
-                            onValueChange = { text ->
-                                val value = text.filter { it.isDigit() }.take(4).toIntOrNull() ?: 0
-                                internalProvider = internalProvider.copyProvider(
-                                    fallbackConfig = fallbackConfig.copy(cooldownSeconds = value.coerceIn(1, 3600))
-                                )
-                            },
-                            label = { Text("冷却时间（秒）") },
-                            supportingText = { Text("前 2 次失败不计冷却，第 3 次起逐步加重") },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        )
-
-                        OutlinedTextField(
-                            value = fallbackConfig.maxRetries.toString(),
-                            onValueChange = { text ->
-                                val value = text.filter { it.isDigit() }.take(2).toIntOrNull() ?: 0
-                                internalProvider = internalProvider.copyProvider(
-                                    fallbackConfig = fallbackConfig.copy(maxRetries = value.coerceIn(1, 20))
-                                )
-                            },
-                            label = { Text("最大重试次数") },
-                            supportingText = { Text("所有 Key 都限流后最多重试几次") },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        )
-                    }
-                }
-            }
-        }
-
-        // --- 保存按钮 ---
-        item {
-            HorizontalDivider()
-        }
-        item {
-            Button(
-                onClick = {
-                    onEdit(internalProvider)
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(context.getString(R.string.setting_provider_page_save))
-            }
-        }
-
-        // 底部留白
-        item { Spacer(Modifier.height(32.dp)) }
-    }
-
-    // --- 添加 Key 弹窗 ---
-    if (showAddKeyDialog) {
-        var newKey by remember { mutableStateOf("") }
-        AlertDialog(
-            onDismissRequest = { showAddKeyDialog = false },
-            title = { Text("添加 API Key") },
-            text = {
-                OutlinedTextField(
-                    value = newKey,
-                    onValueChange = { newKey = it },
-                    label = { Text("新 Key") },
-                    placeholder = { Text("sk-...") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        if (newKey.isNotBlank() && newKey !in keys) {
-                            val newApiKey = (keys + newKey).joinToString("\n")
-                            internalProvider = when (internalProvider) {
-                                is ProviderSetting.OpenAI -> (internalProvider as ProviderSetting.OpenAI).copy(apiKey = newApiKey)
-                                is ProviderSetting.Google -> (internalProvider as ProviderSetting.Google).copy(apiKey = newApiKey)
-                                is ProviderSetting.Claude -> (internalProvider as ProviderSetting.Claude).copy(apiKey = newApiKey)
-                                else -> internalProvider
-                            }
-                        }
-                        showAddKeyDialog = false
-                    }
-                ) {
-                    Text("添加")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showAddKeyDialog = false }) {
-                    Text(stringResource(R.string.cancel))
-                }
-            }
-        )
-    }
-}
-
-@Composable
-private fun KeyStatusCard(
-    key: String,
-    state: KeyState?,
-    isPrimary: Boolean,
-    dragHandle: @Composable () -> Modifier = { Modifier },
-    modifier: Modifier = Modifier,
-    onRemove: () -> Unit,
-    onToggleEnabled: (Boolean) -> Unit = {},
-    onThaw: () -> Unit = {},
-) {
-    val disabled = state?.disabled == true
-    val isCooling = state?.isCoolingDown == true
-    val remainingSec = if (isCooling) {
-        (state!!.remainingCooldownMs / 1000).toInt()
-    } else 0
-    val progress = state?.cooldownProgress ?: 0f
-    val scope = rememberCoroutineScope()
-    val swipeState = rememberSwipeToDismissBoxState()
-
-    SwipeToDismissBox(
-        state = swipeState,
-        backgroundContent = {
-            Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(8.dp),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(
-                    onClick = {
-                        scope.launch {
-                            swipeState.reset()
-                        }
-                    }
-                ) {
-                    Icon(HugeIcons.Cancel01, contentDescription = "取消")
-                }
-                FilledIconButton(
-                    onClick = {
-                        scope.launch {
-                            onRemove()
-                            swipeState.reset()
-                        }
-                    }
-                ) {
-                    Icon(HugeIcons.Delete01, contentDescription = "删除")
-                }
-            }
-        },
-        enableDismissFromStartToEnd = false,
-        gesturesEnabled = true,
-        modifier = modifier
-    ) {
-        Card(
-            colors = androidx.compose.material3.CardDefaults.cardColors(
-                containerColor = if (disabled)
-                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                else
-                    MaterialTheme.colorScheme.surface
-            )
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .then(dragHandle())
-                    .padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                // 第一行：拖拽把手 + Key + 标签
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text(
-                            text = key.maskApiKey(),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = if (disabled)
-                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
-                            else
-                                MaterialTheme.colorScheme.onSurface
-                        )
-                        if (isPrimary && !disabled) {
-                            Tag(type = TagType.INFO) {
-                                Text("主", style = MaterialTheme.typography.labelSmall)
-                            }
-                        }
-                    }
-
-                    // 冷却状态标签（仅冷却/禁用时显示）
-                    if (disabled) {
-                        Surface(
-                            shape = RoundedCornerShape(4.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant
-                        ) {
-                            Text(
-                                text = "⛔ 已禁用",
-                                style = MaterialTheme.typography.labelSmall,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    } else if (isCooling) {
-                        Surface(
-                            shape = RoundedCornerShape(4.dp),
-                            color = MaterialTheme.colorScheme.errorContainer
-                        ) {
-                            Text(
-                                text = "⏳ ${remainingSec}s",
-                                style = MaterialTheme.typography.labelSmall,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                color = MaterialTheme.colorScheme.onErrorContainer
-                            )
-                        }
-                    }
-                }
-
-                // 第二行：操作按钮
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "启用",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Switch(
-                        checked = !disabled,
-                        onCheckedChange = { onToggleEnabled(it) },
-                        modifier = Modifier.height(24.dp)
-                    )
-
-                    if (isCooling) {
-                        TextButton(onClick = onThaw) {
-                            Text("❄️ 解冻", style = MaterialTheme.typography.labelSmall)
-                        }
-                    }
-                }
-
-                // 冷却进度条
-                if (isCooling) {
-                    LinearProgressIndicator(
-                        progress = { progress },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(4.dp),
-                        color = MaterialTheme.colorScheme.error,
-                        trackColor = MaterialTheme.colorScheme.errorContainer,
-                    )
-                }
-
-                // 统计信息
-                if (state != null && !disabled) {
-                    Text(
-                        text = "请求: ${state.totalRequests} · 成功: ${state.successfulRequests} · 失败: ${state.failedRequests} · 连续失败: ${state.consecutiveFailures}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        }
-    }
-}
-
-/** 脱敏显示 API Key */
 private fun String.maskApiKey(): String {
     return when {
         length <= 8 -> this
         else -> substring(0, 4) + "..." + substring(length - 4)
     }
 }
-
 @Composable
 private fun ModelList(
     providerSetting: ProviderSetting,
