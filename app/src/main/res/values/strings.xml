@@ -1952,6 +1952,7 @@
   <string name="setting_provider_page_import_confirm">Import</string>
   <string name="setting_provider_page_multi_key_mode">Multi-Key Mode</string>
   <string name="setting_provider_page_multi_key_mode_desc">Enable structured API key management with alias, strategy and failover</string>
+  <string name="setting_provider_page_manage_multi_keys_with_count">Manage Keys (%1$d / %2$d)</string>
   <string name="setting_provider_page_edit_key">Edit Key</string>
   <string name="setting_provider_page_alias">Alias</string>
   <string name="setting_provider_page_thaw">❄️ Thaw</string>

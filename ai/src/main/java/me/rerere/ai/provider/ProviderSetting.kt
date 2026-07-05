@@ -43,6 +43,7 @@ sealed class ProviderSetting {
     abstract val multiKeyEnabled: Boolean
     abstract val apiKeys: List<ProviderApiKey>
     abstract val keyStrategy: ProviderKeyStrategy
+    abstract val legacyApiKeyBackup: String
     abstract val proxy: ProviderProxy
 
     /** 此 Provider 是否需要独立的 API Key 配置页（本地/设备端 Provider 不需要） */
@@ -65,6 +66,7 @@ sealed class ProviderSetting {
         multiKeyEnabled: Boolean = this.multiKeyEnabled,
         apiKeys: List<ProviderApiKey> = this.apiKeys,
         keyStrategy: ProviderKeyStrategy = this.keyStrategy,
+        legacyApiKeyBackup: String = this.legacyApiKeyBackup,
         proxy: ProviderProxy = this.proxy,
         builtIn: Boolean = this.builtIn,
         description: @Composable (() -> Unit) = this.description,
@@ -83,6 +85,7 @@ sealed class ProviderSetting {
         override val multiKeyEnabled: Boolean = false,
         override val apiKeys: List<ProviderApiKey> = emptyList(),
         override val keyStrategy: ProviderKeyStrategy = ProviderKeyStrategy.LRU,
+        override val legacyApiKeyBackup: String = "",
         override val proxy: ProviderProxy = ProviderProxy.None,
         @Transient override val builtIn: Boolean = false,
         @Transient override val description: @Composable (() -> Unit) = {},
@@ -103,12 +106,13 @@ sealed class ProviderSetting {
             id: Uuid, enabled: Boolean, name: String, models: List<Model>,
             balanceOption: BalanceOption, fallbackConfig: FallbackConfig,
             multiKeyEnabled: Boolean, apiKeys: List<ProviderApiKey>, keyStrategy: ProviderKeyStrategy,
-            proxy: ProviderProxy, builtIn: Boolean,
+            legacyApiKeyBackup: String, proxy: ProviderProxy, builtIn: Boolean,
             description: @Composable (() -> Unit), shortDescription: @Composable (() -> Unit),
         ): ProviderSetting = copy(
             id = id, enabled = enabled, name = name, models = models,
             balanceOption = balanceOption, fallbackConfig = fallbackConfig,
             multiKeyEnabled = multiKeyEnabled, apiKeys = apiKeys, keyStrategy = keyStrategy,
+            legacyApiKeyBackup = legacyApiKeyBackup,
             proxy = proxy, builtIn = builtIn, description = description, shortDescription = shortDescription,
         )
     }
@@ -125,6 +129,7 @@ sealed class ProviderSetting {
         override val multiKeyEnabled: Boolean = false,
         override val apiKeys: List<ProviderApiKey> = emptyList(),
         override val keyStrategy: ProviderKeyStrategy = ProviderKeyStrategy.LRU,
+        override val legacyApiKeyBackup: String = "",
         override val proxy: ProviderProxy = ProviderProxy.None,
         @Transient override val builtIn: Boolean = false,
         @Transient override val description: @Composable (() -> Unit) = {},
@@ -146,12 +151,13 @@ sealed class ProviderSetting {
             id: Uuid, enabled: Boolean, name: String, models: List<Model>,
             balanceOption: BalanceOption, fallbackConfig: FallbackConfig,
             multiKeyEnabled: Boolean, apiKeys: List<ProviderApiKey>, keyStrategy: ProviderKeyStrategy,
-            proxy: ProviderProxy, builtIn: Boolean,
+            legacyApiKeyBackup: String, proxy: ProviderProxy, builtIn: Boolean,
             description: @Composable (() -> Unit), shortDescription: @Composable (() -> Unit),
         ): ProviderSetting = copy(
             id = id, enabled = enabled, name = name, models = models,
             balanceOption = balanceOption, fallbackConfig = fallbackConfig,
             multiKeyEnabled = multiKeyEnabled, apiKeys = apiKeys, keyStrategy = keyStrategy,
+            legacyApiKeyBackup = legacyApiKeyBackup,
             proxy = proxy, builtIn = builtIn, description = description, shortDescription = shortDescription,
         )
     }
@@ -168,6 +174,7 @@ sealed class ProviderSetting {
         override val multiKeyEnabled: Boolean = false,
         override val apiKeys: List<ProviderApiKey> = emptyList(),
         override val keyStrategy: ProviderKeyStrategy = ProviderKeyStrategy.LRU,
+        override val legacyApiKeyBackup: String = "",
         override val proxy: ProviderProxy = ProviderProxy.None,
         @Transient override val builtIn: Boolean = false,
         @Transient override val description: @Composable (() -> Unit) = {},
@@ -185,12 +192,13 @@ sealed class ProviderSetting {
             id: Uuid, enabled: Boolean, name: String, models: List<Model>,
             balanceOption: BalanceOption, fallbackConfig: FallbackConfig,
             multiKeyEnabled: Boolean, apiKeys: List<ProviderApiKey>, keyStrategy: ProviderKeyStrategy,
-            proxy: ProviderProxy, builtIn: Boolean,
+            legacyApiKeyBackup: String, proxy: ProviderProxy, builtIn: Boolean,
             description: @Composable (() -> Unit), shortDescription: @Composable (() -> Unit),
         ): ProviderSetting = copy(
             id = id, enabled = enabled, name = name, models = models,
             balanceOption = balanceOption, fallbackConfig = fallbackConfig,
             multiKeyEnabled = multiKeyEnabled, apiKeys = apiKeys, keyStrategy = keyStrategy,
+            legacyApiKeyBackup = legacyApiKeyBackup,
             proxy = proxy, builtIn = builtIn, description = description, shortDescription = shortDescription,
         )
     }
@@ -207,6 +215,7 @@ sealed class ProviderSetting {
         override val multiKeyEnabled: Boolean = false,
         override val apiKeys: List<ProviderApiKey> = emptyList(),
         override val keyStrategy: ProviderKeyStrategy = ProviderKeyStrategy.LRU,
+        override val legacyApiKeyBackup: String = "",
         override val proxy: ProviderProxy = ProviderProxy.None,
         override val hasKeyPage: Boolean = false,
         @Transient override val builtIn: Boolean = true,
@@ -244,6 +253,7 @@ sealed class ProviderSetting {
         override val multiKeyEnabled: Boolean = false,
         override val apiKeys: List<ProviderApiKey> = emptyList(),
         override val keyStrategy: ProviderKeyStrategy = ProviderKeyStrategy.LRU,
+        override val legacyApiKeyBackup: String = "",
         override val proxy: ProviderProxy = ProviderProxy.None,
         override val hasKeyPage: Boolean = false,
         @Transient override val builtIn: Boolean = true,
@@ -258,12 +268,13 @@ sealed class ProviderSetting {
             id: Uuid, enabled: Boolean, name: String, models: List<Model>,
             balanceOption: BalanceOption, fallbackConfig: FallbackConfig,
             multiKeyEnabled: Boolean, apiKeys: List<ProviderApiKey>, keyStrategy: ProviderKeyStrategy,
-            proxy: ProviderProxy, builtIn: Boolean,
+            legacyApiKeyBackup: String, proxy: ProviderProxy, builtIn: Boolean,
             description: @Composable (() -> Unit), shortDescription: @Composable (() -> Unit),
         ): ProviderSetting = copy(
             id = id, enabled = enabled, name = name, models = models,
             balanceOption = balanceOption, fallbackConfig = fallbackConfig,
             multiKeyEnabled = multiKeyEnabled, apiKeys = apiKeys, keyStrategy = keyStrategy,
+            legacyApiKeyBackup = legacyApiKeyBackup,
             proxy = proxy, builtIn = builtIn, description = description, shortDescription = shortDescription,
         )
     }
@@ -280,6 +291,7 @@ sealed class ProviderSetting {
         override val multiKeyEnabled: Boolean = false,
         override val apiKeys: List<ProviderApiKey> = emptyList(),
         override val keyStrategy: ProviderKeyStrategy = ProviderKeyStrategy.LRU,
+        override val legacyApiKeyBackup: String = "",
         override val proxy: ProviderProxy = ProviderProxy.None,
         @Transient override val builtIn: Boolean = true,
         @Transient override val description: @Composable (() -> Unit) = {},
@@ -293,12 +305,13 @@ sealed class ProviderSetting {
             id: Uuid, enabled: Boolean, name: String, models: List<Model>,
             balanceOption: BalanceOption, fallbackConfig: FallbackConfig,
             multiKeyEnabled: Boolean, apiKeys: List<ProviderApiKey>, keyStrategy: ProviderKeyStrategy,
-            proxy: ProviderProxy, builtIn: Boolean,
+            legacyApiKeyBackup: String, proxy: ProviderProxy, builtIn: Boolean,
             description: @Composable (() -> Unit), shortDescription: @Composable (() -> Unit),
         ): ProviderSetting = copy(
             id = id, enabled = enabled, name = name, models = models,
             balanceOption = balanceOption, fallbackConfig = fallbackConfig,
             multiKeyEnabled = multiKeyEnabled, apiKeys = apiKeys, keyStrategy = keyStrategy,
+            legacyApiKeyBackup = legacyApiKeyBackup,
             proxy = proxy, builtIn = builtIn, description = description, shortDescription = shortDescription,
         )
     }

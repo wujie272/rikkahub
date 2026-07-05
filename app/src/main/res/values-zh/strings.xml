@@ -1963,4 +1963,5 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_provider_page_import_confirm">导入</string>
   <string name="setting_provider_page_multi_key_mode">多 Key 模式</string>
   <string name="setting_provider_page_multi_key_mode_desc">启用结构化 API Key 管理，支持别名、策略和自动切换</string>
+  <string name="setting_provider_page_manage_multi_keys_with_count">管理 Key（%1$d / %2$d）</string>
 </resources>
