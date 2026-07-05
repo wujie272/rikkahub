@@ -295,73 +295,6 @@ private val OFFICIAL_PROVIDER_HOSTS = setOf(
     CLAUDE_OFFICIAL_HOST
 )
 
-/**
- * 可折叠的 API Key 输入组件。折叠时显示 Key 数量，展开后可编辑（带眼睛切换显示/隐藏）。
- */
-@Composable
-private fun CollapsibleApiKeyInput(
-    apiKey: String,
-    onApiKeyChange: (String) -> Unit,
-) {
-    var showRawKeys by remember { mutableStateOf(false) }
-    val keys = apiKey.split("\n").map { it.trim() }.filter { it.isNotBlank() }.distinct()
-
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        // 折叠卡片头
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            onClick = { showRawKeys = !showRawKeys }
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "API Keys",
-                        style = MaterialTheme.typography.titleSmall
-                    )
-                    Text(
-                        text = when (keys.size) {
-                            0 -> "未设置"
-                            1 -> "1 个 Key"
-                            else -> "${keys.size} 个 Key"
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Icon(
-                    if (showRawKeys) HugeIcons.ArrowDown01 else HugeIcons.ArrowRight01,
-                    contentDescription = null
-                )
-            }
-        }
-
-        // 展开后的编辑框（带眼睛）
-        if (showRawKeys) {
-            var keyVisible by remember { mutableStateOf(false) }
-            OutlinedTextField(
-                value = apiKey,
-                onValueChange = onApiKeyChange,
-                label = { Text("API Keys") },
-                placeholder = { Text("每行一个 Key") },
-                modifier = Modifier.fillMaxWidth(),
-                maxLines = 6,
-                visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                trailingIcon = {
-                    IconButton(onClick = { keyVisible = !keyVisible }) {
-                        Icon(if (keyVisible) HugeIcons.ViewOff else HugeIcons.View, contentDescription = null)
-                    }
-                },
-            )
-        }
-    }
-}
-
 @Composable
 private fun ProviderConfigureOpenAI(
     provider: ProviderSetting.OpenAI,
@@ -378,9 +311,20 @@ private fun ProviderConfigureOpenAI(
         modifier = Modifier.fillMaxWidth(),
     )
 
-    CollapsibleApiKeyInput(
-        apiKey = provider.apiKey,
-        onApiKeyChange = { onEdit(provider.copy(apiKey = it.trim())) },
+    var keyVisible by remember { mutableStateOf(false) }
+
+    OutlinedTextField(
+        value = provider.apiKey,
+        onValueChange = { onEdit(provider.copy(apiKey = it.trim())) },
+        label = { Text(stringResource(R.string.setting_provider_page_api_key)) },
+        modifier = Modifier.fillMaxWidth(),
+        maxLines = 3,
+        visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
+        trailingIcon = {
+            IconButton(onClick = { keyVisible = !keyVisible }) {
+                Icon(if (keyVisible) HugeIcons.ViewOff else HugeIcons.View, contentDescription = null)
+            }
+        },
     )
 
     OutlinedTextField(
@@ -626,9 +570,20 @@ private fun ProviderConfigureClaude(
         maxLines = 3,
     )
 
-    CollapsibleApiKeyInput(
-        apiKey = provider.apiKey,
-        onApiKeyChange = { onEdit(provider.copy(apiKey = it.trim())) },
+    var keyVisible by remember { mutableStateOf(false) }
+
+    OutlinedTextField(
+        value = provider.apiKey,
+        onValueChange = { onEdit(provider.copy(apiKey = it.trim())) },
+        label = { Text(stringResource(R.string.setting_provider_page_api_key)) },
+        modifier = Modifier.fillMaxWidth(),
+        maxLines = 3,
+        visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
+        trailingIcon = {
+            IconButton(onClick = { keyVisible = !keyVisible }) {
+                Icon(if (keyVisible) HugeIcons.ViewOff else HugeIcons.View, contentDescription = null)
+            }
+        },
     )
 
     OutlinedTextField(
@@ -728,9 +683,20 @@ private fun ProviderConfigureGoogle(
     )
 
     if (!(provider.vertexAI && provider.useServiceAccount)) {
-        CollapsibleApiKeyInput(
-            apiKey = provider.apiKey,
-            onApiKeyChange = { onEdit(provider.copy(apiKey = it.trim())) },
+        var keyVisible by remember { mutableStateOf(false) }
+
+        OutlinedTextField(
+            value = provider.apiKey,
+            onValueChange = { onEdit(provider.copy(apiKey = it.trim())) },
+            label = { Text(stringResource(R.string.setting_provider_page_api_key)) },
+            modifier = Modifier.fillMaxWidth(),
+            maxLines = 3,
+            visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
+            trailingIcon = {
+                IconButton(onClick = { keyVisible = !keyVisible }) {
+                    Icon(if (keyVisible) HugeIcons.ViewOff else HugeIcons.View, contentDescription = null)
+                }
+            },
         )
     }
 
