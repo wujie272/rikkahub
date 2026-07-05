@@ -318,8 +318,7 @@ private fun ProviderConfigureOpenAI(
         onValueChange = { onEdit(provider.copy(apiKey = it.trim())) },
         label = { Text(stringResource(R.string.setting_provider_page_api_key)) },
         modifier = Modifier.fillMaxWidth(),
-        enabled = !provider.multiKeyEnabled,
-        maxLines = if (keyVisible) 3 else 1,
+        maxLines = 3,
         visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
         trailingIcon = {
             IconButton(onClick = { keyVisible = !keyVisible }) {
@@ -327,10 +326,6 @@ private fun ProviderConfigureOpenAI(
             }
         },
     )
-
-    ProviderMultiKeySection(provider = provider) { updated ->
-        (updated as? ProviderSetting.OpenAI)?.let(onEdit)
-    }
 
     OutlinedTextField(
         value = provider.baseUrl,
@@ -582,8 +577,7 @@ private fun ProviderConfigureClaude(
         onValueChange = { onEdit(provider.copy(apiKey = it.trim())) },
         label = { Text(stringResource(R.string.setting_provider_page_api_key)) },
         modifier = Modifier.fillMaxWidth(),
-        enabled = !provider.multiKeyEnabled,
-        maxLines = if (keyVisible) 3 else 1,
+        maxLines = 3,
         visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
         trailingIcon = {
             IconButton(onClick = { keyVisible = !keyVisible }) {
@@ -591,10 +585,6 @@ private fun ProviderConfigureClaude(
             }
         },
     )
-
-    ProviderMultiKeySection(provider = provider) { updated ->
-        (updated as? ProviderSetting.Claude)?.let(onEdit)
-    }
 
     OutlinedTextField(
         value = provider.baseUrl,
@@ -700,8 +690,7 @@ private fun ProviderConfigureGoogle(
             onValueChange = { onEdit(provider.copy(apiKey = it.trim())) },
             label = { Text(stringResource(R.string.setting_provider_page_api_key)) },
             modifier = Modifier.fillMaxWidth(),
-            enabled = !provider.multiKeyEnabled,
-            maxLines = if (keyVisible) 3 else 1,
+            maxLines = 3,
             visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
             trailingIcon = {
                 IconButton(onClick = { keyVisible = !keyVisible }) {
@@ -709,10 +698,6 @@ private fun ProviderConfigureGoogle(
                 }
             },
         )
-
-        ProviderMultiKeySection(provider = provider) { updated ->
-            (updated as? ProviderSetting.Google)?.let(onEdit)
-        }
     }
 
     if (!provider.vertexAI) {

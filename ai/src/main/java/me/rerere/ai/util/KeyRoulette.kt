@@ -1,10 +1,6 @@
 package me.rerere.ai.util
 
 import android.content.Context
-
-import me.rerere.ai.provider.ProviderSetting
-import me.rerere.ai.provider.activeApiKeyValuesForRequest
-import me.rerere.ai.provider.getApiKeyValue
 import android.util.Log
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -34,12 +30,6 @@ data class KeyState(
 
 interface KeyRoulette {
     fun next(keys: String, providerId: String = ""): String
-
-    fun next(providerSetting: me.rerere.ai.provider.ProviderSetting): String {
-        val activeKeys = providerSetting.activeApiKeyValuesForRequest()
-        if (activeKeys.isEmpty()) return providerSetting.getApiKeyValue()
-        return next(activeKeys.joinToString("\n"), providerSetting.id.toString())
-    }
 
     /**
      * 报告某个 key 请求失败，触发冷却
