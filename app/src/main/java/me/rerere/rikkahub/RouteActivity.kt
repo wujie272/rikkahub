@@ -124,7 +124,7 @@ import me.rerere.rikkahub.ui.pages.setting.SettingDonatePage
 import me.rerere.rikkahub.ui.pages.setting.SettingFilesPage
 import me.rerere.rikkahub.ui.pages.setting.SettingMcpPage
 import me.rerere.rikkahub.ui.pages.setting.SettingModelPage
-import me.rerere.rikkahub.ui.pages.grove.GrovePage
+import me.rerere.rikkahub.ui.pages.rag.RagPage
 import me.rerere.rikkahub.ui.pages.setting.SettingPage
 import me.rerere.rikkahub.ui.pages.setting.SettingProviderDetailPage
 import me.rerere.rikkahub.ui.pages.setting.SettingProviderPage
@@ -507,8 +507,8 @@ class RouteActivity : ComponentActivity() {
 
 
 
-                            entry<Screen.Grove> {
-                                GrovePage()
+                            entry<Screen.Rag> {
+                                RagPage()
                             }
 
                             entry<Screen.SettingSsh> {
@@ -794,7 +794,7 @@ sealed interface Screen : NavKey {
     data object SettingWeb : Screen
 
     @Serializable
-    data object Grove : Screen
+    data object Rag : Screen
 
     @Serializable
     data object SettingSsh : Screen

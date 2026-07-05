@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.data.grove
+package me.rerere.rikkahub.data.rag
 
 import androidx.room.Database
 import androidx.room.RoomDatabase
@@ -8,6 +8,6 @@ import androidx.room.RoomDatabase
     version = 1,
     exportSchema = false,
 )
-abstract class GroveDatabase : RoomDatabase() {
+abstract class RagDatabase : RoomDatabase() {
     abstract fun documentDao(): DocumentDAO
 }

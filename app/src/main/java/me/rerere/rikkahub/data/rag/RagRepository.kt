@@ -1,12 +1,12 @@
-package me.rerere.rikkahub.data.grove
+package me.rerere.rikkahub.data.rag
 
 /**
- * Grove统一仓库，对外暴露的高层接口。
+ * RAG 知识库统一仓库，对外暴露的高层接口。
  * 组合 IndexService + SearchService，UI 层只依赖这一个类。
  */
-class GroveRepository(
-    val indexService: GroveIndexService,
-    val searchService: GroveSearchService,
+class RagRepository(
+    val indexService: RagIndexService,
+    val searchService: RagSearchService,
 ) {
     /**
      * embedding 模型是否已配置
@@ -21,7 +21,7 @@ class GroveRepository(
     /**
      * 获取统计信息
      */
-    suspend fun getStats(): GroveIndexService.IndexStats = indexService.getStats()
+    suspend fun getStats(): RagIndexService.IndexStats = indexService.getStats()
 
     /**
      * 获取文件夹列表

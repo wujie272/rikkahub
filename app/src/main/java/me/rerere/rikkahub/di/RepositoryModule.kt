@@ -20,10 +20,10 @@ import me.rerere.workspace.WorkspaceBindMount
 import me.rerere.workspace.WorkspaceManager
 import org.koin.dsl.module
 import androidx.room.Room
-import me.rerere.rikkahub.data.grove.GroveDatabase
-import me.rerere.rikkahub.data.grove.GroveIndexService
-import me.rerere.rikkahub.data.grove.GroveRepository
-import me.rerere.rikkahub.data.grove.GroveSearchService
+import me.rerere.rikkahub.data.rag.RagDatabase
+import me.rerere.rikkahub.data.rag.RagIndexService
+import me.rerere.rikkahub.data.rag.RagRepository
+import me.rerere.rikkahub.data.rag.RagSearchService
 import java.io.File
 
 val repositoryModule = module {
@@ -102,25 +102,25 @@ val repositoryModule = module {
     single {
         Room.databaseBuilder(
             get<android.content.Context>(),
-            GroveDatabase::class.java,
-            "rikka_hub_grove"
+            RagDatabase::class.java,
+            "rikka_hub_rag"
         ).build()
     }
 
     single {
-        get<GroveDatabase>().documentDao()
+        get<RagDatabase>().documentDao()
     }
 
     single {
-        GroveIndexService(get(), get())
+        RagIndexService(get(), get())
     }
 
     single {
-        GroveSearchService(get(), get())
+        RagSearchService(get(), get())
     }
 
     single {
-        GroveRepository(get(), get())
+        RagRepository(get(), get())
     }
 
 }

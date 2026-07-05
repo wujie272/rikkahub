@@ -234,10 +234,10 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         headlineContent = { Text(stringResource(R.string.setting_page_default_model)) },
                     )
                     item(
-                        onClick = { navController.navigate(Screen.Grove) },
+                        onClick = { navController.navigate(Screen.Rag) },
                         leadingContent = { Icon(HugeIcons.Bookshelf01, null) },
-                        supportingContent = { Text("搜索你的 1,141 篇笔记") },
-                        headlineContent = { Text("Grove") },
+                        supportingContent = { Text("搜索你的笔记") },
+                        headlineContent = { Text("RAG 知识库") },
                     )
                     item(
                         onClick = { navController.navigate(Screen.SettingProvider) },

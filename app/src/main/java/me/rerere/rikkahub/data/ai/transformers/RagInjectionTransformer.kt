@@ -2,10 +2,10 @@ package me.rerere.rikkahub.data.ai.transformers
 
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
-import me.rerere.rikkahub.data.grove.GroveSearchService
+import me.rerere.rikkahub.data.rag.RagSearchService
 
 /**
- * Grove 注入转换器
+ * RAG 知识库注入转换器
  *
  * 类似 Lorebook 的触发式注入：当用户消息命中笔记库中的内容时，
  * 自动将相关 chunk 注入到系统提示词中。
@@ -16,8 +16,8 @@ import me.rerere.rikkahub.data.grove.GroveSearchService
  * - 小窗口模型（<32K）：最多 2 条
  * 同时根据已用 token 动态调整，避免超限。
  */
-class GroveInjectionTransformer(
-    private val groveSearchService: GroveSearchService,
+class RagInjectionTransformer(
+    private val ragSearchService: RagSearchService,
 ) : InputMessageTransformer {
 
     companion object {
@@ -49,7 +49,7 @@ class GroveInjectionTransformer(
 
         // 语义搜索
         val results = try {
-            groveSearchService.search(
+            ragSearchService.search(
                 query = userText,
                 limit = maxResults,
                 minScore = MIN_SCORE,
@@ -121,7 +121,7 @@ class GroveInjectionTransformer(
      * 构建注入内容，根据实际 token 预算截断文本。
      */
     private fun buildInjectionContent(
-        results: List<GroveSearchService.SearchResult>,
+        results: List<RagSearchService.SearchResult>,
         ctx: TransformerContext,
         messages: List<UIMessage>,
     ): String {
@@ -143,7 +143,7 @@ class GroveInjectionTransformer(
 
         return buildString {
             appendLine()
-            appendLine("**Grove 笔记检索结果**")
+            appendLine("**RAG 知识库检索结果**")
             appendLine("以下内容来自你的笔记库，可能与当前对话相关：")
             appendLine()
             results.forEachIndexed { i, r ->

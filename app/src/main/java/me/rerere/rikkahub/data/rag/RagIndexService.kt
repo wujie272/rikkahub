@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.data.grove
+package me.rerere.rikkahub.data.rag
 
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
@@ -9,15 +9,15 @@ import java.io.File
 import java.security.MessageDigest
 
 /**
- * Grove索引服务。
+ * RAG 知识库索引服务。
  * 遍历笔记库、切 chunk、算 embedding、增量更新。
  */
-class GroveIndexService(
+class RagIndexService(
     private val documentDAO: DocumentDAO,
     private val embeddingService: EmbeddingService,
 ) {
     companion object {
-        private const val TAG = "GroveIndex"
+        private const val TAG = "RagIndex"
         private const val CHUNK_MAX_CHARS = 1500 // 单 chunk 最大字符数
         private const val CHUNK_OVERLAP_CHARS = 100 // 相邻 chunk 重叠字符数
     }

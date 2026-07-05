@@ -1,11 +1,11 @@
-package me.rerere.rikkahub.data.grove
+package me.rerere.rikkahub.data.rag
 
 import me.rerere.rikkahub.data.ai.rag.EmbeddingService
 import me.rerere.rikkahub.data.ai.rag.VectorEngine
 import kotlin.math.min
 
 /**
- * Grove语义搜索服务。
+ * RAG 知识库语义搜索服务。
  * 复用现有 EmbeddingService + VectorEngine。
  *
  * 改进：
@@ -13,7 +13,7 @@ import kotlin.math.min
  * 2. 段落上下文合并（命中 chunk 带前后相邻 chunk）
  * 3. 搜索结果去重（同一文件多个 chunk 合并）
  */
-class GroveSearchService(
+class RagSearchService(
     private val documentDAO: DocumentDAO,
     private val embeddingService: EmbeddingService,
 ) {

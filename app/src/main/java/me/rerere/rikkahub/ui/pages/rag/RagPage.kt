@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.ui.pages.grove
+package me.rerere.rikkahub.ui.pages.rag
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -41,7 +41,7 @@ import me.rerere.hugeicons.stroke.Folder01
 import me.rerere.hugeicons.stroke.Bookshelf01
 import me.rerere.hugeicons.stroke.File02
 import me.rerere.hugeicons.stroke.Refresh01
-import me.rerere.rikkahub.data.grove.GroveSearchService
+import me.rerere.rikkahub.data.rag.RagSearchService
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.theme.CustomColors
 import org.koin.androidx.compose.koinViewModel
@@ -56,8 +56,8 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.LaunchedEffect
 
 @Composable
-fun GrovePage() {
-    val vm: GroveVM = koinViewModel()
+fun RagPage() {
+    val vm: RagVM = koinViewModel()
     val uiState by vm.uiState.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
@@ -74,7 +74,7 @@ fun GrovePage() {
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             LargeFlexibleTopAppBar(
-                title = { Text("Grove") },
+                title = { Text("RAG 知识库") },
                 navigationIcon = { BackButton() },
                 actions = {
                     FilledTonalButton(
@@ -92,7 +92,7 @@ fun GrovePage() {
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         containerColor = CustomColors.topBarColors.containerColor,
     ) { innerPadding ->
-        GroveContent(
+        RagContent(
             modifier = Modifier.padding(innerPadding),
             uiState = uiState,
             onSearch = { vm.search(it) },
@@ -107,9 +107,9 @@ fun GrovePage() {
 }
 
 @Composable
-private fun GroveContent(
+private fun RagContent(
     modifier: Modifier = Modifier,
-    uiState: GroveVM.UiState,
+    uiState: RagVM.UiState,
     onSearch: (String) -> Unit,
     onStartIndex: () -> Unit,
     onSelectFolder: (String?) -> Unit,
@@ -126,7 +126,7 @@ private fun GroveContent(
     ) {
         // 路径设置
         item("path") {
-            GroveVaultPathInput(
+            RagVaultPathInput(
                 path = uiState.vaultPath,
                 onPathChange = onPathChange,
             )
@@ -146,15 +146,15 @@ private fun GroveContent(
 
         // 忽略目录设置
         item("ignore") {
-            GroveIgnoreFoldersInput(
+            RagIgnoreFoldersInput(
                 ignoreFolders = uiState.ignoreFolders,
                 onIgnoreChange = onIgnoreChange,
             )
         }
 
-        // Grove 注入开关
+        // RAG 注入开关
         item("injection") {
-            GroveInjectionToggle(
+            RagInjectionToggle(
                 enabled = uiState.injectionEnabled,
                 onEnabledChange = onInjectionEnabledChange,
             )
@@ -321,7 +321,7 @@ private fun StatsCard(
     lastUpdated: Long,
     isReady: Boolean,
     isIndexing: Boolean,
-    indexProgress: me.rerere.rikkahub.data.grove.GroveIndexService.IndexProgress?,
+    indexProgress: me.rerere.rikkahub.data.rag.RagIndexService.IndexProgress?,
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -397,7 +397,7 @@ private fun StatItem(label: String, value: String) {
 
 @Composable
 private fun SearchResultCard(
-    result: GroveSearchService.SearchResult,
+    result: RagSearchService.SearchResult,
 ) {
     var showContext by remember { mutableStateOf(false) }
     val hasContext = result.expandedContext.isNotBlank() && result.expandedContext != result.chunkText
@@ -480,7 +480,7 @@ private fun SearchResultCard(
 }
 
 @Composable
-private fun GroveVaultPathInput(
+private fun RagVaultPathInput(
     path: String,
     onPathChange: (String) -> Unit,
 ) {
@@ -530,7 +530,7 @@ private fun GroveVaultPathInput(
 }
 
 @Composable
-private fun GroveIgnoreExtensionsInput(
+private fun RagIgnoreExtensionsInput(
     ignoreExtensions: String,
     onIgnoreExtensionsChange: (String) -> Unit,
     onInjectionEnabledChange: (Boolean) -> Unit,
@@ -561,7 +561,7 @@ private fun GroveIgnoreExtensionsInput(
 }
 
 @Composable
-private fun GroveInjectionToggle(
+private fun RagInjectionToggle(
     enabled: Boolean,
     onEnabledChange: (Boolean) -> Unit,
 ) {
@@ -593,7 +593,7 @@ private fun GroveInjectionToggle(
 }
 
 @Composable
-private fun GroveIgnoreFoldersInput(
+private fun RagIgnoreFoldersInput(
     ignoreFolders: String,
     onIgnoreChange: (String) -> Unit,
 ) {

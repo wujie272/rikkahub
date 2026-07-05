@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.data.grove
+package me.rerere.rikkahub.data.rag
 
 import kotlin.math.ln
 import kotlin.math.log2

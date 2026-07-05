@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.ui.pages.grove
+package me.rerere.rikkahub.ui.pages.rag
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -7,13 +7,13 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.datastore.SettingsStore
-import me.rerere.rikkahub.data.grove.GroveIndexService
-import me.rerere.rikkahub.data.grove.GroveRepository
-import me.rerere.rikkahub.data.grove.GroveSearchService
-import me.rerere.rikkahub.data.grove.FolderStat
+import me.rerere.rikkahub.data.rag.RagIndexService
+import me.rerere.rikkahub.data.rag.RagRepository
+import me.rerere.rikkahub.data.rag.RagSearchService
+import me.rerere.rikkahub.data.rag.FolderStat
 
-class GroveVM(
-    private val groveRepository: GroveRepository,
+class RagVM(
+    private val ragRepository: RagRepository,
     private val settingsStore: SettingsStore,
 ) : ViewModel() {
 
@@ -24,9 +24,9 @@ class GroveVM(
         val folderCount: Int = 0,
         val lastUpdated: Long = 0,
         val isIndexing: Boolean = false,
-        val indexProgress: GroveIndexService.IndexProgress? = null,
+        val indexProgress: RagIndexService.IndexProgress? = null,
         val searchQuery: String = "",
-        val searchResults: List<GroveSearchService.SearchResult> = emptyList(),
+        val searchResults: List<RagSearchService.SearchResult> = emptyList(),
         val isSearching: Boolean = false,
         val hasEmbeddingModel: Boolean = false,
         val folders: List<String> = emptyList(),
@@ -51,19 +51,19 @@ class GroveVM(
         viewModelScope.launch {
             try {
                 val settings = settingsStore.settingsFlow.value
-                val stats = groveRepository.getStats()
-                val folders = groveRepository.getFolders()
+                val stats = ragRepository.getStats()
+                val folders = ragRepository.getFolders()
                 _uiState.value = _uiState.value.copy(
-                    isReady = groveRepository.isReady(),
+                    isReady = ragRepository.isReady(),
                     totalChunks = stats.totalChunks,
                     totalFiles = stats.totalFiles,
                     folderCount = stats.folderCount,
                     lastUpdated = stats.lastUpdated,
                     folders = folders,
-                    vaultPath = settings.groveVaultPath,
-                    ignoreFolders = settings.groveIgnoreFolders,
-                    ignoreExtensions = settings.groveIgnoreExtensions,
-                    injectionEnabled = settings.groveInjectionEnabled,
+                    vaultPath = settings.ragVaultPath,
+                    ignoreFolders = settings.ragIgnoreFolders,
+                    ignoreExtensions = settings.ragIgnoreExtensions,
+                    injectionEnabled = settings.ragInjectionEnabled,
                     folderFileCounts = stats.folderFileCounts,
                     hasEmbeddingModel = settings.embeddingModelId.toString() != "00000000-0000-0000-0000-000000000000",
                 )
@@ -76,28 +76,28 @@ class GroveVM(
     fun updateVaultPath(path: String) {
         _uiState.value = _uiState.value.copy(vaultPath = path)
         viewModelScope.launch {
-            settingsStore.update { it.copy(groveVaultPath = path) }
+            settingsStore.update { it.copy(ragVaultPath = path) }
         }
     }
 
     fun updateIgnoreFolders(ignore: String) {
         _uiState.value = _uiState.value.copy(ignoreFolders = ignore)
         viewModelScope.launch {
-            settingsStore.update { it.copy(groveIgnoreFolders = ignore) }
+            settingsStore.update { it.copy(ragIgnoreFolders = ignore) }
         }
     }
 
     fun updateIgnoreExtensions(extensions: String) {
         _uiState.value = _uiState.value.copy(ignoreExtensions = extensions)
         viewModelScope.launch {
-            settingsStore.update { it.copy(groveIgnoreExtensions = extensions) }
+            settingsStore.update { it.copy(ragIgnoreExtensions = extensions) }
         }
     }
 
     fun updateInjectionEnabled(enabled: Boolean) {
         _uiState.value = _uiState.value.copy(injectionEnabled = enabled)
         viewModelScope.launch {
-            settingsStore.update { it.copy(groveInjectionEnabled = enabled) }
+            settingsStore.update { it.copy(ragInjectionEnabled = enabled) }
         }
     }
 
@@ -112,7 +112,7 @@ class GroveVM(
         _uiState.value = _uiState.value.copy(isIndexing = true, error = null)
 
         viewModelScope.launch {
-            groveRepository.indexService.index(
+            ragRepository.indexService.index(
                 vaultPath = vaultPath,
                 ignoreFolders = _uiState.value.ignoreFolders,
                 ignoreExtensions = _uiState.value.ignoreExtensions,
@@ -157,7 +157,7 @@ class GroveVM(
 
         viewModelScope.launch {
             try {
-                val results = groveRepository.searchService.search(
+                val results = ragRepository.searchService.search(
                     query = query,
                     limit = 10,
                     folderFilter = _uiState.value.selectedFolder,

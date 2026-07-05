@@ -197,11 +197,11 @@ class SettingsStore(
         // 赞助提醒
         val SPONSOR_ALERT_DISMISSED_AT = intPreferencesKey("sponsor_alert_dismissed_at")
 
-        // Grove
-        val GROVE_VAULT_PATH = stringPreferencesKey("grove_vault_path")
-        val GROVE_IGNORE_FOLDERS = stringPreferencesKey("grove_ignore_folders")
-        val GROVE_IGNORE_EXTENSIONS = stringPreferencesKey("grove_ignore_extensions")
-        val GROVE_INJECTION_ENABLED = booleanPreferencesKey("grove_injection_enabled")
+        // RAG 知识库
+        val RAG_VAULT_PATH = stringPreferencesKey("rag_vault_path")
+        val RAG_IGNORE_FOLDERS = stringPreferencesKey("rag_ignore_folders")
+        val RAG_IGNORE_EXTENSIONS = stringPreferencesKey("rag_ignore_extensions")
+        val RAG_INJECTION_ENABLED = booleanPreferencesKey("rag_injection_enabled")
     }
 
     private val dataStore = context.settingsStore
@@ -238,10 +238,10 @@ class SettingsStore(
                 ocrPrompt = preferences[OCR_PROMPT] ?: DEFAULT_OCR_PROMPT,
                 compressModelId = preferences[COMPRESS_MODEL]?.let { Uuid.parse(it) } ?: DEFAULT_AUTO_MODEL_ID,
                 compressPrompt = preferences[COMPRESS_PROMPT] ?: DEFAULT_COMPRESS_PROMPT,
-                groveVaultPath = preferences[GROVE_VAULT_PATH] ?: "",
-                groveIgnoreFolders = preferences[GROVE_IGNORE_FOLDERS] ?: "",
-                groveIgnoreExtensions = preferences[GROVE_IGNORE_EXTENSIONS] ?: "",
-                groveInjectionEnabled = preferences[GROVE_INJECTION_ENABLED] ?: false,
+                ragVaultPath = preferences[RAG_VAULT_PATH] ?: "",
+                ragIgnoreFolders = preferences[RAG_IGNORE_FOLDERS] ?: "",
+                ragIgnoreExtensions = preferences[RAG_IGNORE_EXTENSIONS] ?: "",
+                ragInjectionEnabled = preferences[RAG_INJECTION_ENABLED] ?: false,
                 assistantId = preferences[SELECT_ASSISTANT]?.let { Uuid.parse(it) }
                     ?: DEFAULT_ASSISTANT_ID,
                 assistantTags = preferences[ASSISTANT_TAGS]?.let {
@@ -510,10 +510,10 @@ class SettingsStore(
             preferences[OCR_PROMPT] = settings.ocrPrompt
             preferences[COMPRESS_MODEL] = settings.compressModelId.toString()
             preferences[COMPRESS_PROMPT] = settings.compressPrompt
-            preferences[GROVE_VAULT_PATH] = settings.groveVaultPath
-            preferences[GROVE_IGNORE_FOLDERS] = settings.groveIgnoreFolders
-            preferences[GROVE_IGNORE_EXTENSIONS] = settings.groveIgnoreExtensions
-            preferences[GROVE_INJECTION_ENABLED] = settings.groveInjectionEnabled
+            preferences[RAG_VAULT_PATH] = settings.ragVaultPath
+            preferences[RAG_IGNORE_FOLDERS] = settings.ragIgnoreFolders
+            preferences[RAG_IGNORE_EXTENSIONS] = settings.ragIgnoreExtensions
+            preferences[RAG_INJECTION_ENABLED] = settings.ragInjectionEnabled
 
             preferences[PROVIDERS] = JsonInstant.encodeToString(settings.providers)
             preferences[DELETED_BUILTIN_PROVIDER_IDS] = JsonInstant.encodeToString(
@@ -672,10 +672,10 @@ data class Settings(
     val embeddingModelId: Uuid = Uuid.random(),
     val compressModelId: Uuid = Uuid.random(),
     val compressPrompt: String = DEFAULT_COMPRESS_PROMPT,
-    val groveVaultPath: String = "",
-    val groveIgnoreFolders: String = "",
-    val groveIgnoreExtensions: String = "",
-    val groveInjectionEnabled: Boolean = false,
+    val ragVaultPath: String = "",
+    val ragIgnoreFolders: String = "",
+    val ragIgnoreExtensions: String = "",
+    val ragInjectionEnabled: Boolean = false,
     val assistantId: Uuid = DEFAULT_ASSISTANT_ID,
     val providers: List<ProviderSetting> = DEFAULT_PROVIDERS,
     /**
