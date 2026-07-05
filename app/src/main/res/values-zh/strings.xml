@@ -1936,3 +1936,32 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="chat_page_delete_folder_confirm">删除文件夹 "%1$s"？其中的对话不会被删除，只会从文件夹中移除。</string>
   <string name="chat_page_delete_folder_generating">此文件夹中有对话仍在生成中，请停止后再删除。</string>
 </resources>
+
+  <!-- 多Key管理 (新增) -->
+  <string name="setting_provider_page_api_keys">API Keys</string>
+  <string name="setting_provider_page_key_strategy">Key 策略</string>
+  <string name="setting_provider_page_add_key">添加 Key</string>
+  <string name="setting_provider_page_paste_from_clipboard">从剪贴板导入</string>
+  <string name="setting_provider_page_legacy_key_migrate">旧格式 Key 可用，点击迁移到结构化管理</string>
+  <string name="setting_provider_page_keys_enabled">个 Key 已启用</string>
+  <string name="setting_provider_page_no_api_keys">未配置 API Key</string>
+  <string name="setting_provider_page_edit_alias">编辑别名</string>
+  <string name="setting_provider_page_edit_key">编辑 Key</string>
+  <string name="setting_provider_page_alias">别名</string>
+  <string name="setting_provider_page_thaw">❄️ 解冻</string>
+  <string name="setting_provider_page_requests">请求</string>
+  <string name="setting_provider_page_success">成功</string>
+  <string name="setting_provider_page_failures">失败</string>
+  <string name="setting_provider_page_proxy">代理</string>
+  <string name="setting_provider_page_proxy_desc">为此提供商配置 HTTP 代理</string>
+  <string name="setting_provider_page_proxy_none">无</string>
+  <string name="setting_provider_page_proxy_address">地址</string>
+  <string name="setting_provider_page_proxy_port">端口</string>
+  <string name="setting_provider_page_proxy_username">用户名</string>
+  <string name="setting_provider_page_proxy_password">密码</string>
+  <string name="setting_provider_page_import_keys">导入 Key</string>
+  <string name="setting_provider_page_import_keys_hint">粘贴 Key，每行一个或用逗号分隔</string>
+  <string name="setting_provider_page_import_confirm">导入</string>
+  <string name="setting_provider_page_multi_key_mode">多 Key 模式</string>
+  <string name="setting_provider_page_multi_key_mode_desc">启用结构化 API Key 管理，支持别名、策略和自动切换</string>
+</resources>
