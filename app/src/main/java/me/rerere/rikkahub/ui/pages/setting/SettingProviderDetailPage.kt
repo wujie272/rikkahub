@@ -340,12 +340,74 @@ private fun SettingProviderConfigPage(
             }
         )
 
-        // Key 管理入口（仅在远程 Provider 显示）
+        // 多 Key 模式开关（仅在远程 Provider 显示）
         if (provider.hasKeyPage && internalProvider !is ProviderSetting.Codex) {
-            KeyManagementEntryCard(
-                provider = internalProvider,
-                onClick = { showKeyManagement = true }
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.setting_provider_page_multi_key_mode),
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    Text(
+                        text = stringResource(R.string.setting_provider_page_multi_key_mode_desc),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = internalProvider.multiKeyEnabled,
+                    onCheckedChange = { enabled ->
+                        internalProvider = when (internalProvider) {
+                            is ProviderSetting.OpenAI -> {
+                                val p = internalProvider as ProviderSetting.OpenAI
+                                if (enabled && p.apiKeys.isEmpty()) {
+                                    val imported = p.apiKey.split("\n", ",")
+                                        .map { it.trim() }.filter { it.isNotBlank() }
+                                        .map { ProviderApiKey(key = it) }
+                                    p.copy(multiKeyEnabled = true, apiKeys = imported)
+                                } else {
+                                    p.copy(multiKeyEnabled = enabled)
+                                }
+                            }
+                            is ProviderSetting.Google -> {
+                                val p = internalProvider as ProviderSetting.Google
+                                if (enabled && p.apiKeys.isEmpty()) {
+                                    val imported = p.apiKey.split("\n", ",")
+                                        .map { it.trim() }.filter { it.isNotBlank() }
+                                        .map { ProviderApiKey(key = it) }
+                                    p.copy(multiKeyEnabled = true, apiKeys = imported)
+                                } else {
+                                    p.copy(multiKeyEnabled = enabled)
+                                }
+                            }
+                            is ProviderSetting.Claude -> {
+                                val p = internalProvider as ProviderSetting.Claude
+                                if (enabled && p.apiKeys.isEmpty()) {
+                                    val imported = p.apiKey.split("\n", ",")
+                                        .map { it.trim() }.filter { it.isNotBlank() }
+                                        .map { ProviderApiKey(key = it) }
+                                    p.copy(multiKeyEnabled = true, apiKeys = imported)
+                                } else {
+                                    p.copy(multiKeyEnabled = enabled)
+                                }
+                            }
+                            else -> internalProvider
+                        }
+                    },
+                )
+            }
+
+            // Key 管理入口（仅多Key模式开启时显示）
+            if (internalProvider.multiKeyEnabled) {
+                KeyManagementEntryCard(
+                    provider = internalProvider,
+                    onClick = { showKeyManagement = true }
+                )
+            }
         }
 
         // Key 管理 ModalBottomSheet
