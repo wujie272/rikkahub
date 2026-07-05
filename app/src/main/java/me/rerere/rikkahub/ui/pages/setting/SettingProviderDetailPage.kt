@@ -5,13 +5,12 @@ import me.rerere.hugeicons.stroke.Package01
 import me.rerere.hugeicons.stroke.Connect
 import me.rerere.hugeicons.stroke.ArrowDown01
 import me.rerere.hugeicons.stroke.Add01
-import me.rerere.hugeicons.stroke.Key01
+import me.rerere.hugeicons.stroke.CheckmarkCircle01
 import me.rerere.hugeicons.stroke.Refresh03
 import me.rerere.hugeicons.stroke.Tools
 import me.rerere.hugeicons.stroke.Share01
 import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.Cancel01
-import me.rerere.hugeicons.stroke.ArrowRight01
 import me.rerere.hugeicons.stroke.Cloud
 import me.rerere.hugeicons.stroke.Copy01
 import me.rerere.hugeicons.stroke.Edit01
@@ -149,10 +148,7 @@ import me.rerere.rikkahub.ui.pages.setting.components.isUsingDefaultBaseUrl
 import me.rerere.rikkahub.ui.pages.setting.components.resetBaseUrlToDefault
 import me.rerere.ai.provider.ProviderApiKey
 import me.rerere.ai.provider.ProviderKeyStrategy
-import me.rerere.ai.provider.activeApiKeyValuesForRequest
-import me.rerere.ai.provider.normalizeProviderApiKeys
 import me.rerere.ai.provider.syncEnabledApiKeysToLegacyField
-import me.rerere.ai.provider.pickApiKey
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.ui.theme.extendColors
 import me.rerere.rikkahub.utils.UiState
@@ -338,78 +334,11 @@ private fun SettingProviderConfigPage(
             provider = internalProvider,
             onEdit = {
                 internalProvider = it
-            }
+            },
+            onOpenKeyManagement = {
+                showKeyManagement = true
+            },
         )
-
-        // 多 Key 模式开关（仅在远程 Provider 显示）
-        if (provider.hasKeyPage && internalProvider !is ProviderSetting.Codex) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = stringResource(R.string.setting_provider_page_multi_key_mode),
-                        style = MaterialTheme.typography.titleSmall,
-                    )
-                    Text(
-                        text = stringResource(R.string.setting_provider_page_multi_key_mode_desc),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Switch(
-                    checked = internalProvider.multiKeyEnabled,
-                    onCheckedChange = { enabled ->
-                        internalProvider = when (internalProvider) {
-                            is ProviderSetting.OpenAI -> {
-                                val p = internalProvider as ProviderSetting.OpenAI
-                                if (enabled && p.apiKeys.isEmpty()) {
-                                    val imported = p.apiKey.split("\n", ",")
-                                        .map { it.trim() }.filter { it.isNotBlank() }
-                                        .map { ProviderApiKey(key = it) }
-                                    p.copy(multiKeyEnabled = true, apiKeys = imported)
-                                } else {
-                                    p.copy(multiKeyEnabled = enabled)
-                                }
-                            }
-                            is ProviderSetting.Google -> {
-                                val p = internalProvider as ProviderSetting.Google
-                                if (enabled && p.apiKeys.isEmpty()) {
-                                    val imported = p.apiKey.split("\n", ",")
-                                        .map { it.trim() }.filter { it.isNotBlank() }
-                                        .map { ProviderApiKey(key = it) }
-                                    p.copy(multiKeyEnabled = true, apiKeys = imported)
-                                } else {
-                                    p.copy(multiKeyEnabled = enabled)
-                                }
-                            }
-                            is ProviderSetting.Claude -> {
-                                val p = internalProvider as ProviderSetting.Claude
-                                if (enabled && p.apiKeys.isEmpty()) {
-                                    val imported = p.apiKey.split("\n", ",")
-                                        .map { it.trim() }.filter { it.isNotBlank() }
-                                        .map { ProviderApiKey(key = it) }
-                                    p.copy(multiKeyEnabled = true, apiKeys = imported)
-                                } else {
-                                    p.copy(multiKeyEnabled = enabled)
-                                }
-                            }
-                            else -> internalProvider
-                        }
-                    },
-                )
-            }
-
-            // Key 管理入口（仅多Key模式开启时显示）
-            if (internalProvider.multiKeyEnabled) {
-                KeyManagementEntryCard(
-                    provider = internalProvider,
-                    onClick = { showKeyManagement = true }
-                )
-            }
-        }
 
         // Key 管理 ModalBottomSheet
         if (showKeyManagement) {
@@ -468,15 +397,8 @@ private fun SettingProviderConfigPage(
 
             Button(
                 onClick = {
-                    // 保存前同步结构化 Key → legacy apiKey（各子类具体字段）
-                    val legacyKey = internalProvider.syncEnabledApiKeysToLegacyField()
-                    val synced = when (internalProvider) {
-                        is ProviderSetting.OpenAI -> (internalProvider as ProviderSetting.OpenAI).copy(apiKey = legacyKey)
-                        is ProviderSetting.Google -> (internalProvider as ProviderSetting.Google).copy(apiKey = legacyKey)
-                        is ProviderSetting.Claude -> (internalProvider as ProviderSetting.Claude).copy(apiKey = legacyKey)
-                        else -> internalProvider
-                    }
-                    onEdit(synced)
+                    // syncEnabledApiKeysToLegacyField 会自动修复污染 + 同步到 apiKey
+                    onEdit(internalProvider.syncEnabledApiKeysToLegacyField())
                 }
             ) {
                 Text(stringResource(R.string.setting_provider_page_save))
@@ -718,20 +640,12 @@ private fun KeyManagementSheet(
                 }
                 Button(
                     onClick = {
-                        val legacyKey = internalApiKeys.filter { it.enabled }.joinToString("\n") { it.key }
                         val updated = provider.copyProvider(
                             apiKeys = internalApiKeys,
                             keyStrategy = internalStrategy,
-                            multiKeyEnabled = internalApiKeys.size > 1,
+                            multiKeyEnabled = provider.multiKeyEnabled,
                         )
-                        // 同步到 legacy apiKey 字段
-                        val synced = when (updated) {
-                            is ProviderSetting.OpenAI -> updated.copy(apiKey = legacyKey)
-                            is ProviderSetting.Google -> updated.copy(apiKey = legacyKey)
-                            is ProviderSetting.Claude -> updated.copy(apiKey = legacyKey)
-                            else -> updated
-                        }
-                        onSave(synced)
+                        onSave(updated.syncEnabledApiKeysToLegacyField())
                     }
                 ) {
                     Text(stringResource(R.string.setting_provider_page_save))
@@ -1009,70 +923,6 @@ private fun KeySheetCard(
     }
 }
 
-// ========== Key 管理入口卡片 ==========
-
-@Composable
-private fun KeyManagementEntryCard(
-    provider: ProviderSetting,
-    onClick: () -> Unit
-) {
-    val enabledCount = provider.apiKeys.count { it.enabled }
-    val totalCount = provider.apiKeys.size
-    val hasLegacy = when (provider) {
-        is ProviderSetting.OpenAI -> provider.apiKey.isNotBlank()
-        is ProviderSetting.Google -> provider.apiKey.isNotBlank()
-        is ProviderSetting.Claude -> provider.apiKey.isNotBlank()
-        else -> false
-    }
-    val showMigrationHint = hasLegacy && totalCount == 0
-
-    Card(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(HugeIcons.Key01, null, tint = MaterialTheme.colorScheme.primary)
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(
-                        text = stringResource(R.string.setting_provider_page_api_keys),
-                        style = MaterialTheme.typography.titleSmall,
-                    )
-                    if (showMigrationHint) {
-                        Text(
-                            text = stringResource(R.string.setting_provider_page_legacy_key_migrate),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                    } else if (totalCount > 0) {
-                        Text(
-                            text = "$enabledCount / $totalCount ${stringResource(R.string.setting_provider_page_keys_enabled)} · ${provider.keyStrategy.name}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    } else {
-                        Text(
-                            text = stringResource(R.string.setting_provider_page_no_api_keys),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-            }
-            Icon(HugeIcons.ArrowRight01, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    }
-}
-
 @Composable
 private fun SettingProviderModelPage(
     provider: ProviderSetting,
@@ -1084,8 +934,6 @@ private fun SettingProviderModelPage(
     )
 }
 
-// ========== (removed) old SettingProviderKeyPage replaced by KeyManagementSheet ==========
-// ========== (removed) old KeyStatusCard replaced by KeySheetCard ==========
 // Keeping the maskApiKey utility
 
 private fun String.maskApiKey(): String {

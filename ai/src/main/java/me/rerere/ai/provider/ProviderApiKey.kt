@@ -50,40 +50,102 @@ sealed class ProviderProxy {
     ) : ProviderProxy()
 }
 
-/**
- * Migrate old comma/newline-separated apiKey to the new structured format.
- */
-fun ProviderSetting.normalizeProviderApiKeys(): List<ProviderApiKey> {
-    val raw = when (this) {
-        is ProviderSetting.OpenAI -> this.apiKey
-        is ProviderSetting.Google -> this.apiKey
-        is ProviderSetting.Claude -> this.apiKey
-        else -> ""
-    }
-    return raw.split("\n")
-        .flatMap { it.split(",") }
-        .map { it.trim() }
-        .filter { it.isNotBlank() }
-        .distinct()
-        .map { ProviderApiKey(key = it) }
+// ── Helpers ──────────────────────────────────────────────────────────────
+
+/** Get the current single-key value from the concrete subtype. */
+internal fun ProviderSetting.apiKeyValue(): String = when (this) {
+    is ProviderSetting.OpenAI -> apiKey
+    is ProviderSetting.Google -> apiKey
+    is ProviderSetting.Claude -> apiKey
+    else -> ""
 }
 
-/**
- * Sync the enabled Keys back to the legacy `apiKey` field so old
- * code (conversations, request handling) continues to work.
- */
-fun ProviderSetting.syncEnabledApiKeysToLegacyField(): String {
-    return this.apiKeys
-        .filter { it.enabled }
-        .joinToString("\n")
+/** Get the structured apiKeys list. */
+internal fun ProviderSetting.apiKeysList(): List<ProviderApiKey> = when (this) {
+    is ProviderSetting.OpenAI -> apiKeys
+    is ProviderSetting.Google -> apiKeys
+    is ProviderSetting.Claude -> apiKeys
+    else -> emptyList()
 }
+
+/** Get the multiKey flag. */
+internal fun ProviderSetting.multiKeyFlag(): Boolean = when (this) {
+    is ProviderSetting.OpenAI -> multiKeyEnabled
+    is ProviderSetting.Google -> multiKeyEnabled
+    is ProviderSetting.Claude -> multiKeyEnabled
+    else -> false
+}
+
+/** Get the key strategy. */
+internal fun ProviderSetting.keyStrategyValue(): ProviderKeyStrategy = when (this) {
+    is ProviderSetting.OpenAI -> keyStrategy
+    is ProviderSetting.Google -> keyStrategy
+    is ProviderSetting.Claude -> keyStrategy
+    else -> ProviderKeyStrategy.LRU
+}
+
+// ── Unified update entry (like LastChat's copyWithApiKeyConfig) ──────────
+
+/**
+ * Create a copy of this [ProviderSetting] with key-related fields updated.
+ * This is the single entry point for all Key configuration changes —
+ * mirrors LastChat's `copyWithApiKeyConfig`.
+ */
+fun ProviderSetting.copyWithApiKeyConfig(
+    apiKey: String = apiKeyValue(),
+    multiKeyEnabled: Boolean = multiKeyFlag(),
+    apiKeys: List<ProviderApiKey> = apiKeysList(),
+    keyStrategy: ProviderKeyStrategy = keyStrategyValue(),
+): ProviderSetting = when (this) {
+    is ProviderSetting.OpenAI -> copy(
+        apiKey = apiKey,
+        multiKeyEnabled = multiKeyEnabled,
+        apiKeys = apiKeys,
+        keyStrategy = keyStrategy,
+    )
+    is ProviderSetting.Google -> copy(
+        apiKey = apiKey,
+        multiKeyEnabled = multiKeyEnabled,
+        apiKeys = apiKeys,
+        keyStrategy = keyStrategy,
+    )
+    is ProviderSetting.Claude -> copy(
+        apiKey = apiKey,
+        multiKeyEnabled = multiKeyEnabled,
+        apiKeys = apiKeys,
+        keyStrategy = keyStrategy,
+    )
+    else -> this
+}
+
+// ── Sync enabled keys back to legacy apiKey ──────────────────────────────
+
+/**
+ * Sync enabled keys from structured [apiKeys] back to the legacy [apiKey]
+ * field, so existing code (conversations, request handling) continues to work.
+ *
+ * Returns the updated [ProviderSetting]; no-op if multi-key is disabled.
+ *
+ * Mirrors LastChat's [syncEnabledApiKeysToLegacyField].
+ */
+fun ProviderSetting.syncEnabledApiKeysToLegacyField(): ProviderSetting {
+    if (!multiKeyFlag()) return this
+
+    val enabledKeys = apiKeysList()
+        .filter { it.enabled }
+        .joinToString("\n") { it.key }
+
+    return copyWithApiKeyConfig(apiKey = enabledKeys)
+}
+
+// ── Active key values for request ────────────────────────────────────────
 
 /**
  * Get active (enabled) API key values as a flat list of strings.
- * Used by the AI provider layer to feed into KeyRoulette.next().
+ * Used by the AI provider layer to feed into [KeyRoulette.next].
  */
 fun ProviderSetting.activeApiKeyValuesForRequest(): List<String> {
-    return this.apiKeys
+    return apiKeysList()
         .filter { it.enabled }
         .map { it.key }
 }
@@ -95,31 +157,15 @@ fun ProviderSetting.pickApiKey(
     keyRoulette: KeyRoulette,
     providerId: String = this.id.toString(),
 ): String {
-    val activeKeys = this.activeApiKeyValuesForRequest()
-    if (activeKeys.isEmpty()) return when (this) {
-        is ProviderSetting.OpenAI -> this.apiKey
-        is ProviderSetting.Google -> this.apiKey
-        is ProviderSetting.Claude -> this.apiKey
-        else -> ""
-    }
-    return when (this.keyStrategy) {
-        ProviderKeyStrategy.LRU -> {
+    val activeKeys = activeApiKeyValuesForRequest()
+    if (activeKeys.isEmpty()) return apiKeyValue()
+    return when (keyStrategyValue()) {
+        ProviderKeyStrategy.LRU ->
             keyRoulette.next(activeKeys.joinToString("\n"), providerId)
-        }
         ProviderKeyStrategy.RANDOM -> activeKeys.random()
-        ProviderKeyStrategy.ROUND_ROBIN -> {
+        ProviderKeyStrategy.ROUND_ROBIN ->
             keyRoulette.next(activeKeys.joinToString("\n"), providerId)
-        }
     }
 }
 
-/**
- * Migration wrapper: call on load to ensure old data is converted.
- */
-fun ProviderSetting.prepareMultiKey(): ProviderSetting {
-    if (this.multiKeyEnabled && this.apiKeys.isEmpty()) {
-        // First-time migration: old format -> new structured
-        return this.copyProvider(apiKeys = this.normalizeProviderApiKeys())
-    }
-    return this
-}
+

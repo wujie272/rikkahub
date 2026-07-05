@@ -58,6 +58,9 @@ import me.rerere.hugeicons.stroke.ArrowDown01
 import me.rerere.hugeicons.stroke.ArrowRight01
 import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.Edit01
+import me.rerere.hugeicons.stroke.Key01
+import me.rerere.ai.provider.ProviderApiKey
+import me.rerere.ai.provider.ProviderKeyStrategy
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dokar.sonner.ToastType
 import me.rerere.ai.provider.ClaudePromptCacheTtl
@@ -85,7 +88,8 @@ import kotlin.reflect.KClass
 fun ProviderConfigure(
     provider: ProviderSetting,
     modifier: Modifier = Modifier,
-    onEdit: (provider: ProviderSetting) -> Unit
+    onEdit: (provider: ProviderSetting) -> Unit,
+    onOpenKeyManagement: (() -> Unit)? = null,
 ) {
     Column(
         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -129,6 +133,15 @@ fun ProviderConfigure(
             }
 
             is ProviderSetting.Codex -> Unit
+        }
+
+        // 多 Key 模式：紧跟在 API Key 配置下方
+        if (provider.hasKeyPage && provider !is ProviderSetting.Codex) {
+            MultiKeySection(
+                provider = provider,
+                onOpenKeyManagement = onOpenKeyManagement,
+                onEdit = onEdit,
+            )
         }
     }
 }
@@ -1350,5 +1363,89 @@ private fun InstalledModelRow(
                 }
             },
         )
+    }
+}
+
+
+@Composable
+private fun MultiKeySection(
+    provider: ProviderSetting,
+    onOpenKeyManagement: (() -> Unit)?,
+    onEdit: (ProviderSetting) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = stringResource(R.string.setting_provider_page_multi_key_mode),
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Text(
+                text = stringResource(R.string.setting_provider_page_multi_key_mode_desc),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Switch(
+            checked = provider.multiKeyEnabled,
+            onCheckedChange = { enabled ->
+                val apiKey = when (provider) {
+                    is ProviderSetting.OpenAI -> provider.apiKey
+                    is ProviderSetting.Google -> provider.apiKey
+                    is ProviderSetting.Claude -> provider.apiKey
+                    else -> ""
+                }
+                val apiKeys = provider.apiKeys
+                val updated = if (enabled && apiKeys.isEmpty()) {
+                    val imported = apiKey.split("\n", ",")
+                        .map { it.trim() }.filter { it.isNotBlank() }
+                        .map { ProviderApiKey(key = it) }
+                    provider.copyProvider(multiKeyEnabled = true, apiKeys = imported)
+                } else {
+                    provider.copyProvider(multiKeyEnabled = enabled)
+                }
+                onEdit(updated)
+            },
+        )
+    }
+
+    // Key 管理入口卡片
+    if (provider.multiKeyEnabled) {
+        val enabledCount = provider.apiKeys.count { it.enabled }
+        val totalCount = provider.apiKeys.size
+        Card(
+            onClick = { onOpenKeyManagement?.invoke() },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(HugeIcons.Key01, null, tint = MaterialTheme.colorScheme.primary)
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            text = stringResource(R.string.setting_provider_page_api_keys),
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+                        Text(
+                            text = "$enabledCount / $totalCount ${stringResource(R.string.setting_provider_page_keys_enabled)} · ${provider.keyStrategy.name}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                Icon(HugeIcons.ArrowRight01, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
     }
 }

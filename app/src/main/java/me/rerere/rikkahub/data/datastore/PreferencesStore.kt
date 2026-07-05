@@ -84,7 +84,8 @@ private fun decodeProvidersTolerant(raw: String): List<ProviderSetting> {
     }.getOrNull() ?: return emptyList()
     return array.mapNotNull { element ->
         try {
-            JsonInstant.decodeFromJsonElement<ProviderSetting>(element)
+            val provider = JsonInstant.decodeFromJsonElement<ProviderSetting>(element)
+            provider
         } catch (e: SerializationException) {
             Log.w(TAG, "Skipping unrecognised provider entry during decode: ${e.message}")
             null
