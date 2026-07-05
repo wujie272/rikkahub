@@ -125,35 +125,30 @@ fun ProviderSetting.getApiKeyValue(): String = when (this) {
     is ProviderSetting.OpenAI -> apiKey
     is ProviderSetting.Google -> apiKey
     is ProviderSetting.Claude -> apiKey
-    else -> ""
 }
 
 fun ProviderSetting.isMultiKeyEnabled(): Boolean = when (this) {
     is ProviderSetting.OpenAI -> multiKeyEnabled
     is ProviderSetting.Google -> multiKeyEnabled
     is ProviderSetting.Claude -> multiKeyEnabled
-    else -> false
 }
 
 fun ProviderSetting.getProviderApiKeys(): List<ProviderApiKey> = when (this) {
     is ProviderSetting.OpenAI -> apiKeys
     is ProviderSetting.Google -> apiKeys
     is ProviderSetting.Claude -> apiKeys
-    else -> emptyList()
 }
 
 fun ProviderSetting.getProviderKeyStrategy(): ProviderKeyStrategy = when (this) {
     is ProviderSetting.OpenAI -> keyStrategy
     is ProviderSetting.Google -> keyStrategy
     is ProviderSetting.Claude -> keyStrategy
-    else -> ProviderKeyStrategy.LRU
 }
 
 fun ProviderSetting.getLegacyApiKeyBackup(): String = when (this) {
     is ProviderSetting.OpenAI -> legacyApiKeyBackup
     is ProviderSetting.Google -> legacyApiKeyBackup
     is ProviderSetting.Claude -> legacyApiKeyBackup
-    else -> ""
 }
 
 /**
