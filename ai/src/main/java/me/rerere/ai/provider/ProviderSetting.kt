@@ -231,12 +231,13 @@ sealed class ProviderSetting {
             id: Uuid, enabled: Boolean, name: String, models: List<Model>,
             balanceOption: BalanceOption, fallbackConfig: FallbackConfig,
             multiKeyEnabled: Boolean, apiKeys: List<ProviderApiKey>, keyStrategy: ProviderKeyStrategy,
-            proxy: ProviderProxy, builtIn: Boolean,
+            legacyApiKeyBackup: String, proxy: ProviderProxy, builtIn: Boolean,
             description: @Composable (() -> Unit), shortDescription: @Composable (() -> Unit),
         ): ProviderSetting = copy(
             id = id, enabled = enabled, name = name, models = models,
             balanceOption = balanceOption, fallbackConfig = fallbackConfig,
             multiKeyEnabled = multiKeyEnabled, apiKeys = apiKeys, keyStrategy = keyStrategy,
+            legacyApiKeyBackup = legacyApiKeyBackup,
             proxy = proxy, builtIn = builtIn, description = description, shortDescription = shortDescription,
         )
     }
