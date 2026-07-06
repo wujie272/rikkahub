@@ -57,11 +57,11 @@ class TextSelectionActivity : ComponentActivity() {
                     LocalToaster provides toastState,
                     LocalDarkMode provides false,
                 ) {
-                    Toaster(state = toastState, richColors = true) {
-                        TextSelectionSheet(
-                            viewModel = viewModel,
-                            onDismiss = { finish() },
-                            onContinueInApp = {
+                    Toaster(state = toastState, richColors = true)
+                    TextSelectionSheet(
+                        viewModel = viewModel,
+                        onDismiss = { finish() },
+                        onContinueInApp = {
                                 val intent = Intent(this@TextSelectionActivity, RouteActivity::class.java).apply {
                                     flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
                                     if (viewModel.lastAction == QuickAction.TRANSLATE) {

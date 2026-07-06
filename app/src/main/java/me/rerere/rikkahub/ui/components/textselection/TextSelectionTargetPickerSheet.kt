@@ -12,12 +12,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Group
-import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.ArrowDown01
+import me.rerere.hugeicons.stroke.Cancel01
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -61,7 +61,7 @@ fun TextSelectionTargetPickerSheet(
                     }
                 },
             ) {
-                Icon(Icons.Rounded.KeyboardArrowDown, contentDescription = null)
+                Icon(HugeIcons.ArrowDown01, contentDescription = null)
             }
         },
     ) {
@@ -174,7 +174,7 @@ fun TextSelectionTargetPickerSheet(
                                     color = MaterialTheme.colorScheme.surfaceContainerHighest,
                                 ) {
                                     Icon(
-                                        Icons.Rounded.Group,
+                                        HugeIcons.Cancel01,
                                         contentDescription = null,
                                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                         modifier = Modifier.size(20.dp).padding(10.dp),

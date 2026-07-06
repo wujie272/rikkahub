@@ -31,6 +31,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -58,6 +59,7 @@ import coil3.svg.SvgDecoder
 import com.dokar.sonner.Toaster
 import com.dokar.sonner.rememberToasterState
 import kotlinx.serialization.Serializable
+import kotlinx.coroutines.flow.first
 import me.rerere.highlight.Highlighter
 import me.rerere.highlight.LocalHighlighter
 import me.rerere.rikkahub.data.datastore.SettingsStore
@@ -180,7 +182,7 @@ class RouteActivity : ComponentActivity() {
     private val okHttpClient by inject<OkHttpClient>()
     private val settingsStore by inject<SettingsStore>()
     private var navStack: MutableList<NavKey>? = null
-    private var pendingDirectChat by mutableStateOf<DirectChatData?>(null)
+    private val _pendingDirectChat = mutableStateOf<DirectChatData?>(null)
 
     // Volume key listener registry — last registered handler wins
     internal val volumeKeyListeners = mutableListOf<(isVolumeUp: Boolean) -> Boolean>()
@@ -312,7 +314,7 @@ class RouteActivity : ComponentActivity() {
         }
         val migrationState by DatabaseMigrationTracker.state.collectAsStateWithLifecycle()
 
-    val directChatData = pendingDirectChat
+    val directChatData = _pendingDirectChat.value
     LaunchedEffect(directChatData) {
         val data = directChatData ?: return@LaunchedEffect
         try {
@@ -321,7 +323,7 @@ class RouteActivity : ComponentActivity() {
                 DIRECT_CHAT_TARGET_TYPE_ASSISTANT -> {
                     val assistantId = Uuid.parse(data.targetId)
                     if (settings.assistants.none { it.id == assistantId }) {
-                        pendingDirectChat = null
+                        _pendingDirectChat.value = null
                         return@LaunchedEffect
                     }
                     ChatTarget.Assistant(assistantId)
@@ -329,20 +331,20 @@ class RouteActivity : ComponentActivity() {
                 DIRECT_CHAT_TARGET_TYPE_GROUP_CHAT -> {
                     val templateId = Uuid.parse(data.targetId)
                     if (settings.groupChatTemplates.none { it.id == templateId }) {
-                        pendingDirectChat = null
+                        _pendingDirectChat.value = null
                         return@LaunchedEffect
                     }
                     ChatTarget.GroupChat(templateId)
                 }
                 else -> {
-                    pendingDirectChat = null
+                    _pendingDirectChat.value = null
                     return@LaunchedEffect
                 }
             }
             navigateToDirectChat(target, data.text, data.autoSend)
-            pendingDirectChat = null
+            _pendingDirectChat.value = null
         } catch (_: Exception) {
-            pendingDirectChat = null
+            _pendingDirectChat.value = null
         }
     }
 

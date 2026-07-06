@@ -59,13 +59,12 @@ import androidx.compose.ui.unit.dp
 import com.dokar.sonner.ToastType
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.AiMagic
-import me.rerere.hugeicons.stroke.ArrowDown01
 import me.rerere.hugeicons.stroke.ArrowLeft01
 import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.Copy01
 import me.rerere.hugeicons.stroke.Idea01
 import me.rerere.hugeicons.stroke.MagicWand01
-import me.rerere.hugeicons.stroke.Send01
+import me.rerere.hugeicons.stroke.Forward02
 import me.rerere.hugeicons.stroke.Sparkles
 import me.rerere.hugeicons.stroke.Translate
 import me.rerere.rikkahub.R
@@ -144,9 +143,8 @@ fun TextSelectionSheet(
                     AnimatedContent(
                         targetState = viewModel.state,
                         transitionSpec = {
-                            fadeIn(animationSpec = spring(stiffness = Spring.StiffnessMedium))
-                                    togetherWith
-                                    fadeOut(animationSpec = spring(stiffness = Spring.StiffnessMedium))
+                            (fadeIn(animationSpec = spring(stiffness = Spring.StiffnessMedium)) togetherWith
+                                    fadeOut(animationSpec = spring(stiffness = Spring.StiffnessMedium)))
                         },
                         contentKey = { it::class.simpleName },
                         label = "state_transition",
@@ -261,7 +259,7 @@ private fun ActionSelectionContent(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(
-                    HugeIcons.Send01, contentDescription = null,
+                    HugeIcons.Forward02, contentDescription = null,
                     modifier = Modifier.size(18.dp),
                     tint = MaterialTheme.colorScheme.onTertiaryContainer,
                 )
@@ -360,6 +358,7 @@ private fun ResultContent(
 ) {
     val clipboardManager = LocalClipboardManager.current
     val toaster = LocalToaster.current
+    val copiedText = stringResource(R.string.text_selection_copy)
 
     Column(
         modifier = Modifier.fillMaxWidth().padding(16.dp).animateContentSize(),
@@ -423,7 +422,7 @@ private fun ResultContent(
                     color = MaterialTheme.colorScheme.primaryContainer,
                     onClick = {
                         clipboardManager.setText(AnnotatedString(responseText))
-                        toaster.show(stringResource(R.string.text_selection_copy), type = ToastType.Success)
+                        toaster.show(copiedText, type = ToastType.Success)
                     },
                 ) {
                     Row(
