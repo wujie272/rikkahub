@@ -46,6 +46,7 @@ import me.rerere.rikkahub.data.model.GroupChatTemplate
 
 import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.QuickMessage
+import me.rerere.rikkahub.data.model.TextSelectionConfig
 import me.rerere.rikkahub.data.model.Tag
 import me.rerere.rikkahub.data.sync.s3.S3Config
 import me.rerere.rikkahub.ui.theme.CustomTheme
@@ -188,6 +189,9 @@ class SettingsStore(
         val QUICK_MESSAGES = stringPreferencesKey("quick_messages")
         val GROUP_CHAT_TEMPLATES = stringPreferencesKey("group_chat_templates")
 
+        // Text Selection
+        val TEXT_SELECTION_CONFIG = stringPreferencesKey("text_selection_config")
+
 
         // 备份提醒
         val BACKUP_REMINDER_CONFIG = stringPreferencesKey("backup_reminder_config")
@@ -303,6 +307,9 @@ class SettingsStore(
                 quickMessages = preferences[QUICK_MESSAGES]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: emptyList(),
+                textSelectionConfig = preferences[TEXT_SELECTION_CONFIG]?.let {
+                    JsonInstant.decodeFromString(it)
+                } ?: TextSelectionConfig(),
                 webServerEnabled = preferences[WEB_SERVER_ENABLED] == true,
                 webServerPort = preferences[WEB_SERVER_PORT] ?: 8080,
                 webServerJwtEnabled = preferences[WEB_SERVER_JWT_ENABLED] == true,
@@ -548,6 +555,7 @@ class SettingsStore(
             preferences[GROUP_CHAT_TEMPLATES] = JsonInstant.encodeToString(settings.groupChatTemplates)
 
             preferences[QUICK_MESSAGES] = JsonInstant.encodeToString(settings.quickMessages)
+            preferences[TEXT_SELECTION_CONFIG] = JsonInstant.encodeToString(settings.textSelectionConfig)
             preferences[WEB_SERVER_ENABLED] = settings.webServerEnabled
             preferences[WEB_SERVER_PORT] = settings.webServerPort
             preferences[WEB_SERVER_JWT_ENABLED] = settings.webServerJwtEnabled
@@ -710,6 +718,7 @@ data class Settings(
     val groupChatTemplates: List<GroupChatTemplate> = emptyList(),
 
     val quickMessages: List<QuickMessage> = emptyList(),
+    val textSelectionConfig: TextSelectionConfig = TextSelectionConfig(),
     val webServerEnabled: Boolean = false,
     val webServerPort: Int = 8080,
     val webServerJwtEnabled: Boolean = false,

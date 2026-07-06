@@ -112,6 +112,7 @@ import me.rerere.rikkahub.ui.pages.log.LogPage
 import me.rerere.rikkahub.ui.pages.search.SearchPage
 import me.rerere.rikkahub.ui.pages.setting.SettingAboutPage
 import me.rerere.rikkahub.ui.pages.setting.SettingAccessibilityPage
+import me.rerere.rikkahub.ui.pages.setting.SettingAndroidIntegrationPage
 import me.rerere.rikkahub.ui.pages.setting.SettingNotificationsPage
 import me.rerere.rikkahub.ui.pages.setting.SettingPermissionsPage
 import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesPage
@@ -549,6 +550,9 @@ class RouteActivity : ComponentActivity() {
                                 me.rerere.rikkahub.ui.pages.setting.SettingToolApprovalsPage()
                             }
 
+                            entry<Screen.SettingAndroidIntegration> {
+                                SettingAndroidIntegrationPage()
+                            }
                             entry<Screen.SettingAccessibility> {
                                 SettingAccessibilityPage()
                             }
@@ -822,6 +826,9 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object SettingToolApprovals : Screen
+
+    @Serializable
+    data object SettingAndroidIntegration : Screen
 
     @Serializable
     data object SettingAccessibility : Screen

@@ -186,6 +186,24 @@
         android:resource="@xml/shortcuts" />
     </activity>
     <activity
+      android:name=".ui.activity.TextSelectionActivity"
+      android:exported="true"
+      android:label="@string/text_selection_menu_label"
+      android:theme="@style/Theme.Rikkahub.ToolHost"
+      android:configChanges="keyboardHidden|orientation|screenSize"
+      android:windowSoftInputMode="adjustResize">
+      <intent-filter>
+        <action android:name="android.intent.action.PROCESS_TEXT" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <data android:mimeType="text/plain" />
+      </intent-filter>
+      <intent-filter>
+        <action android:name="android.intent.action.SEND" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <data android:mimeType="text/plain" />
+      </intent-filter>
+    </activity>
+    <activity
       android:name=".ui.activity.ShortcutHandlerActivity"
       android:exported="true"
       android:theme="@android:style/Theme.Translucent.NoTitleBar">

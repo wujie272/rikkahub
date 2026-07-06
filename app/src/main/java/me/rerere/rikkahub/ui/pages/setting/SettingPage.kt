@@ -307,6 +307,12 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         headlineContent = { Text(stringResource(R.string.setting_page_tool_approvals)) },
                     )
                     item(
+                        onClick = { navController.navigate(Screen.SettingAndroidIntegration) },
+                        leadingContent = { Icon(HugeIcons.SmartPhone01, null) },
+                        supportingContent = { Text(stringResource(R.string.setting_android_integration_desc)) },
+                        headlineContent = { Text(stringResource(R.string.setting_android_integration)) },
+                    )
+                    item(
                         onClick = { navController.navigate(Screen.SettingAccessibility) },
                         leadingContent = { Icon(HugeIcons.SmartPhone01, null) },
                         supportingContent = { Text(stringResource(R.string.setting_page_accessibility_desc)) },

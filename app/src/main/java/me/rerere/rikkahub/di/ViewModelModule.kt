@@ -28,6 +28,7 @@ import me.rerere.rikkahub.ui.pages.setting.browser.SettingBrowserViewModel
 import me.rerere.rikkahub.ui.pages.setting.termux.SettingTermuxViewModel
 import me.rerere.rikkahub.ui.pages.setting.locallm.SettingLocalLlmViewModel
 import me.rerere.rikkahub.ui.pages.share.handler.ShareHandlerVM
+import me.rerere.rikkahub.ui.activity.TextSelectionVM
 import me.rerere.rikkahub.ui.pages.translator.TranslatorVM
 import me.rerere.rikkahub.ui.pages.rag.RagVM
 import me.rerere.rikkahub.ui.pages.setting.doctor.DoctorViewModel
@@ -124,6 +125,7 @@ val viewModelModule = module {
     viewModelOf(::SearchVM)
     viewModelOf(::StatsVM)
     viewModelOf(::WorkflowsViewModel)
+    viewModel { TextSelectionVM(get(), get()) }
     viewModelOf(::ScheduledJobsViewModel)
     viewModelOf(::DoctorViewModel)
     viewModelOf(::SettingBrowserViewModel)
