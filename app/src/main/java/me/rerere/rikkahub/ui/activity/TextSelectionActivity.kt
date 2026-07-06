@@ -62,54 +62,53 @@ class TextSelectionActivity : ComponentActivity() {
                         viewModel = viewModel,
                         onDismiss = { finish() },
                         onContinueInApp = {
-                                val intent = Intent(this@TextSelectionActivity, RouteActivity::class.java).apply {
-                                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                                    if (viewModel.lastAction == QuickAction.TRANSLATE) {
-                                        putExtra("navigate_to", "translator")
-                                        putExtra("translator_input", viewModel.selectedText)
-                                        val state = viewModel.state
-                                        if (state is TextSelectionState.Result) {
-                                            putExtra("translator_output", state.responseText)
-                                        }
-                                    } else {
-                                        putExtra("continue_conversation", true)
-                                        putExtra("selected_text", viewModel.selectedText)
-                                        settings.textSelectionConfig.assistantId?.let {
-                                            putExtra("selection_assistant_id", it.toString())
-                                        }
-                                        val state = viewModel.state
-                                        if (state is TextSelectionState.Result) {
-                                            putExtra("ai_response", state.responseText)
-                                        }
-                                        if (viewModel.lastAction == QuickAction.CUSTOM) {
-                                            putExtra("user_prompt", viewModel.customPrompt)
-                                        }
+                            val intent = Intent(this@TextSelectionActivity, RouteActivity::class.java).apply {
+                                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                                if (viewModel.lastAction == QuickAction.TRANSLATE) {
+                                    putExtra("navigate_to", "translator")
+                                    putExtra("translator_input", viewModel.selectedText)
+                                    val state = viewModel.state
+                                    if (state is TextSelectionState.Result) {
+                                        putExtra("translator_output", state.responseText)
+                                    }
+                                } else {
+                                    putExtra("continue_conversation", true)
+                                    putExtra("selected_text", viewModel.selectedText)
+                                    settings.textSelectionConfig.assistantId?.let {
+                                        putExtra("selection_assistant_id", it.toString())
+                                    }
+                                    val state = viewModel.state
+                                    if (state is TextSelectionState.Result) {
+                                        putExtra("ai_response", state.responseText)
+                                    }
+                                    if (viewModel.lastAction == QuickAction.CUSTOM) {
+                                        putExtra("user_prompt", viewModel.customPrompt)
                                     }
                                 }
-                                startActivity(intent)
-                                finish()
-                            },
-                            onSendToConversation = { target ->
-                                val intent = Intent(this@TextSelectionActivity, RouteActivity::class.java).apply {
-                                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                                    putExtra(EXTRA_DIRECT_CHAT_TEXT, viewModel.selectedText)
-                                    putExtra(EXTRA_DIRECT_CHAT_AUTO_SEND, true)
-                                    when (target) {
-                                        is ChatTarget.Assistant -> {
-                                            putExtra(EXTRA_DIRECT_CHAT_TARGET_TYPE, DIRECT_CHAT_TARGET_TYPE_ASSISTANT)
-                                            putExtra(EXTRA_DIRECT_CHAT_TARGET_ID, target.assistantId.toString())
-                                        }
-                                        is ChatTarget.GroupChat -> {
-                                            putExtra(EXTRA_DIRECT_CHAT_TARGET_TYPE, DIRECT_CHAT_TARGET_TYPE_GROUP_CHAT)
-                                            putExtra(EXTRA_DIRECT_CHAT_TARGET_ID, target.templateId.toString())
-                                        }
+                            }
+                            startActivity(intent)
+                            finish()
+                        },
+                        onSendToConversation = { target ->
+                            val intent = Intent(this@TextSelectionActivity, RouteActivity::class.java).apply {
+                                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                                putExtra(EXTRA_DIRECT_CHAT_TEXT, viewModel.selectedText)
+                                putExtra(EXTRA_DIRECT_CHAT_AUTO_SEND, true)
+                                when (target) {
+                                    is ChatTarget.Assistant -> {
+                                        putExtra(EXTRA_DIRECT_CHAT_TARGET_TYPE, DIRECT_CHAT_TARGET_TYPE_ASSISTANT)
+                                        putExtra(EXTRA_DIRECT_CHAT_TARGET_ID, target.assistantId.toString())
+                                    }
+                                    is ChatTarget.GroupChat -> {
+                                        putExtra(EXTRA_DIRECT_CHAT_TARGET_TYPE, DIRECT_CHAT_TARGET_TYPE_GROUP_CHAT)
+                                        putExtra(EXTRA_DIRECT_CHAT_TARGET_ID, target.templateId.toString())
                                     }
                                 }
-                                startActivity(intent)
-                                finish()
-                            },
-                        )
-                    }
+                            }
+                            startActivity(intent)
+                            finish()
+                        },
+                    )
                 }
             }
         }

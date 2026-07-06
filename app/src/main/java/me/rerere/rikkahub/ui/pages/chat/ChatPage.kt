@@ -176,13 +176,6 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null, au
 
     val chatListState = rememberLazyListState()
     
-    // Auto-send when direct chat intent is received
-    LaunchedEffect(autoSend, inputState) {
-        if (autoSend && inputState.text.isNotBlank()) {
-            inputState.sendMessage()
-        }
-    }
-
 LaunchedEffect(nodeId, conversation.messageNodes.size) {
         if (!vm.chatListInitialized && conversation.messageNodes.isNotEmpty()) {
             if (nodeId != null) {
