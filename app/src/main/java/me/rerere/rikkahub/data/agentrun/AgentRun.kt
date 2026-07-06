@@ -9,7 +9,7 @@ import androidx.room.PrimaryKey
  * Phase 24 — unified `AgentRun` ledger row.
  *
  * One persisted record per autonomous run across all five autonomous execution paths:
- * cron jobs, workflows, sub-agents, Telegram conversations, and external automation.
+ * cron jobs, workflows, sub-agents, and external automation.
  * This is the *shadow* ledger — additive observability + boot recovery. The per-domain
  * detail tables (`scheduled_job_runs`, `workflow_runs`) stay the authoritative source of
  * truth for their domains; this table is the single cross-pillar surface.
@@ -41,7 +41,7 @@ data class AgentRun(
 
     /**
      * Per-kind domain id. cron: `jobId:runAtMs`; workflow: workflow id; subagent: sub-agent
-     * run id; telegram: conversation id; external_automation: request id (or a generated id).
+     * run id; external_automation: request id (or a generated id).
      */
     @ColumnInfo(name = "domain_id")
     val domainId: String,
@@ -118,14 +118,13 @@ enum class AgentRunStatus {
 }
 
 /**
- * Discriminator for the five autonomous paths. Stored as [AgentRunKind.wire] in the
+ * Discriminator for the four autonomous paths. Stored as [AgentRunKind.wire] in the
  * `kind` column.
  */
 enum class AgentRunKind(val wire: String) {
     Cron("cron"),
     Workflow("workflow"),
     SubAgent("subagent"),
-    Telegram("telegram"),
     ExternalAutomation("external_automation");
 
     companion object {

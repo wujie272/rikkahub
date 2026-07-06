@@ -14,8 +14,7 @@ These tools are nearly free; call them whenever the user's request depends on th
 - **`get_battery_status`** — when scheduling something long-running, when the user says "I'm leaving the house", when a job's expected runtime is non-trivial. If `< 20%` and not charging, surface it.
 - **`get_location`** — only when the user's request actually depends on location ("nearest", "weather here", "am I home"). Never pre-fetch.
 - **`read_window_tree`** — before any `tap`, `click_node`, `scroll`, or `global_action` call, unless you already have a fresh tree from the same turn. The screen changes between turns even when you didn't act.
-- **`telegram_status`** — when the user asks why the bot is slow / not delivering, OR when an outbound `telegram_send_message` fails. The status envelope tells you whether the foreground service is alive.
-- **`list_recent_notifications`** — when the user asks "what notifications did I miss", "what's that ping", or anything implying notification history. Cheap (in-memory ring buffer). The auto-route forwarder already pushes whitelisted apps to Telegram in real time; the LLM does not need to poll — answer based on what's already in the chat history when relevant.
+- **`list_recent_notifications`** — when the user asks "what notifications did I miss", "what's that ping", or anything implying notification history. Cheap (in-memory ring buffer).
 - **`whisper_status`** — call this ONCE the moment an audio / voice / video-note attachment arrives, before promising any transcription. Returns `ready_to_transcribe` plus a list of `missing_steps`. Free, no approval needed. If `ready_to_transcribe: true`, proceed straight to `transcribe_audio_file`. If anything is missing, surface the gap to the user and ask for confirmation BEFORE running install commands (the build-from-source path takes ~5 minutes and downloads ~75 MB).
 
 ## What to sample (expensive, only on demand)
@@ -54,7 +53,7 @@ Tools return structured `{error, recovery, ...}` envelopes when state is degrade
 - **Browser typing:** Never drive Chrome's URL bar with `set_text`. The accessibility tree's editable target is unstable across Chrome's launch overlay, the Suggestions panel, and the omnibox. For searches use `open_url("https://www.google.com/search?q=…")`; for direct visits use `open_url("https://example.com")`. One tool call, done.
 - **Terminal typing:** Never `set_text` into Termux. Use `termux_run_command` with capture mode.
 - **Selector retries:** If `click_node(by=text, value="Send")` returned `no_match`, calling it again with the SAME `value` won't suddenly succeed. Try a different selector axis (`view_id_resource_name` if the app exposes one) or a different value.
-- **Self-diagnostic spam:** Don't call `notification_status` / `telegram_status` mid-task "to make sure" — they are diagnostic tools, only useful when something already returned a not-bound envelope.
+- **Self-diagnostic spam:** Don't call diagnostic tools mid-task "to make sure" — they are only useful when something already returned a not-bound envelope.
 - **Re-reads with no action between:** After a successful `tap` / `click_node` / `swipe`, give the OS one beat before re-reading the tree. Reading the tree N times for the same on-screen state is wasted budget.
 - **package_name guards after launch_app:** If `launch_app` returned `confirmed_foreground:false` or `error:"launch_did_not_focus"`, do NOT pass `package_name` to the next `read_window_tree` / `click_node` / `find_node` — those guards will keep returning `wrong_foreground_app` and you will loop. Drop the guard and read the screen as-is.
 - **Clicking the N-th search result:** Don't fight the search-results page with `click_node` by text — the labels are often a mix of languages, ad markers, and rich snippets, and your selector will miss. If the user wants the top result, use `open_url("https://www.google.com/search?q=…&btnI=1")` (Google's "I'm Feeling Lucky" — lands directly on the first organic hit). If `btnI` doesn't fire, fall back to a coordinate `tap` near the top of the results area after one `read_window_tree`, not repeated text-selector retries.
@@ -62,17 +61,16 @@ Tools return structured `{error, recovery, ...}` envelopes when state is degrade
 
 When in doubt, stop early and reply with what you have. Let the user redirect. The host app enforces a 3-call cap on identical (tool, args) pairs and a 32-step turn cap as a hard backstop, but you should never make the cap care.
 
-## Initial heartbeat (cold start of a Telegram conversation)
+## Initial heartbeat (cold start)
 
-When the user first messages the bot, do this in your head before replying:
+When the conversation first starts, do this in your head before replying:
 
-1. Note the `[telegram_context: ...]` preamble — the chat_id is in there. All scheduled jobs you create should route back to this chat_id via `telegram_send_message`.
-2. Check what skill files (this one, plus any others enabled) tell you about voice, posture, and tool surface.
-3. Don't do a status dump. Just answer their question. The heartbeat is internal, not a recital.
+1. Check what skill files (this one, plus any others enabled) tell you about voice, posture, and tool surface.
+2. Don't do a status dump. Just answer their question. The heartbeat is internal, not a recital.
 
 ## When to *not* sample
 
 - Don't repeatedly call `get_time_info` mid-turn. Once per turn is plenty.
 - Don't read the window tree if the user just gave you specific coordinates.
 - Don't `take_screenshot` after every action — the action log + a final screenshot is enough.
-- Don't call `telegram_status` unless something has gone wrong; the user can see whether replies are arriving.
+- Don't call diagnostic tools unless something has gone wrong; the user can see whether replies are arriving.

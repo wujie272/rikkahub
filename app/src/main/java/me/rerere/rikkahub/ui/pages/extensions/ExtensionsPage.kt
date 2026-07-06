@@ -20,6 +20,7 @@ import me.rerere.rikkahub.R
 import me.rerere.hugeicons.stroke.Book03
 import me.rerere.hugeicons.stroke.File02
 import me.rerere.hugeicons.stroke.Folder01
+import me.rerere.hugeicons.stroke.ServerStack01
 import me.rerere.hugeicons.stroke.Puzzle
 import me.rerere.hugeicons.stroke.Zap
 import me.rerere.rikkahub.Screen
@@ -73,6 +74,12 @@ fun ExtensionsPage() {
                         leadingContent = { Icon(HugeIcons.Puzzle, null) },
                         headlineContent = { Text(stringResource(R.string.extensions_page_agent_skills)) },
                         supportingContent = { Text(stringResource(R.string.extensions_page_agent_skills_desc)) },
+                    )
+                    item(
+                        onClick = { navController.navigate(Screen.SettingSsh) },
+                        leadingContent = { Icon(HugeIcons.ServerStack01, null) },
+                        headlineContent = { Text(stringResource(R.string.setting_page_ssh)) },
+                        supportingContent = { Text(stringResource(R.string.setting_page_ssh_desc)) },
                     )
                     item(
                         onClick = { navController.navigate(Screen.Workspaces) },

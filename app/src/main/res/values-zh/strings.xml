@@ -324,6 +324,7 @@
   <string name="group_detail_all_assistants_added">所有助手已添加</string>
   <string name="group_detail_start_chat">开始聊天</string>
     <string name="group_chat_title">群聊</string>
+    <string name="group_chat_template_create">创建群聊模板</string>
     <string name="group_chat_manage">管理群组</string>
   <string name="chat_page_today">今天</string>
   <string name="chat_page_yesterday">昨天</string>
@@ -1963,4 +1964,22 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_provider_page_import_confirm">导入</string>
   <string name="setting_provider_page_multi_key_mode">多 Key 模式</string>
   <string name="setting_provider_page_multi_key_mode_desc">启用结构化 API Key 管理，支持别名、策略和自动切换</string>
+  <string name="text_selection_menu_label">询问 RikkaHub</string>
+  <string name="text_selection_translate">翻译</string>
+  <string name="text_selection_explain">解释</string>
+  <string name="text_selection_summarize">总结</string>
+  <string name="text_selection_ask">随便问…</string>
+  <string name="text_selection_custom_placeholder">关于这段文字想了解什么…</string>
+  <string name="text_selection_generating">生成中…</string>
+  <string name="text_selection_preview">预览</string>
+  <string name="text_selection_try_it">试试看</string>
+  <string name="text_selection_continue_chat">在 App 中继续</string>
+  <string name="text_selection_setup_instructions">在任意 App 中选择文字，弹出工具栏中找到 "RikkaHub"，点击即可使用这些功能。</string>
+  <string name="text_selection_demo_text">这是一段可以选中的示例文字！试试长按选中这些文字，然后在弹出的工具栏中找到 "RikkaHub"。如果没看到，可能需要点开更多菜单。</string>
+  <string name="text_selection_demo_hint">👆 长按上面的文字试试选中它</string>
+  <string name="setting_android_integration">Android 集成</string>
+  <string name="setting_android_integration_desc">文字选择弹窗设置</string>
+  <string name="text_selection_how_it_works">使用说明</string>
+  <string name="text_selection_copy">复制</string>
+  <string name="text_selection_send_to_conversation">发送到对话</string>
 </resources>

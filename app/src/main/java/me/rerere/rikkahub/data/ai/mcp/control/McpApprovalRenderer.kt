@@ -12,12 +12,12 @@ import kotlinx.serialization.json.jsonPrimitive
  *
  * The default prompt path serialises the raw args JSON into a `<pre>` block — for
  * mcp_add and mcp_update that would expose Authorization tokens, API keys, and cookies
- * verbatim to whoever is reading the prompt (in-app dialog or Telegram chat). Spec
+ * verbatim to whoever is reading the prompt (in-app dialog or remote chat). Spec
  * 2026-05-05-mcp-control-design §6 + §"Approval prompt rendering" require these prompts
  * to use [McpHeaderRedactor] before display.
  *
  * The renderer returns plain text (no HTML / Compose). Each calling surface decides how
- * to escape and present it — Telegram wraps in `<pre>` after HTML-escaping, the in-app
+ * to escape and present it — the remote surface wraps in `<pre>` after HTML-escaping, the in-app
  * approval card renders it as a `Text` block.
  *
  * Returns null when the tool isn't an MCP tool that needs custom rendering — callers

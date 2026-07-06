@@ -31,7 +31,7 @@ Convert OpenClaw skills from ClawHub (or raw markdown) into RikkaHub-compatible 
 |---|---|---|
 | `sessions_list` | Not available | Remove the section or note the limitation |
 | `sessions_history` | Not available | Remove the section or note the limitation |
-| `sessions_send` | `telegram_send_message` | Cross-session becomes cross-device notification |
+| `sessions_send` | `post_notification` | Cross-session becomes cross-device notification |
 | `sessions_spawn` | `subagent_dispatch` | Only if the user has sub-agents enabled |
 | `clawdhub install <name>` | `skill_install_from_url` or `skill_install_from_text` | Replace install instructions |
 | `openclaw hooks enable` | `schedule_job` or `workflow_create` | Hooks become scheduled/workflow automation |
@@ -53,7 +53,7 @@ Convert OpenClaw skills from ClawHub (or raw markdown) into RikkaHub-compatible 
 ### Sections to remove or replace
 
 - "OpenClaw Setup" / "OpenClaw Workspace Structure": replace with RikkaHub workspace paths.
-- "Inter-Session Communication": remove `sessions_*` tools; if the concept is valuable, suggest `telegram_send_message` as a cross-session notification workaround.
+- "Inter-Session Communication": remove `sessions_*` tools; if the concept is valuable, suggest `post_notification` as a cross-session notification workaround.
 - "Hook Integration" / "Enable Hook": replace with RikkaHub workflows (`workflow_create`) or scheduled jobs (`schedule_job`).
 - "Claude Code / Codex Setup": remove entirely (other agent platforms).
 - Installation via `clawdhub` or `git clone`: replace with "install via `skill_install_from_url` or `skill_install_from_text`" and RikkaHub-compatible paths.

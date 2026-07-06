@@ -12,7 +12,7 @@ private const val TAG = "AgentRunRepository"
 /**
  * Phase 24 — single shared writer/reader for the unified `agent_runs` ledger.
  *
- * All five autonomous paths (cron, workflow, sub-agent, Telegram, external automation)
+ * All four autonomous paths (cron, workflow, sub-agent, external automation)
  * write through this one repository. Every mutating method serialises through a single
  * [Mutex] so two concurrent runs transitioning at the same time can't last-writer-win
  * each other's `status` / `last_error` fields — each transition is read-modify-write
@@ -32,7 +32,7 @@ class AgentRunRepository(private val dao: AgentRunDao) {
     /**
      * Open a new ledger row. Returns the generated row id (a UUID string). The row starts
      * in [AgentRunStatus.running] with `started_at_ms` set — callers that need a distinct
-     * `queued` phase should call [setStatus] afterwards, but for the five v1 paths the run
+     * `queued` phase should call [setStatus] afterwards, but for the v1 paths the run
      * is already executing by the time the row is opened.
      *
      * On failure a fallback UUID is still returned so callers can keep a stable handle and

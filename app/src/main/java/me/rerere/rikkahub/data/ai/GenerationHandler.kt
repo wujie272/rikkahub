@@ -73,7 +73,7 @@ private const val TOOL_OUTPUT_PREVIEW_CHARS = 4 * 1024
 /**
  * Keys whose string values are sensitive enough that the raw value MUST NOT land in
  * logcat. Tool args land in `Log.i` for debugging; without redaction, `save_ssh_host`'s
- * `private_key` / `password` and `telegram_set_token`'s `token` would print verbatim
+ * `private_key` / `password` and `save_ssh_host`'s `password` would print verbatim
  * — readable on debug builds, by other apps holding READ_LOGS on OEM-bugged ROMs, and
  * by `bugreport`/`dumpsys`. The match is case-insensitive against the key name and
  * applies regardless of nesting depth.
@@ -295,7 +295,7 @@ class GenerationHandler(
         // returns false so callers that don't care still get vanilla approval gating.
         isToolAutoApproved: suspend (toolName: String) -> Boolean = { false },
         // Optional per-call addendum appended to the system prompt. Used by surfaces that
-        // need the model to know runtime context (e.g. "you're talking via Telegram, the
+        // need the model to know runtime context (e.g. "you're talking via a remote surface, the
         // chat_id is 12345") without polluting the user message body — without this the
         // preamble is replayed in user history every turn, burning ~80 tokens × N turns.
         systemAddendum: String? = null,
@@ -885,7 +885,7 @@ class GenerationHandler(
     }
         .onStart {
             // Reset per-turn navigation tracking and surface the overlay so the user
-            // sees that automation is happening even when the agent runs from Telegram.
+            // sees that automation is happening even when the agent runs from a remote surface.
             AgentTurnTracker.reset()
             AgentOverlay.show(context)
         }

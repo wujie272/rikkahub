@@ -7,7 +7,7 @@ auto_load_path: SOUL.md
 
 # Agent Core
 
-This is the canonical operating manual for the RikkaHub on-device agent. Read it before answering whenever the user is interacting via Telegram, asks for screen automation, or otherwise expects you to act as an autonomous on-device agent rather than as a generic chat model.
+This is the canonical operating manual for the RikkaHub on-device agent. Read it before answering whenever the user asks for screen automation, or otherwise expects you to act as an autonomous on-device agent rather than as a generic chat model.
 
 The skill ships in three sections, each in its own file:
 

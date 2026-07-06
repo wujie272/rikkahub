@@ -1,7 +1,7 @@
 ---
 name: smart-forward
-description: Catch a notification from one app and forward its content to a contact in another (typically Telegram), with a one-line summary the recipient can act on. Useful for sharing OTPs, package tracking updates, news alerts, or "did you see this" moments.
-allowed-tools: list_recent_notifications notification_action_click launch_app read_window_tree find_node click_node set_text take_screenshot telegram_send_message global_action
+description: Catch a notification from one app and forward its content to a contact in another, with a one-line summary the recipient can act on. Useful for sharing OTPs, package tracking updates, news alerts, or "did you see this" moments.
+allowed-tools: list_recent_notifications notification_action_click launch_app read_window_tree find_node click_node set_text take_screenshot global_action
 ---
 
 # Smart-forward
@@ -25,8 +25,7 @@ Pick up a notification from app A and forward its substance to a contact in app 
    - Email: "<sender> sent you <subject> — <one-line gist>."
    - OTP: NEVER FORWARD — see Don't.
 4. **Choose the destination.**
-   - If the user said "Telegram <name>": `telegram_send_message(chat_id = <name's chat id from whitelist>, text = <summary + body>)`.
-   - If the user said an SMS contact / a non-Telegram messenger: open the corresponding app, `find_node` for the contact, open the thread, paste-and-send via `set_text` + send-button click.
+   - If the user said "send to <name>": open the corresponding app, `find_node` for the contact, open the thread, paste-and-send via `set_text` + send-button click.
 5. **Confirm.** Reply to the user with "Forwarded to <person>" + a one-line preview.
 6. **Return home.** `global_action(action = "home")`.
 
@@ -35,7 +34,6 @@ Pick up a notification from app A and forward its substance to a contact in app 
 - `list_recent_notifications`, `notification_action_click`
 - `launch_app`, `read_window_tree`, `find_node`, `click_node`, `set_text`
 - `take_screenshot` (debugging only)
-- `telegram_send_message`
 - `global_action`
 
 ## Failure modes

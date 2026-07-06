@@ -69,6 +69,7 @@ import me.rerere.hugeicons.stroke.ServerStack01
 import me.rerere.hugeicons.stroke.Shield01
 import me.rerere.hugeicons.stroke.Settings03
 import me.rerere.hugeicons.stroke.Share04
+import me.rerere.hugeicons.stroke.Rocket01
 import me.rerere.hugeicons.stroke.SmartPhone01
 import me.rerere.hugeicons.stroke.Sun01
 import me.rerere.hugeicons.stroke.WavingHand01
@@ -234,12 +235,6 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         headlineContent = { Text(stringResource(R.string.setting_page_default_model)) },
                     )
                     item(
-                        onClick = { navController.navigate(Screen.Rag) },
-                        leadingContent = { Icon(HugeIcons.Bookshelf01, null) },
-                        supportingContent = { Text("搜索你的笔记") },
-                        headlineContent = { Text("RAG 知识库") },
-                    )
-                    item(
                         onClick = { navController.navigate(Screen.SettingProvider) },
                         leadingContent = { Icon(HugeIcons.Brain02, null) },
                         supportingContent = { Text(stringResource(R.string.setting_page_providers_desc)) },
@@ -308,7 +303,7 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                     )
                     item(
                         onClick = { navController.navigate(Screen.SettingAndroidIntegration) },
-                        leadingContent = { Icon(HugeIcons.SmartPhone01, null) },
+                        leadingContent = { Icon(HugeIcons.Rocket01, null) },
                         supportingContent = { Text(stringResource(R.string.setting_android_integration_desc)) },
                         headlineContent = { Text(stringResource(R.string.setting_android_integration)) },
                     )
@@ -323,12 +318,6 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         leadingContent = { Icon(HugeIcons.Alert01, null) },
                         supportingContent = { Text(stringResource(R.string.setting_page_notifications_desc)) },
                         headlineContent = { Text(stringResource(R.string.setting_page_notifications)) },
-                    )
-                    item(
-                        onClick = { navController.navigate(Screen.SettingSsh) },
-                        leadingContent = { Icon(HugeIcons.Console, null) },
-                        supportingContent = { Text(stringResource(R.string.setting_page_ssh_desc)) },
-                        headlineContent = { Text(stringResource(R.string.setting_page_ssh)) },
                     )
                     item(
                         onClick = { navController.navigate(Screen.SettingPermissions) },

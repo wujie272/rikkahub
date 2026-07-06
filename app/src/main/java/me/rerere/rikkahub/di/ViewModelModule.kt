@@ -18,11 +18,6 @@ import me.rerere.rikkahub.ui.pages.extensions.skills.SkillDetailVM
 import me.rerere.rikkahub.ui.pages.extensions.skills.SkillsVM
 import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspaceDetailVM
 import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspaceVM
-import me.rerere.rikkahub.ui.pages.group.GroupVM
-import me.rerere.rikkahub.ui.pages.assistant.groupchat.GroupChatTemplateDetailVM
-
-import me.rerere.rikkahub.ui.pages.group.GroupDetailVM
-import me.rerere.rikkahub.ui.pages.group.GroupChatVM
 import me.rerere.rikkahub.ui.pages.setting.SettingVM
 import me.rerere.rikkahub.ui.pages.setting.browser.SettingBrowserViewModel
 import me.rerere.rikkahub.ui.pages.setting.termux.SettingTermuxViewModel
@@ -30,7 +25,6 @@ import me.rerere.rikkahub.ui.pages.setting.locallm.SettingLocalLlmViewModel
 import me.rerere.rikkahub.ui.pages.share.handler.ShareHandlerVM
 import me.rerere.rikkahub.ui.activity.TextSelectionVM
 import me.rerere.rikkahub.ui.pages.translator.TranslatorVM
-import me.rerere.rikkahub.ui.pages.rag.RagVM
 import me.rerere.rikkahub.ui.pages.setting.doctor.DoctorViewModel
 import me.rerere.rikkahub.ui.pages.setting.scheduledjobs.ScheduledJobsViewModel
 import me.rerere.rikkahub.workflow.ui.WorkflowsViewModel
@@ -87,34 +81,6 @@ val viewModelModule = module {
     }
     viewModelOf(::SkillDetailVM)
     viewModelOf(::WorkspaceVM)
-    viewModelOf(::GroupVM)
-    viewModel<GroupDetailVM> {
-        GroupDetailVM(
-            groupId = it.get<String>(),
-            repository = get(),
-            settingsStore = get(),
-            chatService = get(),
-        )
-    }
-    viewModel<GroupChatVM> { params ->
-        GroupChatVM(
-            conversationId = kotlin.uuid.Uuid.parse(params.get<String>()),
-            context = get(),
-            settingsStore = get(),
-            conversationRepo = get(),
-            chatService = get(),
-            updateChecker = get(),
-            filesManager = get(),
-            favoriteRepository = get(),
-            groupRepository = get(),
-        )
-    }
-    viewModel<GroupChatTemplateDetailVM> { params ->
-        GroupChatTemplateDetailVM(
-            id = params.get<String>(),
-            settingsStore = get(),
-        )
-    }
     viewModel<WorkspaceDetailVM> {
         WorkspaceDetailVM(
             id = it.get(),
@@ -130,7 +96,6 @@ val viewModelModule = module {
     viewModelOf(::DoctorViewModel)
     viewModelOf(::SettingBrowserViewModel)
     viewModelOf(::SettingTermuxViewModel)
-    viewModel<RagVM> { RagVM(get(), get()) }
 
     // Phase 22A: parameterised by LocalRuntime — one VM instance per provider tile.
     viewModel<SettingLocalLlmViewModel> { params ->

@@ -122,7 +122,7 @@ object SecretRedactor {
 
     private val patterns: List<Pair<Regex, String>> = listOf(
         // Telegram bot tokens: <int>:<35-char alnum>
-        Regex("""\b\d{8,12}:[A-Za-z0-9_-]{30,40}\b""") to "[redacted-telegram-token]",
+        Regex("""\b\d{8,12}:[A-Za-z0-9_-]{30,40}\b""") to "[redacted-bot-token]",
         // Bearer / API-key-ish headers — captures `Authorization: Bearer XYZ` AND
         // `X-Api-Key: XYZ` as one unit so the value after the optional Bearer/Token
         // prefix gets redacted along with the header. Stops at newline so multi-line

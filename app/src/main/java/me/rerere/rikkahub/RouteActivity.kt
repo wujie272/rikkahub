@@ -31,6 +31,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -58,6 +59,7 @@ import coil3.svg.SvgDecoder
 import com.dokar.sonner.Toaster
 import com.dokar.sonner.rememberToasterState
 import kotlinx.serialization.Serializable
+import kotlinx.coroutines.flow.first
 import me.rerere.highlight.Highlighter
 import me.rerere.highlight.LocalHighlighter
 import me.rerere.rikkahub.data.datastore.SettingsStore
@@ -96,9 +98,6 @@ import me.rerere.rikkahub.ui.pages.extensions.ExtensionsPage
 import me.rerere.rikkahub.ui.pages.extensions.PromptPage
 import me.rerere.rikkahub.ui.pages.extensions.QuickMessagesPage
 import me.rerere.rikkahub.ui.pages.extensions.skills.SkillDetailPage
-import me.rerere.rikkahub.ui.pages.group.GroupListPage
-import me.rerere.rikkahub.ui.pages.group.GroupDetailPage
-import me.rerere.rikkahub.ui.pages.group.GroupChatPage
 import me.rerere.rikkahub.ui.pages.assistant.groupchat.GroupChatTemplateDetailPage
 
 import me.rerere.rikkahub.ui.pages.extensions.skills.SkillsPage
@@ -125,7 +124,6 @@ import me.rerere.rikkahub.ui.pages.setting.SettingDonatePage
 import me.rerere.rikkahub.ui.pages.setting.SettingFilesPage
 import me.rerere.rikkahub.ui.pages.setting.SettingMcpPage
 import me.rerere.rikkahub.ui.pages.setting.SettingModelPage
-import me.rerere.rikkahub.ui.pages.rag.RagPage
 import me.rerere.rikkahub.ui.pages.setting.SettingPage
 import me.rerere.rikkahub.ui.pages.setting.SettingProviderDetailPage
 import me.rerere.rikkahub.ui.pages.setting.SettingProviderPage
@@ -147,8 +145,28 @@ import okhttp3.OkHttpClient
 import org.koin.android.ext.android.inject
 import org.koin.compose.koinInject
 import kotlin.uuid.Uuid
+import me.rerere.rikkahub.data.model.ChatTarget
+import me.rerere.rikkahub.utils.base64Decode
+import me.rerere.rikkahub.utils.base64Encode
+import androidx.compose.runtime.mutableStateOf
 
 private const val TAG = "RouteActivity"
+
+
+
+internal const val EXTRA_DIRECT_CHAT_TARGET_TYPE = "direct_chat_target_type"
+internal const val EXTRA_DIRECT_CHAT_TARGET_ID = "direct_chat_target_id"
+internal const val EXTRA_DIRECT_CHAT_TEXT = "direct_chat_text"
+internal const val EXTRA_DIRECT_CHAT_AUTO_SEND = "direct_chat_auto_send"
+internal const val DIRECT_CHAT_TARGET_TYPE_ASSISTANT = "assistant"
+internal const val DIRECT_CHAT_TARGET_TYPE_GROUP_CHAT = "group_chat"
+data class DirectChatData(
+    val targetType: String,
+    val targetId: String,
+    val text: String,
+    val autoSend: Boolean,
+)
+
 
 class RouteActivity : ComponentActivity() {
     companion object {
@@ -159,6 +177,7 @@ class RouteActivity : ComponentActivity() {
     private val okHttpClient by inject<OkHttpClient>()
     private val settingsStore by inject<SettingsStore>()
     private var navStack: MutableList<NavKey>? = null
+    private val _pendingDirectChat = mutableStateOf<DirectChatData?>(null)
 
     // Volume key listener registry — last registered handler wins
     internal val volumeKeyListeners = mutableListOf<(isVolumeUp: Boolean) -> Boolean>()
@@ -223,22 +242,14 @@ class RouteActivity : ComponentActivity() {
                 action = intent?.action
                 putExtra(Intent.EXTRA_TEXT, intent?.getStringExtra(Intent.EXTRA_TEXT))
                 putExtra(Intent.EXTRA_STREAM, intent?.getStringExtra(Intent.EXTRA_STREAM))
-                putExtra(Intent.EXTRA_PROCESS_TEXT, intent?.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT))
             }
         }
 
         LaunchedEffect(backStack) {
-            when (shareIntent.action) {
-                Intent.ACTION_SEND -> {
-                    val text = shareIntent.getStringExtra(Intent.EXTRA_TEXT) ?: ""
-                    val imageUri = shareIntent.getStringExtra(Intent.EXTRA_STREAM)
-                    backStack.add(Screen.ShareHandler(text, imageUri))
-                }
-
-                Intent.ACTION_PROCESS_TEXT -> {
-                    val text = shareIntent.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)?.toString() ?: ""
-                    backStack.add(Screen.ShareHandler(text, null))
-                }
+            if (shareIntent.action == Intent.ACTION_SEND) {
+                val text = shareIntent.getStringExtra(Intent.EXTRA_TEXT) ?: ""
+                val imageUri = shareIntent.getStringExtra(Intent.EXTRA_STREAM)
+                backStack.add(Screen.ShareHandler(text, imageUri))
             }
         }
     }
@@ -259,6 +270,18 @@ class RouteActivity : ComponentActivity() {
         }
     }
 
+    private fun navigateToDirectChat(target: ChatTarget, text: String, autoSend: Boolean = false) {
+        val navStack = navStack ?: return
+        val chatId = Uuid.random()
+        navStack.clear()
+        navStack.add(Screen.Chat(
+            id = chatId.toString(),
+            text = text.base64Encode(),
+            autoSend = autoSend,
+        ))
+    }
+
+
     @OptIn(ExperimentalComposeUiApi::class)
     @Composable
     fun AppRoutes() {
@@ -277,6 +300,33 @@ class RouteActivity : ComponentActivity() {
             }
         }
         val migrationState by DatabaseMigrationTracker.state.collectAsStateWithLifecycle()
+
+    val directChatData = _pendingDirectChat.value
+    LaunchedEffect(directChatData) {
+        val data = directChatData ?: return@LaunchedEffect
+        try {
+            val settings = settingsStore.settingsFlow.first { !it.init }
+            val target = when (data.targetType) {
+                DIRECT_CHAT_TARGET_TYPE_ASSISTANT -> {
+                    val assistantId = Uuid.parse(data.targetId)
+                    if (settings.assistants.none { it.id == assistantId }) {
+                        _pendingDirectChat.value = null
+                        return@LaunchedEffect
+                    }
+                    ChatTarget.Assistant(assistantId)
+                }
+                else -> {
+                    _pendingDirectChat.value = null
+                    return@LaunchedEffect
+                }
+            }
+            navigateToDirectChat(target, data.text, data.autoSend)
+            _pendingDirectChat.value = null
+        } catch (_: Exception) {
+            _pendingDirectChat.value = null
+        }
+    }
+
 
         val startScreen = Screen.Chat(
             id = if (readBooleanPreference("create_new_conversation_on_start", true)) {
@@ -358,7 +408,8 @@ class RouteActivity : ComponentActivity() {
                                     id = Uuid.parse(key.id),
                                     text = key.text,
                                     files = key.files.map { it.toUri() },
-                                    nodeId = key.nodeId?.let { Uuid.parse(it) }
+                                    nodeId = key.nodeId?.let { Uuid.parse(it) },
+                                    autoSend = key.autoSend,
                                 )
                             }
 
@@ -508,10 +559,6 @@ class RouteActivity : ComponentActivity() {
 
 
 
-                            entry<Screen.Rag> {
-                                RagPage()
-                            }
-
                             entry<Screen.SettingSsh> {
                                 SettingSshPage()
                             }
@@ -609,23 +656,11 @@ class RouteActivity : ComponentActivity() {
                                 SkillDetailPage(skillName = key.skillName)
                             }
 
-                            entry<Screen.GroupList> {
-                                GroupListPage()
-                            }
-
-                            entry<Screen.GroupDetail> { key ->
-                                GroupDetailPage(key.id)
-                            }
-
-                            entry<Screen.GroupChat> { key ->
-                                GroupChatPage(id = key.id)
-                            }
-
-                            entry<Screen.MessageSearch> {
                             entry<Screen.GroupChatTemplateDetail> { key ->
                                 GroupChatTemplateDetailPage(id = key.id)
                             }
 
+                            entry<Screen.MessageSearch> {
                                 SearchPage()
                             }
 
@@ -689,7 +724,8 @@ sealed interface Screen : NavKey {
         val id: String,
         val text: String? = null,
         val files: List<String> = emptyList(),
-        val nodeId: String? = null
+        val nodeId: String? = null,
+        val autoSend: Boolean = false
     ) : Screen
 
     @Serializable
@@ -798,9 +834,6 @@ sealed interface Screen : NavKey {
     data object SettingWeb : Screen
 
     @Serializable
-    data object Rag : Screen
-
-    @Serializable
     data object SettingSsh : Screen
 
     @Serializable
@@ -873,15 +906,6 @@ sealed interface Screen : NavKey {
     data class SkillDetail(val skillName: String) : Screen
 
     @Serializable
-    data object GroupList : Screen
-
-    @Serializable
-    data class GroupDetail(val id: String) : Screen
-
-    @Serializable
-    data class GroupChat(val id: String) : Screen
-
-    @Serializable
     data class GroupChatTemplateDetail(val id: String) : Screen
 
     @Serializable
@@ -891,3 +915,4 @@ sealed interface Screen : NavKey {
     data object Stats : Screen
 
 }
+

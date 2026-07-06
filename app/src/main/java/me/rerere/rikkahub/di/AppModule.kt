@@ -65,14 +65,6 @@ val appModule = module {
     single { me.rerere.rikkahub.data.preferences.ToolApprovalPreferences(get()) }
     single { NotificationListenerPreferences(get()) }
 
-    // Phase 3: Group roleplay speech strategy engine
-    single {
-        me.rerere.rikkahub.data.ai.group.GroupTurnOrchestrator(
-            groupRepository = get(),
-            settingsStore = get(),
-        )
-    }
-
     // Phase 13: External Automation Intent API
     single { me.rerere.rikkahub.automation.ExternalAutomationConfig(get()) }
     single {
@@ -242,10 +234,7 @@ val appModule = module {
             skillManager = get(),
             toolApprovalPreferences = get(),
             workspaceRepository = get(),
-            groupTurnOrchestrator = get(),
-            groupRepository = get(),
             folderRepository = get(),
-            ragSearchService = get()
         )
     }
 

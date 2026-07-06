@@ -37,7 +37,6 @@ import me.rerere.rikkahub.data.db.migrations.Migration_14_15
 import me.rerere.rikkahub.data.db.migrations.Migration_15_16
 import me.rerere.rikkahub.data.db.migrations.Migration_23_24
 import me.rerere.rikkahub.data.db.migrations.Migration_24_27
-import me.rerere.rikkahub.data.db.migrations.Migration_27_28
 import me.rerere.rikkahub.data.db.migrations.Migration_28_29
 import me.rerere.rikkahub.data.db.migrations.Migration_29_30
 import me.rerere.rikkahub.data.db.migrations.Migration_30_31
@@ -72,7 +71,7 @@ val dataSourceModule = module {
                 Migration_6_7, Migration_11_12, Migration_13_14,
                 Migration_14_15, Migration_15_16, Migration_23_24,
                 Migration_24_27,
-                Migration_27_28, Migration_28_29, Migration_29_30,
+                Migration_28_29, Migration_29_30,
                 Migration_30_31,
                 Migration_31_32,
                 Migration_32_33,
@@ -153,10 +152,6 @@ val dataSourceModule = module {
 
     single {
         get<AppDatabase>().workspaceDao()
-    }
-
-    single {
-        get<AppDatabase>().groupDao()
     }
 
     single {

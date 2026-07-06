@@ -17,7 +17,7 @@ object AgentTurnTracker {
     /**
      * Per-package timestamp recording the last time the agent itself interacted with a
      * package (launch_app, open_url, termux_run_command). The notification listener checks
-     * this before forwarding to Telegram so a user driving the agent does not get spammed
+     * this before forwarding to remote so a user driving the agent does not get spammed
      * with status pings from the very work the agent just kicked off (Termux's "1 session"
      * counter is the canonical offender).
      */
@@ -59,7 +59,7 @@ object AgentTurnTracker {
 
     /**
      * True if the agent itself touched [packageName] within [withinMs]. Used by the
-     * notification listener to drop forward-to-Telegram for packages the user did not
+     * notification listener to drop forward-to-remote for packages the user did not
      * interact with — the agent did, and the resulting status notifications are not new
      * information for the user.
      */

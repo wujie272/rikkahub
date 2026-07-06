@@ -84,7 +84,7 @@ object BrowserToolDefaults {
 
     // --- Timeout settings (GitHub issue #4: user-configurable) -------------------------------
     //
-    // The issue asked for "unlimited", but a truly unbounded task can wedge the Telegram bot
+    // The issue asked for "unlimited", but a truly unbounded task can wedge the bot
     // (it blocks on generation completing) and burn battery silently — see CLAUDE.md's "every
     // tool MUST have a hard timeout" rule. So instead of unlimited we expose a generous
     // configurable range with a hard ceiling. Input from the Settings UI is clamped to these

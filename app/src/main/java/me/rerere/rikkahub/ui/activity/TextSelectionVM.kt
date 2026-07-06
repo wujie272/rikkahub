@@ -215,7 +215,7 @@ class TextSelectionVM(
         messages = messages.handleMessageChunk(chunk, model).toMutableList()
 
         val lastMessage = messages.lastOrNull()
-        val responseText = lastMessage?.toText() ?: ""
+        val responseText = lastMessage?.parts?.filterIsInstance<me.rerere.ai.ui.UIMessagePart.Text>()?.joinToString("\n") { it.text } ?: ""
         val isReasoning = lastMessage?.parts?.any {
             it is UIMessagePart.Reasoning && it.finishedAt == null
         } ?: false

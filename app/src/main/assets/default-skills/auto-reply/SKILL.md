@@ -10,9 +10,9 @@ Reply to an incoming message inside the originating chat app, without leaving th
 
 ## When to use
 
-The user says something like "reply to <person> for me", "send <person> 'on my way'", "draft a reply to the last message", or you spot an unread chat (Telegram / WhatsApp / Signal / Messages / Slack) in `list_recent_notifications` and the user has asked you to handle replies autonomously.
+The user says something like "reply to <person> for me", "send <person> 'on my way'", "draft a reply to the last message", or you spot an unread chat (WhatsApp / Signal / Messages / Slack) in `list_recent_notifications` and the user has asked you to handle replies autonomously.
 
-Do NOT use this skill if the user just asked you to send a brand-new message to someone you haven't surfaced yet — for that, use `telegram_send_message` (Telegram only) or open the app yourself.
+Do NOT use this skill if the user just asked you to send a brand-new message to someone you haven't surfaced yet — for that, open the app yourself.
 
 ## Steps
 

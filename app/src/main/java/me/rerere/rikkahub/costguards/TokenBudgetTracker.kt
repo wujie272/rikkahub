@@ -16,7 +16,7 @@ import me.rerere.rikkahub.data.model.Conversation
  * v1 surface:
  *   - LLM-callable tool (`check_token_usage`) returns the totals + budget status so the
  *     model can self-stop or notify the user.
- *   - Future Compose / Telegram surfaces collect the same numbers.
+ *   - Future surfaces collect the same numbers.
  */
 object TokenBudgetTracker {
 

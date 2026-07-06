@@ -1982,4 +1982,13 @@
   <string name="text_selection_demo_hint">👆 Long-press the text above to try selecting it</string>
   <string name="setting_android_integration">Android Integration</string>
   <string name="setting_android_integration_desc">Text selection popup settings</string>
+
+  <string name="text_selection_how_it_works">How It Works</string>
+  <string name="text_selection_copy">Copy</string>
+  <string name="text_selection_send_to_conversation">Send to Conversation</string>
+  <string name="assistant_page_no_system_prompt">No System Prompt</string>
+  <string name="group_chat_members_count">%1$d members</string>
+
+  <string name="group_chat_default_name">Group Chat</string>
+  <string name="group_chat_template_create">Create a group chat template</string>
 </resources>

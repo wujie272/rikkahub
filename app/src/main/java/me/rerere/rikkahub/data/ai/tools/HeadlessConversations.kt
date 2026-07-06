@@ -28,7 +28,7 @@ private const val PREFS_KEY_AUTO_APPROVE = "auto_approve_ids"
  *
  * The Telegram bot is a deliberate split: it IS browser-headless (the user's phone
  * shouldn't get a popup whenever the LLM browses something), but it is NOT
- * auto-approval — the bot has an inline-keyboard approval flow in TelegramBotService
+ * auto-approval — the bot has an inline-keyboard approval flow for headless surfaces
  * that prompts the user to approve each side-effecting tool. Without the split,
  * marking the bot conv as `mark()` (the original code) silently bypassed the
  * inline-keyboard flow because `isToolAutoApproved` was true via `isHeadless`,
@@ -114,7 +114,7 @@ object HeadlessConversations {
      * True if side-effecting tools should auto-approve in this conversation.
      * Returns true ONLY for `mark()` callers (no approval channel at all).
      * Telegram bot conversations marked via `markBrowserHeadless()` return false
-     * here so the inline-keyboard approval flow in TelegramBotService can fire.
+     * here so the inline-keyboard approval flow for headless surfaces can fire.
      */
     fun shouldAutoApprove(conversationId: Uuid): Boolean = conversationId in autoApproveIds
 

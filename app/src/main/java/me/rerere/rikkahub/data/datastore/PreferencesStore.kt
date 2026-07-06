@@ -130,7 +130,6 @@ class SettingsStore(
         val ENABLE_SUGGESTION = booleanPreferencesKey("enable_suggestion")
         val SUGGESTION_MODEL = stringPreferencesKey("suggestion_model")
         val IMAGE_GENERATION_MODEL = stringPreferencesKey("image_generation_model")
-        val EMBEDDING_MODEL = stringPreferencesKey("embedding_model")
         val TITLE_PROMPT = stringPreferencesKey("title_prompt")
         val TRANSLATION_PROMPT = stringPreferencesKey("translation_prompt")
         val TRANSLATE_THINKING_BUDGET = intPreferencesKey("translate_thinking_budget")
@@ -202,11 +201,7 @@ class SettingsStore(
         // 赞助提醒
         val SPONSOR_ALERT_DISMISSED_AT = intPreferencesKey("sponsor_alert_dismissed_at")
 
-        // RAG 知识库
-        val RAG_VAULT_PATH = stringPreferencesKey("rag_vault_path")
-        val RAG_IGNORE_FOLDERS = stringPreferencesKey("rag_ignore_folders")
-        val RAG_IGNORE_EXTENSIONS = stringPreferencesKey("rag_ignore_extensions")
-        val RAG_INJECTION_ENABLED = booleanPreferencesKey("rag_injection_enabled")
+
     }
 
     private val dataStore = context.settingsStore
@@ -234,7 +229,6 @@ class SettingsStore(
                 enableSuggestion = preferences[ENABLE_SUGGESTION] != false,
                 suggestionModelId = preferences[SUGGESTION_MODEL]?.let { Uuid.parse(it) },
                 imageGenerationModelId = preferences[IMAGE_GENERATION_MODEL]?.let { Uuid.parse(it) } ?: Uuid.random(),
-                embeddingModelId = preferences[EMBEDDING_MODEL]?.let { Uuid.parse(it) } ?: Uuid.random(),
                 titlePrompt = preferences[TITLE_PROMPT] ?: DEFAULT_TITLE_PROMPT,
                 translatePrompt = preferences[TRANSLATION_PROMPT] ?: DEFAULT_TRANSLATION_PROMPT,
                 translateThinkingBudget = preferences[TRANSLATE_THINKING_BUDGET] ?: 0,
@@ -243,10 +237,6 @@ class SettingsStore(
                 ocrPrompt = preferences[OCR_PROMPT] ?: DEFAULT_OCR_PROMPT,
                 compressModelId = preferences[COMPRESS_MODEL]?.let { Uuid.parse(it) } ?: DEFAULT_AUTO_MODEL_ID,
                 compressPrompt = preferences[COMPRESS_PROMPT] ?: DEFAULT_COMPRESS_PROMPT,
-                ragVaultPath = preferences[RAG_VAULT_PATH] ?: "",
-                ragIgnoreFolders = preferences[RAG_IGNORE_FOLDERS] ?: "",
-                ragIgnoreExtensions = preferences[RAG_IGNORE_EXTENSIONS] ?: "",
-                ragInjectionEnabled = preferences[RAG_INJECTION_ENABLED] ?: false,
                 assistantId = preferences[SELECT_ASSISTANT]?.let { Uuid.parse(it) }
                     ?: DEFAULT_ASSISTANT_ID,
                 assistantTags = preferences[ASSISTANT_TAGS]?.let {
@@ -509,7 +499,6 @@ class SettingsStore(
                 preferences[SUGGESTION_MODEL] = it.toString()
             } ?: preferences.remove(SUGGESTION_MODEL)
             preferences[IMAGE_GENERATION_MODEL] = settings.imageGenerationModelId.toString()
-            preferences[EMBEDDING_MODEL] = settings.embeddingModelId.toString()
             preferences[TITLE_PROMPT] = settings.titlePrompt
             preferences[TRANSLATION_PROMPT] = settings.translatePrompt
             preferences[TRANSLATE_THINKING_BUDGET] = settings.translateThinkingBudget
@@ -518,10 +507,6 @@ class SettingsStore(
             preferences[OCR_PROMPT] = settings.ocrPrompt
             preferences[COMPRESS_MODEL] = settings.compressModelId.toString()
             preferences[COMPRESS_PROMPT] = settings.compressPrompt
-            preferences[RAG_VAULT_PATH] = settings.ragVaultPath
-            preferences[RAG_IGNORE_FOLDERS] = settings.ragIgnoreFolders
-            preferences[RAG_IGNORE_EXTENSIONS] = settings.ragIgnoreExtensions
-            preferences[RAG_INJECTION_ENABLED] = settings.ragInjectionEnabled
 
             preferences[PROVIDERS] = JsonInstant.encodeToString(settings.providers)
             preferences[DELETED_BUILTIN_PROVIDER_IDS] = JsonInstant.encodeToString(
@@ -678,13 +663,8 @@ data class Settings(
     val suggestionPrompt: String = DEFAULT_SUGGESTION_PROMPT,
     val ocrModelId: Uuid = Uuid.random(),
     val ocrPrompt: String = DEFAULT_OCR_PROMPT,
-    val embeddingModelId: Uuid = Uuid.random(),
     val compressModelId: Uuid = Uuid.random(),
     val compressPrompt: String = DEFAULT_COMPRESS_PROMPT,
-    val ragVaultPath: String = "",
-    val ragIgnoreFolders: String = "",
-    val ragIgnoreExtensions: String = "",
-    val ragInjectionEnabled: Boolean = false,
     val assistantId: Uuid = DEFAULT_ASSISTANT_ID,
     val providers: List<ProviderSetting> = DEFAULT_PROVIDERS,
     /**

@@ -34,7 +34,7 @@ import kotlin.uuid.Uuid
  * a thin orchestrator over those two DAO calls plus a notification post.
  *
  * Calling onReceive(context, Intent(BOOT_COMPLETED)) is skipped because it
- * requires full Koin DI (ChatService, TelegramBotPreferences, etc.) bootstrapped
+ * requires full Koin DI (ChatService, etc.) bootstrapped
  * on the instrumented process — that is tested implicitly on-device when the user
  * reboots with the app installed.
  *

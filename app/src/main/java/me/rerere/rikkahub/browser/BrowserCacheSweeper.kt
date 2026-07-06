@@ -7,7 +7,7 @@ import java.io.File
 /**
  * Best-effort cleanup of the browser screenshot cache directories. Every PNG capture
  * (foreground `browser_screenshot` + headless auto-stream after every state-changing
- * tool) writes a 1080x1920 ARGB_8888 file ≈ 7.9 MB. A long Telegram-bot session that
+ * tool) writes a 1080x1920 ARGB_8888 file ≈ 7.9 MB. A long headless session that
  * fires 50 actions with auto-stream produces ~400 MB of orphaned PNGs in app cache that
  * would otherwise sit there until the OS clears it (which on modern Android is "rarely,
  * if ever, on its own").

@@ -20,7 +20,7 @@ import android.webkit.WebView
  *    serve stripped-down content to a `wv`-marked embedded WebView)
  *
  * Those fixes lived in `BrowserView.WebViewHost` only. The headless WebView created
- * by `HeadlessBrowserSession.start` had NONE of them, so a Telegram-bot-driven
+ * by `HeadlessBrowserSession.start` had NONE of them, so a headless-driven
  * browse on the same site that the user just verified loads in foreground would
  * silently render an all-white PNG and stream it back to the user's chat.
  *

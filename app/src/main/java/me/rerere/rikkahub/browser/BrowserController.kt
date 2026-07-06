@@ -33,7 +33,7 @@ import java.lang.ref.WeakReference
  *    watches the AI navigate.
  *  - [Mode.Headless]: a [HeadlessBrowserSession] hosts the WebView in the application
  *    process, parented to an unattached layout. Used when the calling conversation is a
- *    Telegram bot / cron / sub-agent — anything `HeadlessConversations.isHeadless(convId)`
+ *    cron / sub-agent — anything `HeadlessConversations.isHeadless(convId)`
  *    returns true for. After every state-changing tool, the controller streams a screenshot
  *    + URL into the calling chat via [BrowserScreenshotStreamer].
  *
@@ -115,7 +115,7 @@ object BrowserController {
     /**
      * Serialises every read-modify-write of [mode] and [streamDedupe]. The bind/unbind
      * entry points and the per-conv de-dupe map mutate shared state from multiple coroutines
-     * (Telegram polling loop, cron worker, sub-agent), so a plain `@Volatile` on [mode] is
+     * (cron worker, sub-agent), so a plain `@Volatile` on [mode] is
      * not enough to make "check the current binding, then replace it" atomic. Without it, two
      * concurrent headless conversations can both pass [bindHeadless]'s clobber check and the
      * second silently overwrites the first — a later screenshot then routes to the wrong chat.
@@ -147,7 +147,7 @@ object BrowserController {
      * De-dupe state for [streamScreenshotIfHeadless], keyed by [Mode.Headless.callerConvId].
      * When the LLM bounces between the same/very-similar URL (e.g. minimax-m2.7 occasionally
      * calls browser_open 5x in a row trying to find a page) every state-changing tool fires
-     * the streamer, flooding the user's Telegram chat with near-identical PNGs. Skip the send
+     * the streamer, flooding the user's remote chat with near-identical PNGs. Skip the send
      * when the URL is the same as that conversation's last stream AND the last stream was
      * within [STREAM_DEDUPE_WINDOW_MS]. A click that didn't change the URL is also caught by
      * this rule (URL stays equal).
@@ -459,12 +459,12 @@ object BrowserController {
      * No-op when the controller isn't in [Mode.Headless] — foreground users watch the
      * Activity directly and don't need a streamed copy.
      *
-     * Failures are swallowed at the streamer level (a missing chat mapping, a Telegram
+     * Failures are swallowed at the streamer level (a missing chat mapping, a remote
      * outage, etc.) so a screenshot send error never bubbles up to fail the tool itself.
      * The LLM has already produced its envelope by the time we get here.
      *
      * Wiring: the streamer is resolved lazily through Koin so the controller doesn't take
-     * a constructor dep on it (would create a cycle through TelegramBotService → Koin →
+     * a constructor dep on it (would create a cycle through the streamer → Koin →
      * LocalTools → BrowserController). [BrowserScreenshotStreamer.NoOp] is the safe
      * fallback if no implementation is registered (e.g. from a JVM unit test).
      */
@@ -480,7 +480,7 @@ object BrowserController {
         data class Capture(val path: String, val url: String?)
         // Read the current URL on the main thread first. If it matches the last streamed
         // URL within STREAM_DEDUPE_WINDOW_MS, skip everything — bitmap allocation, file
-        // write, and Telegram upload. Catches three real-world cases that flood the user's
+        // write, and remote upload. Catches three real-world cases that flood the user's
         // chat with redundant PNGs:
         //   1. Click that didn't navigate (URL unchanged → diff helper marks it unchanged
         //      but the streamer still fires for the action label).

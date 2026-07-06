@@ -62,3 +62,5 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew :app:compileReleaseKotlin :ai:compileReleaseKotlin --build-cache
+
+

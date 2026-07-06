@@ -6,7 +6,7 @@ package me.rerere.rikkahub.data.ai.mcp.control
  * The header values themselves are persisted verbatim via PreferencesStore — we need the
  * real bytes to actually authenticate against the MCP server. This object is consulted only
  * by surfaces that render headers to the user / LLM / logcat: the approval prompt, the
- * `mcp_get` and `mcp_list` tool results, the Telegram inline-keyboard prompt, and any
+ * `mcp_get` and `mcp_list` tool results, the inline-keyboard prompt, and any
  * future debug log of the active MCP config.
  *
  * Matching is case-insensitive on the header name (HTTP header names are case-insensitive

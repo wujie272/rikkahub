@@ -31,7 +31,7 @@ Compress the user's notification noise into a short briefing with concrete sugge
    - Drop informational entirely UNLESS the user usually wants those (check memory).
    - Total length ≤6 short sentences.
 6. **Propose actions.** End with up to 3 concrete suggestions:
-   - "Reply to <Bob> in Telegram?"
+   - "Reply to <Bob> in WhatsApp?"
    - "Open the bank alert?"
    - "Dismiss the 14 marketing pings?"
    The user can say yes/no/skip and you do the next step.

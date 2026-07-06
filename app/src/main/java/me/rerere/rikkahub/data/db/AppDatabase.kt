@@ -17,7 +17,7 @@ import me.rerere.rikkahub.data.db.dao.MemoryDAO
 import me.rerere.rikkahub.data.db.dao.MessageNodeDAO
 import me.rerere.rikkahub.data.db.dao.ScheduledJobDao
 import me.rerere.rikkahub.data.db.dao.ScheduledJobRunDao
-import me.rerere.rikkahub.data.db.dao.GroupDao
+
 import me.rerere.rikkahub.data.db.dao.SshHostDao
 import me.rerere.rikkahub.data.db.dao.WorkspaceDAO
 import me.rerere.rikkahub.data.db.entity.ConversationEntity
@@ -30,14 +30,13 @@ import me.rerere.rikkahub.data.db.entity.MessageNodeEntity
 import me.rerere.rikkahub.data.db.entity.ScheduledJobEntity
 import me.rerere.rikkahub.data.db.entity.ScheduledJobRunEntity
 import me.rerere.rikkahub.data.db.entity.SshHostEntity
-import me.rerere.rikkahub.data.db.entity.GroupEntity
-import me.rerere.rikkahub.data.db.entity.GroupMemberEntity
+
+
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.data.db.migrations.Migration_16_17
 import me.rerere.rikkahub.data.db.migrations.Migration_20_21
 import me.rerere.rikkahub.data.db.migrations.Migration_21_22
 import me.rerere.rikkahub.data.db.migrations.Migration_22_23
-import me.rerere.rikkahub.data.db.migrations.Migration_27_28
 import me.rerere.rikkahub.data.db.migrations.Migration_29_30
 import me.rerere.rikkahub.data.db.migrations.Migration_30_31
 import me.rerere.rikkahub.data.db.migrations.Migration_8_9
@@ -61,12 +60,11 @@ import me.rerere.rikkahub.workflow.db.WorkflowRunEntity
         WorkflowEntity::class,
         WorkflowRunEntity::class,
         AgentRun::class,
-        GroupEntity::class,
-        GroupMemberEntity::class,
+
         WorkspaceEntity::class,
         FolderEntity::class,
     ],
-    version = 33,
+    version = 34,
     autoMigrations = [
         // v1→v23: Using auto-migrations for early versions (no manual migrations overlap)
         AutoMigration(from = 1, to = 2),
@@ -117,8 +115,6 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun workflowRunDao(): WorkflowRunDao
 
     abstract fun agentRunDao(): AgentRunDao
-
-    abstract fun groupDao(): GroupDao
 
     abstract fun workspaceDao(): WorkspaceDAO
 

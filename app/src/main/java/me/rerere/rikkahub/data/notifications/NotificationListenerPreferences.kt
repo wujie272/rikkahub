@@ -10,9 +10,9 @@ import kotlinx.coroutines.flow.map
 private val Context.notificationListenerDataStore by preferencesDataStore(name = "notification_listener")
 
 /**
- * Mirrors TelegramBotPreferences. Single string key under the hood, stores the whitelist as
- * a comma-separated list of package names. Keep the storage shape simple - the only consumer
- * is the listener service plus the settings page.
+ * Single string key under the hood, stores the whitelist as a comma-separated list of
+ * package names. Keep the storage shape simple - the only consumer is the listener service
+ * plus the settings page.
  */
 class NotificationListenerPreferences(private val context: Context) {
     private val store = context.notificationListenerDataStore

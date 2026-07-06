@@ -4,7 +4,6 @@ import android.content.Context
 import me.rerere.rikkahub.data.files.FileFolders
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.files.SkillManager
-import me.rerere.rikkahub.data.ai.rag.EmbeddingService
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.FavoriteRepository
 import me.rerere.rikkahub.data.repository.FolderRepository
@@ -12,27 +11,17 @@ import me.rerere.rikkahub.data.repository.FilesRepository
 import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.data.repository.GenMediaRepository
 
-import me.rerere.rikkahub.data.repository.GroupRepository
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.workspace.ProotShellRunner
 import me.rerere.workspace.RootfsInstaller
 import me.rerere.workspace.WorkspaceBindMount
 import me.rerere.workspace.WorkspaceManager
 import org.koin.dsl.module
-import androidx.room.Room
-import me.rerere.rikkahub.data.rag.RagDatabase
-import me.rerere.rikkahub.data.rag.RagIndexService
-import me.rerere.rikkahub.data.rag.RagRepository
-import me.rerere.rikkahub.data.rag.RagSearchService
 import java.io.File
 
 val repositoryModule = module {
     single {
         ConversationRepository(get(), get(), get(), get(), get(), get())
-    }
-
-    single {
-        EmbeddingService(get(), get())
     }
 
     single {
@@ -88,10 +77,6 @@ val repositoryModule = module {
     }
 
     single {
-        GroupRepository(get())
-    }
-
-    single {
         FilesManager(get(), get(), get())
     }
 
@@ -99,28 +84,6 @@ val repositoryModule = module {
         SkillManager(get(), get())
     }
 
-    single {
-        Room.databaseBuilder(
-            get<android.content.Context>(),
-            RagDatabase::class.java,
-            "rikka_hub_rag"
-        ).build()
-    }
 
-    single {
-        get<RagDatabase>().documentDao()
-    }
-
-    single {
-        RagIndexService(get(), get())
-    }
-
-    single {
-        RagSearchService(get(), get())
-    }
-
-    single {
-        RagRepository(get(), get())
-    }
 
 }

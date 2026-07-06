@@ -1062,7 +1062,7 @@ fun browserDoneTool(invocationContext: ToolInvocationContext? = null): Tool = To
             // "click the next link" doesn't have to re-open from scratch — that broke the
             // page state, cookies-in-flight, and the read screenshots stayed white because
             // we paid the page-load tax twice. browser_done now ONLY clears the per-task
-            // 5-minute timer; the session stays alive until `/new` (TelegramBotService.handleResetCommand)
+            // 5-minute timer; the session stays alive until `/new` (headless reset command)
             // or the calling FGS dies. Foreground mode behaves identically — Activity keeps
             // running as before.
             buildJsonObject { put("success", true) }

@@ -20,7 +20,7 @@ import me.rerere.ai.ui.UIMessagePart
  * Phase 13 — External Automation config tools.
  *
  * Why these are LLM-callable tools instead of a Settings page in v1:
- *  * The project's existing pattern for security-critical config (Telegram bot setup,
+ *  * The project's existing pattern for security-critical config (bot setup,
  *    SSH host management, MCP control) is chat-driven via approval-gated tools — no new
  *    Settings page per phase.
  *  * Building a polished Compose Settings screen for the External Automation toggle adds

@@ -8,7 +8,7 @@ import kotlin.uuid.Uuid
  * surface (Telegram bot, in-app, web API, cron worker) wants the model to see but does
  * NOT belong in the user message.
  *
- * Why this exists: [TelegramBotService.handleIncoming] used to prepend a `[agent_context …]`
+ * Why this exists: the headless surface used to prepend a `[agent_context …]`
  * block to every inbound user text. That worked, but it persisted the preamble inside
  * the user's `UIMessagePart.Text` — so the preamble was re-sent verbatim to the provider
  * on every subsequent turn AND every agentic-loop step. A 20-turn chat sent ~20 copies

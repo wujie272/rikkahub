@@ -126,7 +126,7 @@ class RikkaHubApp : Application() {
         startNetworkChangeMonitor()
 
         // Phase 24 — unified AgentRun ledger boot recovery. Walk the ledger once per
-        // process start: any autonomous run (cron / workflow / sub-agent / Telegram /
+        // process start: any autonomous run (cron / workflow / sub-agent /
         // external automation) left in flight by a killed process is flipped to
         // `process_lost` and a single aggregate notification is fired. This is the
         // cross-pillar generalisation of the Phase 9.5 cron stranded-row sweep and is what

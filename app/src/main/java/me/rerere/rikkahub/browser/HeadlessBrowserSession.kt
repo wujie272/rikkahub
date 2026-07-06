@@ -13,7 +13,7 @@ import java.io.File
 
 /**
  * Pass 3: hosts a WebView offscreen, in the application process, for headless AI-driven
- * browsing (Telegram bot / cron / sub-agent flows). The session is owned by a
+ * browsing (cron / sub-agent flows). The session is owned by a
  * [HeadlessBrowserSessionPool] keyed on the calling conversation id.
  *
  * **Why no system Display.** The spec considered `DisplayManager.createVirtualDisplay`
@@ -91,7 +91,7 @@ class HeadlessBrowserSession(private val context: Context) {
             // hardware layer, autoplay, UA strip, file:// access) lives in
             // configureWebViewForRikka. Before this helper existed, headless mode lacked
             // the white-page render fixes from `1ac54c4b` / `3ac3b4b4` / `a1db859c` and
-            // silently streamed all-white PNGs to the user's Telegram chat on the long
+            // silently streamed all-white PNGs to the user's remote chat on the long
             // tail of mainstream sites. See BrowserWebViewConfig.kt for the history.
             configureWebViewForRikka(this)
             // Headless mode renders via WebView.draw(canvas), which CANNOT capture
@@ -111,7 +111,7 @@ class HeadlessBrowserSession(private val context: Context) {
                     request: WebResourceRequest?,
                 ): Boolean {
                     // Same file:// navigation gate as the foreground BrowserView: headless
-                    // sessions are model-driven (Telegram/cron), so a page- or JS-initiated
+                    // sessions are model-driven (cron), so a page- or JS-initiated
                     // hop into file:// would expose app-private files to browser_get_text.
                     val toFile = request?.url?.scheme.equals("file", ignoreCase = true)
                     return toFile && view?.url?.startsWith("file:", ignoreCase = true) != true
@@ -217,7 +217,7 @@ class HeadlessBrowserSession(private val context: Context) {
  *
  * Eviction: callers are expected to call [release] on `browser_done`. As a defence against
  * forgotten teardowns, [release] is idempotent and the pool size is bounded by how many
- * concurrent headless conversations the FGS host actually keeps running — Telegram bot
+ * concurrent headless conversations the FGS host actually keeps running — cron
  * has at most one (the polling loop is single-threaded), cron jobs run sequentially in
  * their worker, and sub-agents are also serialised. So in practice the pool holds 0–1
  * sessions at a time.

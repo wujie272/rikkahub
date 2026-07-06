@@ -11,11 +11,11 @@ import org.junit.Test
  */
 class SecretRedactorTest {
 
-    @Test fun `Telegram bot tokens are redacted`() {
-        val input = "TelegramBotService: posting with token 1234567890:ABCdefGHIjklMNOpqrSTUvwxYZ_abc-def\n"
+    @Test fun `Bot tokens are redacted`() {
+        val input = "SomeService: posting with token 1234567890:ABCdefGHIjklMNOpqrSTUvwxYZ_abc-def\n"
         val out = SecretRedactor.redact(input)
         assertFalse(out.contains("1234567890:ABCdefGHIjklMNOpqrSTUvwxYZ_abc-def"))
-        assertTrue(out.contains("[redacted-telegram-token]"))
+        assertTrue(out.contains("[redacted-bot-token]"))
     }
 
     @Test fun `Authorization header is redacted`() {
