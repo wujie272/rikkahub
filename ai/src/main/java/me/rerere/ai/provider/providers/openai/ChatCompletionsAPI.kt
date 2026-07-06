@@ -294,7 +294,14 @@ class ChatCompletionsAPI(
         }
         return buildJsonObject {
             put("model", params.model.modelId)
-            put("messages", messagesArray)
+            put(
+                "messages",
+                buildMessages(
+                    messages = messages,
+                    includeHistoryReasoning = providerSetting.includeHistoryReasoning,
+                    supportInputModalities = params.model.inputModalities,
+                )
+            )
 
             if (isModelAllowTemperature(params.model)) {
                 if (params.temperature != null) put("temperature", params.temperature)
