@@ -147,8 +147,29 @@ import okhttp3.OkHttpClient
 import org.koin.android.ext.android.inject
 import org.koin.compose.koinInject
 import kotlin.uuid.Uuid
+import me.rerere.rikkahub.data.model.ChatTarget
+import me.rerere.rikkahub.utils.base64Decode
+import me.rerere.rikkahub.utils.base64Encode
+import androidx.compose.runtime.mutableStateOf
 
 private const val TAG = "RouteActivity"
+
+
+
+internal const val EXTRA_DIRECT_CHAT_TARGET_TYPE = "direct_chat_target_type"
+internal const val EXTRA_DIRECT_CHAT_TARGET_ID = "direct_chat_target_id"
+internal const val EXTRA_DIRECT_CHAT_TEXT = "direct_chat_text"
+internal const val EXTRA_DIRECT_CHAT_AUTO_SEND = "direct_chat_auto_send"
+internal const val DIRECT_CHAT_TARGET_TYPE_ASSISTANT = "assistant"
+internal const val DIRECT_CHAT_TARGET_TYPE_GROUP_CHAT = "group_chat"
+
+data class DirectChatData(
+    val targetType: String,
+    val targetId: String,
+    val text: String,
+    val autoSend: Boolean,
+)
+
 
 class RouteActivity : ComponentActivity() {
     companion object {
@@ -159,6 +180,7 @@ class RouteActivity : ComponentActivity() {
     private val okHttpClient by inject<OkHttpClient>()
     private val settingsStore by inject<SettingsStore>()
     private var navStack: MutableList<NavKey>? = null
+    private var pendingDirectChat by mutableStateOf<DirectChatData?>(null)
 
     // Volume key listener registry — last registered handler wins
     internal val volumeKeyListeners = mutableListOf<(isVolumeUp: Boolean) -> Boolean>()
@@ -259,6 +281,18 @@ class RouteActivity : ComponentActivity() {
         }
     }
 
+    private fun navigateToDirectChat(target: ChatTarget, text: String, autoSend: Boolean = false) {
+        val navStack = navStack ?: return
+        val chatId = Uuid.random()
+        navStack.clear()
+        navStack.add(Screen.Chat(
+            id = chatId.toString(),
+            text = text.base64Encode(),
+            autoSend = autoSend,
+        ))
+    }
+
+
     @OptIn(ExperimentalComposeUiApi::class)
     @Composable
     fun AppRoutes() {
@@ -277,6 +311,41 @@ class RouteActivity : ComponentActivity() {
             }
         }
         val migrationState by DatabaseMigrationTracker.state.collectAsStateWithLifecycle()
+
+    val directChatData = pendingDirectChat
+    LaunchedEffect(directChatData) {
+        val data = directChatData ?: return@LaunchedEffect
+        try {
+            val settings = settingsStore.settingsFlow.first { !it.init }
+            val target = when (data.targetType) {
+                DIRECT_CHAT_TARGET_TYPE_ASSISTANT -> {
+                    val assistantId = Uuid.parse(data.targetId)
+                    if (settings.assistants.none { it.id == assistantId }) {
+                        pendingDirectChat = null
+                        return@LaunchedEffect
+                    }
+                    ChatTarget.Assistant(assistantId)
+                }
+                DIRECT_CHAT_TARGET_TYPE_GROUP_CHAT -> {
+                    val templateId = Uuid.parse(data.targetId)
+                    if (settings.groupChatTemplates.none { it.id == templateId }) {
+                        pendingDirectChat = null
+                        return@LaunchedEffect
+                    }
+                    ChatTarget.GroupChat(templateId)
+                }
+                else -> {
+                    pendingDirectChat = null
+                    return@LaunchedEffect
+                }
+            }
+            navigateToDirectChat(target, data.text, data.autoSend)
+            pendingDirectChat = null
+        } catch (_: Exception) {
+            pendingDirectChat = null
+        }
+    }
+
 
         val startScreen = Screen.Chat(
             id = if (readBooleanPreference("create_new_conversation_on_start", true)) {
@@ -358,7 +427,8 @@ class RouteActivity : ComponentActivity() {
                                     id = Uuid.parse(key.id),
                                     text = key.text,
                                     files = key.files.map { it.toUri() },
-                                    nodeId = key.nodeId?.let { Uuid.parse(it) }
+                                    nodeId = key.nodeId?.let { Uuid.parse(it) },
+                                    autoSend = key.autoSend,
                                 )
                             }
 
@@ -689,7 +759,8 @@ sealed interface Screen : NavKey {
         val id: String,
         val text: String? = null,
         val files: List<String> = emptyList(),
-        val nodeId: String? = null
+        val nodeId: String? = null,
+        val autoSend: Boolean = false
     ) : Screen
 
     @Serializable
