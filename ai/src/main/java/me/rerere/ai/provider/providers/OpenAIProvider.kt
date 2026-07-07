@@ -38,6 +38,7 @@ import me.rerere.ai.util.KeyRoulette
 import me.rerere.ai.util.configureReferHeaders
 import me.rerere.ai.util.json
 import me.rerere.ai.util.mergeCustomBody
+import me.rerere.ai.util.proxied
 import me.rerere.ai.util.toHeaders
 import me.rerere.common.http.await
 import me.rerere.common.http.getByKey
@@ -87,7 +88,8 @@ class OpenAIProvider(
                 .get()
                 .build()
 
-            val response = client.newCall(request).await()
+            val c = client.proxied(providerSetting.proxy)
+            val response = c.newCall(request).await()
             val bodyStr = response.body.string()
             if (!response.isSuccessful) {
                 error("Failed to get models: ${response.code} $bodyStr")
@@ -147,7 +149,8 @@ class OpenAIProvider(
             .addHeader("Authorization", "Bearer $key")
             .get()
             .build()
-        val response = client.newCall(request).await()
+        val c = client.proxied(providerSetting.proxy)
+        val response = c.newCall(request).await()
         if (!response.isSuccessful) {
             error("Failed to get balance: ${response.code} ${response.body.string()}")
         }
@@ -228,7 +231,8 @@ class OpenAIProvider(
             .post(requestBody.toRequestBody("application/json".toMediaType()))
             .build()
 
-        val response = client.newCall(request).await()
+        val c = client.proxied(providerSetting.proxy)
+        val response = c.newCall(request).await()
         if (!response.isSuccessful) {
             error("Failed to generate embedding: ${response.code} ${response.body.string()}")
         }
@@ -295,7 +299,8 @@ class OpenAIProvider(
             .build()
 
         val items = withContext(Dispatchers.IO) {
-            val response = client.newCall(request).await()
+            val c = client.proxied(providerSetting.proxy)
+            val response = c.newCall(request).await()
             if (!response.isSuccessful) {
                 error("Failed to generate image: ${response.code} ${response.body.string()}")
             }
@@ -342,7 +347,8 @@ class OpenAIProvider(
             .post(json.encodeToString(body).toRequestBody("application/json".toMediaType()))
             .build()
 
-        val response = client.newCall(request).await()
+        val c = client.proxied(providerSetting.proxy)
+        val response = c.newCall(request).await()
         val bodyStr = response.body.string()
         if (!response.isSuccessful) {
             error("Failed to generate image: ${response.code} $bodyStr")
@@ -425,7 +431,8 @@ class OpenAIProvider(
             .build()
 
         val items = withContext(Dispatchers.IO) {
-            val response = client.newCall(request).await()
+            val c = client.proxied(providerSetting.proxy)
+            val response = c.newCall(request).await()
             if (!response.isSuccessful) {
                 error("Failed to edit image: ${response.code} ${response.body.string()}")
             }

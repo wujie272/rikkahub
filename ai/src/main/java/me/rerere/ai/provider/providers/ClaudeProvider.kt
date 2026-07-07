@@ -46,6 +46,7 @@ import me.rerere.ai.util.encodeBase64
 import me.rerere.ai.util.json
 import me.rerere.ai.util.mergeCustomBody
 import me.rerere.ai.util.parseErrorDetail
+import me.rerere.ai.util.proxied
 import me.rerere.ai.util.stringSafe
 import me.rerere.ai.util.toHeaders
 import me.rerere.common.http.await
@@ -100,7 +101,8 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
                 .get()
                 .build()
 
-            val response = client.newCall(request).execute()
+            val c = client.proxied(providerSetting.proxy)
+            val response = c.newCall(request).execute()
             val bodyStr = response.body.string()
             if (!response.isSuccessful) {
                 error("Failed to get models: ${response.code} $bodyStr")
@@ -169,7 +171,8 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
 
         Log.i(TAG, "generateText: ${json.encodeToString(requestBody)}")
 
-        val response = client.newCall(request).await()
+        val c = client.proxied(providerSetting.proxy)
+        val response = c.newCall(request).await()
         if (!response.isSuccessful) {
             val code = response.code
             val body = response.body.string()
@@ -321,7 +324,7 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
 
         }
 
-        val eventSource = EventSources.createFactory(client)
+        val eventSource = EventSources.createFactory(client.proxied(providerSetting.proxy))
             .newEventSource(request, listener)
 
         awaitClose {

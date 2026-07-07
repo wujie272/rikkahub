@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -51,6 +50,14 @@ fun SettingProviderProxyPage(
 ) {
     var internalProvider by remember(provider) { mutableStateOf(provider) }
     val proxy = internalProvider.proxy
+
+    // 端口字段使用独立文本状态，防止实时解析篡改用户输入，只在保存时校验
+    // 用 provider.id 做 key，切换提供商时重置，同一提供商内部不重置
+    var portText by remember(provider.id) {
+        mutableStateOf(
+            if (proxy is ProviderProxy.Http) proxy.port.toString() else "8080"
+        )
+    }
 
     Column(
         modifier = Modifier
@@ -115,14 +122,8 @@ fun SettingProviderProxyPage(
             )
 
             OutlinedTextField(
-                value = proxy.port.toString(),
-                onValueChange = { text ->
-                    val port = text.filter { it.isDigit() }.take(5).toIntOrNull()
-                        ?.coerceIn(1, 65535) ?: 8080
-                    internalProvider = internalProvider.copyProvider(
-                        proxy = proxy.copy(port = port)
-                    )
-                },
+                value = portText,
+                onValueChange = { portText = it.filter { it.isDigit() }.take(5) },
                 label = { Text(stringResource(R.string.setting_provider_page_proxy_port)) },
                 placeholder = { Text("8080") },
                 modifier = Modifier.fillMaxWidth(),
@@ -173,6 +174,14 @@ fun SettingProviderProxyPage(
         ) {
             Button(
                 onClick = {
+                    // 保存时同步端口文本到模型
+                    val proxy = internalProvider.proxy
+                    if (proxy is ProviderProxy.Http && portText.isNotBlank()) {
+                        val parsedPort = portText.toIntOrNull()?.coerceIn(1, 65535) ?: 8080
+                        internalProvider = internalProvider.copyProvider(
+                            proxy = proxy.copy(port = parsedPort)
+                        )
+                    }
                     onEdit(internalProvider)
                 },
             ) {

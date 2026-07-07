@@ -55,6 +55,7 @@ import me.rerere.ai.util.configureReferHeaders
 import me.rerere.ai.util.encodeBase64
 import me.rerere.ai.util.json
 import me.rerere.ai.util.mergeCustomBody
+import me.rerere.ai.util.proxied
 import me.rerere.ai.util.removeElements
 import me.rerere.ai.util.stringSafe
 import me.rerere.ai.util.toHeaders
@@ -133,7 +134,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                     .get()
                     .build()
             )
-            val response = client.newCall(request).await()
+            val response = client.proxied(providerSetting.proxy).newCall(request).await()
             if (response.isSuccessful) {
                 val body = response.body.string()
                 Log.d(TAG, "listModels: $body")
@@ -192,7 +193,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
             keyOverride = apiKey
         )
 
-        val response = client.newCall(request).await()
+        val response = client.proxied(providerSetting.proxy).newCall(request).await()
         if (!response.isSuccessful) {
             val code = response.code
             val body = response.body.string()
@@ -366,7 +367,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
             }
         }
 
-        val eventSource = EventSources.createFactory(client)
+        val eventSource = EventSources.createFactory(client.proxied(providerSetting.proxy))
                 .newEventSource(request, listener)
 
         awaitClose {
@@ -901,7 +902,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                 keyOverride = apiKey,
             )
 
-            val response = client.newCall(request).await()
+            val response = client.proxied(providerSetting.proxy).newCall(request).await()
             if (!response.isSuccessful) {
                 val code = response.code
                 val body = response.body.string()
@@ -959,7 +960,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                 keyOverride = apiKey,
             )
 
-            val response = client.newCall(request).await()
+            val response = client.proxied(providerSetting.proxy).newCall(request).await()
             if (!response.isSuccessful) {
                 val code = response.code
                 val body = response.body.string()
@@ -1034,7 +1035,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                     .build()
             )
 
-            val response = client.newCall(request).await()
+            val response = client.proxied(providerSetting.proxy).newCall(request).await()
             if (!response.isSuccessful) {
                 error("Failed to generate image: ${response.code} ${response.body.string()}")
             }
