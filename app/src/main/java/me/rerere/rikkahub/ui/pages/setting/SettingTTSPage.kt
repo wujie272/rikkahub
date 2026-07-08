@@ -373,6 +373,7 @@ private fun TTSProviderItem(
                             is TTSProviderSetting.XAI -> "xAI"
                             is TTSProviderSetting.MiMo -> "MiMo"
                             is TTSProviderSetting.ElevenLabs -> "ElevenLabs"
+                            is TTSProviderSetting.FishAudio -> "Fish Audio"
                             is TTSProviderSetting.Step -> "StepFun"
                         },
                         style = MaterialTheme.typography.bodySmall,

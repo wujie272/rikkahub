@@ -101,6 +101,7 @@ import me.rerere.rikkahub.data.ai.tools.local.buildJavascriptTool
 import me.rerere.rikkahub.data.ai.tools.local.buildTimeInfoTool
 import me.rerere.rikkahub.data.ai.tools.local.buildClipboardTool
 import me.rerere.rikkahub.data.ai.tools.local.buildTextToSpeechTool
+import me.rerere.tts.provider.TTSManager
 import me.rerere.rikkahub.data.ai.tools.local.LocalToolOption
 import me.rerere.rikkahub.data.ai.tools.local.buildCalendarQueryTool
 import me.rerere.rikkahub.data.ai.tools.local.buildCalendarCreateTool
@@ -249,6 +250,8 @@ class LocalTools(
     private val okHttpClient: okhttp3.OkHttpClient,
     // agent-keyboard IPC client — backs the keyboard_* tools (drives the active text field).
     private val keyboardApiClient: me.rerere.rikkahub.data.keyboard.KeyboardApiClient,
+    // Text-to-speech engine — backs the text_to_speech tool.
+    private val ttsManager: TTSManager,
 ) {
     val javascriptTool by lazy { buildJavascriptTool() }
 
@@ -256,7 +259,7 @@ class LocalTools(
 
     val clipboardTool by lazy { buildClipboardTool(context) }
 
-    val ttsTool by lazy { buildTextToSpeechTool(eventBus) }
+    val ttsTool by lazy { buildTextToSpeechTool(eventBus, ttsManager, settingsStore) }
 
     val screenTimeTool by lazy { buildScreenTimeTool(context, eventBus) }
 

@@ -30,7 +30,6 @@ import me.rerere.ai.provider.providers.openai.ChatCompletionsAPI
 import me.rerere.ai.provider.providers.openai.ResponseAPI
 import me.rerere.ai.provider.providers.openai.openRouterModelFromJson
 import me.rerere.ai.provider.providers.openai.parseImageDataUri
-import me.rerere.ai.ui.ImageAspectRatio
 import me.rerere.ai.ui.ImageGenerationItem
 import me.rerere.ai.ui.MessageChunk
 import me.rerere.ai.ui.UIMessage
@@ -276,13 +275,9 @@ class OpenAIProvider(
                 put("model", params.model.modelId)
                 put("prompt", params.prompt)
                 put("n", params.numOfImages)
-                put(
-                    "size", when (params.aspectRatio) {
-                        ImageAspectRatio.SQUARE -> "1024x1024"
-                        ImageAspectRatio.LANDSCAPE -> "1536x1024"
-                        ImageAspectRatio.PORTRAIT -> "1024x1536"
-                    }
-                )
+                if (params.size.isNotBlank()) {
+                    put("size", params.size)
+                }
             }
                 .mergeCustomBody(params.customBody)
         )
@@ -330,11 +325,7 @@ class OpenAIProvider(
             }
             put("image_config", buildJsonObject {
                 put(
-                    "aspect_ratio", when (params.aspectRatio) {
-                        ImageAspectRatio.SQUARE -> "1:1"
-                        ImageAspectRatio.LANDSCAPE -> "16:9"
-                        ImageAspectRatio.PORTRAIT -> "9:16"
-                    }
+                    "aspect_ratio", params.size
                 )
             })
         }.mergeCustomBody(params.customBody)
@@ -390,13 +381,9 @@ class OpenAIProvider(
             .addFormDataPart("model", params.model.modelId)
             .addFormDataPart("prompt", params.prompt)
             .addFormDataPart("n", params.numOfImages.toString())
-            .addFormDataPart(
-                "size", when (params.aspectRatio) {
-                    ImageAspectRatio.SQUARE -> "1024x1024"
-                    ImageAspectRatio.LANDSCAPE -> "1536x1024"
-                    ImageAspectRatio.PORTRAIT -> "1024x1536"
-                }
-            )
+        if (params.size.isNotBlank()) {
+            bodyBuilder.addFormDataPart("size", params.size)
+        }
 
         val imageFieldName = if (params.images.size == 1) "image" else "image[]"
         params.images.forEach { path ->
