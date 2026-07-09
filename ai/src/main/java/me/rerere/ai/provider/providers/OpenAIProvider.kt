@@ -30,7 +30,6 @@ import me.rerere.ai.provider.providers.openai.ChatCompletionsAPI
 import me.rerere.ai.provider.providers.openai.ResponseAPI
 import me.rerere.ai.provider.providers.openai.openRouterModelFromJson
 import me.rerere.ai.provider.providers.openai.parseImageDataUri
-import me.rerere.ai.ui.ImageAspectRatio
 import me.rerere.ai.ui.ImageGenerationItem
 import me.rerere.ai.ui.MessageChunk
 import me.rerere.ai.ui.UIMessage
@@ -326,11 +325,7 @@ class OpenAIProvider(
             }
             put("image_config", buildJsonObject {
                 put(
-                    "aspect_ratio", when (params.aspectRatio) {
-                        ImageAspectRatio.SQUARE -> "1:1"
-                        ImageAspectRatio.LANDSCAPE -> "16:9"
-                        ImageAspectRatio.PORTRAIT -> "9:16"
-                    }
+                    "aspect_ratio", params.size
                 )
             })
         }.mergeCustomBody(params.customBody)
