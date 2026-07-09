@@ -33,6 +33,8 @@ import me.rerere.ai.provider.BuiltInTools
 import me.rerere.ai.provider.EmbeddingGenerationParams
 import me.rerere.ai.provider.EmbeddingGenerationResult
 import me.rerere.ai.provider.ImageGenerationParams
+import me.rerere.ai.ui.ImageAspectRatio
+import me.rerere.ai.ui.ImageGenerationItem
 
 import me.rerere.ai.provider.Modality
 import me.rerere.ai.provider.Model
