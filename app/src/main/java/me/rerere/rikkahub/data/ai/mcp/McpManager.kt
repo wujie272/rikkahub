@@ -590,6 +590,7 @@ class McpManager(
                     }
                 }
             }
+        }
     }
 
     private suspend fun setStatus(config: McpServerConfig, status: McpStatus) {
