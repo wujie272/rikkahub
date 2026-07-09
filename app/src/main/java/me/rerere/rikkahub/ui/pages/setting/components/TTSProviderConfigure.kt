@@ -453,7 +453,7 @@ private fun MiniMaxTTSConfiguration(
         }
     }
 
-D
+
     // Emotion
     var emotionExpanded by remember { mutableStateOf(false) }
     val emotions = listOf("calm", "happy", "sad", "angry", "fearful", "disgusted", "surprised")
@@ -1180,7 +1180,7 @@ private fun FishAudioTTSConfiguration(
                 },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .menuAnchor(MenuAnchorType.PrimaryEditable),
+                    .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable),
                 trailingIcon = {
                     ExposedDropdownMenuDefaults.TrailingIcon(expanded = modelExpanded)
                 }
