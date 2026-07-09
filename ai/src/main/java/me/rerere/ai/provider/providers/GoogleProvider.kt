@@ -1071,5 +1071,4 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
             emit(item)
         }
     }
-upstream/master
 }
