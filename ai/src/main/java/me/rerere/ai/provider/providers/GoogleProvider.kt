@@ -26,6 +26,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
+import kotlinx.serialization.json.putJsonObject
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.TokenUsage
@@ -33,7 +34,6 @@ import me.rerere.ai.provider.BuiltInTools
 import me.rerere.ai.provider.EmbeddingGenerationParams
 import me.rerere.ai.provider.EmbeddingGenerationResult
 import me.rerere.ai.provider.ImageGenerationParams
-import me.rerere.ai.ui.ImageAspectRatio
 import me.rerere.ai.ui.ImageGenerationItem
 
 import me.rerere.ai.provider.Modality
@@ -1012,11 +1012,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                 putJsonObject("parameters") {
                     put("sampleCount", params.numOfImages)
                     put(
-                        "aspectRatio", when (params.aspectRatio) {
-                            ImageAspectRatio.SQUARE -> "1:1"
-                            ImageAspectRatio.LANDSCAPE -> "16:9"
-                            ImageAspectRatio.PORTRAIT -> "9:16"
-                        }
+                        "aspectRatio", params.size
                     )
                 }
             }.mergeCustomBody(params.customBody)
