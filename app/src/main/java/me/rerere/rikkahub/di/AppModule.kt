@@ -188,6 +188,7 @@ val appModule = module {
             storageVolumeGrantStore = get(),
             okHttpClient = get(),
             keyboardApiClient = get(),
+            ttsManager = get(),
         )
 
     }

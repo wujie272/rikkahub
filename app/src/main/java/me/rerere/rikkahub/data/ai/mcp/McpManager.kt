@@ -570,24 +570,24 @@ class McpManager(
                 if (currentStatus == McpStatus.Connected) {
                     scheduleReconnect(config)
                 }
+            }
 
-                clients[config] = client
-                setStatus(config, McpStatus.Connecting)
-                runCatching {
-                    client.connect(transport)
-                    sync(config)
-                }.onSuccess {
-                    setStatus(config, McpStatus.Connected)
-                    reconnectAttempts[config.id] = 0 // 重置重连计数
-                    Log.i(TAG, "Reconnected successfully: ${config.commonOptions.name}")
-                }.onFailure { e ->
-                    // 令牌失效/需要授权时停止重连，引导用户重新授权
-                    if (needsAuthorization(config, e)) {
-                        cancelReconnect(config.id)
-                        setStatus(config, McpStatus.NeedsAuthorization)
-                    } else {
-                        throw e
-                    }
+            clients[config] = client
+            setStatus(config, McpStatus.Connecting)
+            runCatching {
+                client.connect(transport)
+                sync(config)
+            }.onSuccess {
+                setStatus(config, McpStatus.Connected)
+                reconnectAttempts[config.id] = 0 // 重置重连计数
+                Log.i(TAG, "Reconnected successfully: ${config.commonOptions.name}")
+            }.onFailure { e ->
+                // 令牌失效/需要授权时停止重连，引导用户重新授权
+                if (needsAuthorization(config, e)) {
+                    cancelReconnect(config.id)
+                    setStatus(config, McpStatus.NeedsAuthorization)
+                } else {
+                    throw e
                 }
             }
         }
