@@ -1985,4 +1985,20 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="text_selection_how_it_works">使用说明</string>
   <string name="text_selection_copy">复制</string>
   <string name="text_selection_send_to_conversation">发送到对话</string>
+<!-- Text Selection Settings (Android Integration Page) -->
+  <string name="text_selection_assistant">助手</string>
+  <string name="text_selection_translate_language">翻译目标语言</string>
+  <string name="text_selection_actions">快捷动作</string>
+  <string name="text_selection_edit_action">编辑动作</string>
+  <string name="text_selection_action_prompt">提示词</string>
+  <string name="text_selection_action_variable">可用变量: %1$s</string>
+  <string name="text_selection_model">模型</string>
+  <string name="text_selection_actions_reset_to_defaults">已重置为默认</string>
+  <string name="text_selection_actions_reset_to_defaults_desc">恢复默认提示词和设置</string>
+  <string name="text_selection_actions_reset_to_defaults_confirm">确定将所有动作恢复为默认提示词？</string>
+  <string name="text_selection_add_action">添加动作</string>
+  <string name="reset">重置为默认</string>
+  <string name="none">无</string>
+  <string name="save">保存</string>
+  <string name="undo">撤销</string>
 </resources>

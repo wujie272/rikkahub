@@ -1994,4 +1994,20 @@
 
   <string name="group_chat_default_name">Group Chat</string>
   <string name="group_chat_template_create">Create a group chat template</string>
+<!-- Text Selection Settings (Android Integration Page) -->
+  <string name="text_selection_assistant">Assistant</string>
+  <string name="text_selection_translate_language">Translate to</string>
+  <string name="text_selection_actions">Quick Actions</string>
+  <string name="text_selection_edit_action">Edit Action</string>
+  <string name="text_selection_action_prompt">Prompt</string>
+  <string name="text_selection_action_variable">Available variable: %1$s</string>
+  <string name="text_selection_model">Model</string>
+  <string name="text_selection_actions_reset_to_defaults">Reset to defaults</string>
+  <string name="text_selection_actions_reset_to_defaults_desc">Restore default prompts and settings</string>
+  <string name="text_selection_actions_reset_to_defaults_confirm">Restore all actions to their default prompts?</string>
+  <string name="text_selection_add_action">Add Action</string>
+  <string name="reset">Reset to defaults</string>
+  <string name="none">None</string>
+  <string name="save">Save</string>
+  <string name="undo">Undo</string>
 </resources>
