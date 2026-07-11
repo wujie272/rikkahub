@@ -174,6 +174,10 @@ private fun WebViewHost(
                 override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                     super.onPageStarted(view, url, favicon)
                     if (url != null) onUrlChange(url)
+                    // Inject anti-bot shim on every page load to hide WebView fingerprinting
+                    // signals. X/Twitter, Cloudflare, and other sites serve truncated pages
+                    // when they detect navigator.webdriver or missing chrome/runtime.
+                    view?.evaluateJavascript(ANTI_BOT_SHIM_JS, null)
                 }
                 override fun onPageFinished(view: WebView?, url: String?) {
                     super.onPageFinished(view, url)

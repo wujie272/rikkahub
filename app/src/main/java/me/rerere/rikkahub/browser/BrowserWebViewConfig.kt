@@ -48,12 +48,12 @@ internal fun configureWebViewForRikka(webView: WebView) {
         @Suppress("DEPRECATION")
         allowFileAccessFromFileURLs = true
         allowContentAccess = false
-        // useWideViewPort = false — 让 WebView 直接以设备宽度渲染。
-        // 对于有 viewport meta 标签的现代响应式网站（X, Instagram 等），
-        // useWideViewPort=true 会让 WebView 以 800px+ 宽渲染，
-        // 导致页面内容只显示在左上角一小块区域。
-        // 关闭后，X 的登录页就能正常居中显示了。
-        useWideViewPort = false
+        // useWideViewPort + loadWithOverviewMode: 保持 WebView 默认行为。
+        // useWideViewPort=true 让 WebView 自适应 viewport meta 标签的宽度，
+        // loadWithOverviewMode=false 让它不要缩放到屏幕宽度（这会导致
+        // 响应式页面内容被压到顶部）。这样配合后，移动端页面正常渲染，
+        // 桌面端页面也不会被奇怪地缩放。
+        useWideViewPort = true
         loadWithOverviewMode = false
         setSupportMultipleWindows(false)
         javaScriptCanOpenWindowsAutomatically = false

@@ -120,6 +120,7 @@ class HeadlessBrowserSession(private val context: Context) {
                 override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) {
                     super.onPageStarted(view, url, favicon)
                     view.evaluateJavascript(VISIBILITY_SHIM_JS, null)
+                    view.evaluateJavascript(ANTI_BOT_SHIM_JS, null)
                 }
             }
             // Per-WebView third-party cookie enable — must be called after the WebView
