@@ -122,6 +122,10 @@ import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesUIPage
 import me.rerere.rikkahub.ui.pages.setting.SettingThemePage
 import me.rerere.rikkahub.ui.pages.setting.SettingDonatePage
 import me.rerere.rikkahub.ui.pages.setting.SettingFilesPage
+import me.rerere.rikkahub.ui.pages.knowledge.KnowledgeBaseListPage
+import me.rerere.rikkahub.ui.pages.knowledge.KnowledgeBaseDetailPage
+import me.rerere.rikkahub.ui.pages.knowledge.KnowledgeEditPage
+import me.rerere.rikkahub.ui.pages.knowledge.DocumentChunkViewPage
 import me.rerere.rikkahub.ui.pages.setting.SettingMcpPage
 import me.rerere.rikkahub.ui.pages.setting.SettingModelPage
 import me.rerere.rikkahub.ui.pages.setting.SettingPage
@@ -670,6 +674,22 @@ class RouteActivity : ComponentActivity() {
                                 StatsPage()
                             }
 
+                            entry<Screen.KnowledgeBase> {
+                                KnowledgeBaseListPage()
+                            }
+
+                            entry<Screen.KnowledgeBaseDetail> { key ->
+                                KnowledgeBaseDetailPage(kbId = key.id)
+                            }
+
+                            entry<Screen.KnowledgeBaseEdit> { key ->
+                                KnowledgeEditPage(kbId = key.id)
+                            }
+
+                            entry<Screen.KnowledgeBaseChunks> { key ->
+                                DocumentChunkViewPage(kbId = key.id, filePath = key.filePath)
+                            }
+
                         }
                     )
                     if (BuildConfig.DEBUG) {
@@ -915,6 +935,18 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object Stats : Screen
+
+    @Serializable
+    data object KnowledgeBase : Screen
+
+    @Serializable
+    data class KnowledgeBaseDetail(val id: String) : Screen
+
+    @Serializable
+    data class KnowledgeBaseEdit(val id: String? = null) : Screen
+
+    @Serializable
+    data class KnowledgeBaseChunks(val id: String, val filePath: String) : Screen
 
 }
 

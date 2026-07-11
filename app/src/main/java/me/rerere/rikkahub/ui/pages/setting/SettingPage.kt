@@ -323,6 +323,12 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         },
                         headlineContent = { Text(stringResource(R.string.setting_page_chat_storage)) },
                     )
+                    item(
+                        onClick = { navController.navigate(Screen.KnowledgeBase) },
+                        leadingContent = { Icon(HugeIcons.Book03, null) },
+                        supportingContent = { Text("管理知识库，上传文档进行语义搜索") },
+                        headlineContent = { Text("知识库") },
+                    )
                 }
             }
 
