@@ -54,7 +54,6 @@ import me.rerere.hugeicons.stroke.Sparkles
 import me.rerere.hugeicons.stroke.Translate
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.SettingsStore
-import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.TextSelectionAction
 import me.rerere.rikkahub.data.model.TextSelectionConfig
 import me.rerere.rikkahub.ui.components.ai.ModelSelector
@@ -65,15 +64,6 @@ import com.dokar.sonner.ToastType
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.utils.plus
 import org.koin.compose.koinInject
-
-private fun assistantName(assistant: me.rerere.rikkahub.data.model.Assistant): String {
-    return assistant.name.ifEmpty {
-        val systemPromptPreview = assistant.systemPrompt.take(30).replace("
-", " ").trim()
-        if (systemPromptPreview.isNotEmpty()) "Assistant: ${systemPromptPreview}..."
-        else "Assistant (${assistant.id.toString().take(8)})"
-    }
-}
 
 private val COMMON_LANGUAGES = listOf(
     "English", "Spanish", "French", "German", "Italian", "Portuguese",
@@ -158,12 +148,8 @@ fun SettingAndroidIntegrationPage(
                         supportingContent = {
                             Text(
                                 config.assistantId?.let { id ->
-                                    settings.assistants.find { it.id == id }?.name?.ifEmpty {
-                                        settings.assistants.find { it.id == id }?.let { assistantName(it) }
-                                    }
-                                } ?: defaultAssistant?.name?.ifEmpty {
-                                    defaultAssistant?.let { assistantName(it) }
-                                } ?: stringResource(R.string.none)
+                                    settings.assistants.find { it.id == id }?.name
+                                } ?: defaultAssistant?.name ?: stringResource(R.string.none)
                             )
                         },
                         trailingContent = {
@@ -181,8 +167,7 @@ fun SettingAndroidIntegrationPage(
                                 optionToString = { idStr ->
                                     try {
                                         val uuid = kotlin.uuid.Uuid.parse(idStr)
-                                        val a = settings.assistants.find { it.id == uuid }
-                                        a?.name?.ifEmpty { assistantName(a) } ?: "Unknown"
+                                        settings.assistants.find { it.id == uuid }?.name ?: "Unknown"
                                     } catch (_: Exception) { "Unknown" }
                                 },
                                 modifier = Modifier.width(150.dp)

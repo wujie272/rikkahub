@@ -357,8 +357,14 @@ class SettingsStore(
             }.toMutableList()
             var assistants = it.assistants.ifEmpty { DEFAULT_ASSISTANTS }.toMutableList()
             DEFAULT_ASSISTANTS.forEach { defaultAssistant ->
-                if (assistants.none { it.id == defaultAssistant.id }) {
+                val existing = assistants.find { a -> a.id == defaultAssistant.id }
+                if (existing == null) {
                     assistants.add(defaultAssistant.copy())
+                } else if (existing.name.isBlank()) {
+                    // One-shot name fix for existing users whose default assistants were
+                    // persisted with empty names. Only patches the name field — everything
+                    // else the user may have customized (systemPrompt, skills, etc.) stays.
+                    assistants[assistants.indexOf(existing)] = existing.copy(name = defaultAssistant.name)
                 }
             }
             // One-shot upgrade for existing installs that pre-date the agent-core auto-load:
@@ -888,7 +894,7 @@ internal val DEFAULT_AUTO_ENABLED_SKILLS = setOf("autonomous-agent", "openclaw-c
 internal val DEFAULT_ASSISTANTS = listOf(
     Assistant(
         id = DEFAULT_ASSISTANT_ID,
-        name = "",
+        name = "Default",
         systemPrompt = "",
         // The agent-core skill bundle (SOUL/HEARTBEAT/TOOLS) ships with the app and is what
         // teaches every model "you are running on RikkaHub, here are the tools, here is how
@@ -898,7 +904,7 @@ internal val DEFAULT_ASSISTANTS = listOf(
     ),
     Assistant(
         id = Uuid.parse("3d47790c-c415-4b90-9388-751128adb0a0"),
-        name = "",
+        name = "Default (with prompt)",
         systemPrompt = """
             You are a helpful assistant, called {{char}}, based on model {{model_name}}.
 
