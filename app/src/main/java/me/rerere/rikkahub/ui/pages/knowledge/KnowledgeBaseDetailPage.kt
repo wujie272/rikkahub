@@ -102,7 +102,7 @@ fun KnowledgeBaseDetailPage(
 
     // File picker
     val filePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
+        contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         if (uri != null) {
             scope.launch {
