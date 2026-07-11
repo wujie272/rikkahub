@@ -48,15 +48,27 @@ internal fun configureWebViewForRikka(webView: WebView) {
         @Suppress("DEPRECATION")
         allowFileAccessFromFileURLs = true
         allowContentAccess = false
-        useWideViewPort = true
-        loadWithOverviewMode = true
+        // useWideViewPort = false — 让 WebView 直接以设备宽度渲染。
+        // 对于有 viewport meta 标签的现代响应式网站（X, Instagram 等），
+        // useWideViewPort=true 会让 WebView 以 800px+ 宽渲染，
+        // 导致页面内容只显示在左上角一小块区域。
+        // 关闭后，X 的登录页就能正常居中显示了。
+        useWideViewPort = false
+        loadWithOverviewMode = false
         setSupportMultipleWindows(false)
         javaScriptCanOpenWindowsAutomatically = false
         mediaPlaybackRequiresUserGesture = false
         builtInZoomControls = true
         displayZoomControls = false
         mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
-        userAgentString = userAgentString.replace("; wv)", ")")
+        // Full Chrome mobile UA instead of just stripping "wv" — X/Twitter and other
+        // sites detect WebView via navigator.webdriver, User-Agent inconsistencies,
+        // and other fingerprinting signals. A real Chrome UA reduces WebView blocking.
+        val chromeMobileUA = "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.6478.122 Mobile Safari/537.36"
+        userAgentString = chromeMobileUA
+
+        // Capture the mobile UA for desktop mode toggle restoration
+        BrowserController.mobileUA = userAgentString
     }
     // Hardware layer hint. For the foreground Activity's WebView this fixes a Compose
     // AndroidView interop quirk that produces all-white pages. For headless capture via
@@ -64,4 +76,24 @@ internal fun configureWebViewForRikka(webView: WebView) {
     // software path automatically — calling this is harmless either way and keeps the
     // two code paths identical.
     webView.setLayerType(View.LAYER_TYPE_HARDWARE, null)
+
+    // WebViewClient delegation for anti-bot shim injection
 }
+
+/** JS injected on every page start to hide WebView/bot fingerprinting signals. */
+internal const val ANTI_BOT_SHIM_JS = """
+(function(){
+    try {
+        // Hide navigator.webdriver — sites like X/Twitter check this flag
+        Object.defineProperty(navigator, 'webdriver', {get: function(){return undefined;}, configurable: true});
+        // Spoof chrome object presence (real Chrome has it, WebView lacks it)
+        if (window.chrome === undefined) {
+            Object.defineProperty(window, 'chrome', {value: {runtime: {}}, configurable: true});
+        }
+        // Override plugins to look like Chrome mobile has them
+        Object.defineProperty(navigator, 'plugins', {get: function(){return [1,2,3,4,5];}, configurable: true});
+        // Override languages to match Chrome defaults
+        Object.defineProperty(navigator, 'languages', {get: function(){return ['en-US','en','zh-CN','zh'];}, configurable: true});
+    } catch(e) { /* best-effort */ }
+})();
+"""

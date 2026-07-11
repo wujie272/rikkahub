@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.CoroutineScope
@@ -41,17 +42,22 @@ class BrowserPreferences(private val context: Context) {
     private val perToolTimeoutKey = longPreferencesKey("per_tool_timeout_ms")
     private val singleTaskTimeoutKey = longPreferencesKey("single_task_timeout_ms")
 
+    // --- Search engine ------------------------------------------------------------
+
+    private val searchEngineIndexKey = intPreferencesKey("search_engine_index")
+
     init {
-        // Push the persisted (or default) timeout values into [BrowserController] — the
-        // synchronous runtime source of truth read by every browser tool's withTimeoutOrNull
-        // and the task-window check. BrowserPreferences is a Koin singleton constructed at
-        // app start, so this collector arms the values before the first tool call and keeps
-        // them in sync when the user edits them in Settings → Browser.
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         scope.launch {
             perToolTimeoutFlow()
                 .distinctUntilChanged()
                 .onEach { BrowserController.perToolTimeoutMs = it }
+                .collect {}
+        }
+        scope.launch {
+            searchEngineIndexFlow()
+                .distinctUntilChanged()
+                .onEach { BrowserController.searchEngineIndex = it }
                 .collect {}
         }
         scope.launch {
@@ -61,6 +67,8 @@ class BrowserPreferences(private val context: Context) {
                 .collect {}
         }
     }
+
+    // --- Timeout flows ------------------------------------------------------------
 
     /** Per-tool timeout (ms). Missing-key safe; always clamped into the supported range. */
     fun perToolTimeoutFlow(): Flow<Long> = store.data.map { prefs ->
@@ -86,6 +94,22 @@ class BrowserPreferences(private val context: Context) {
     suspend fun setSingleTaskTimeoutMs(ms: Long) {
         store.edit { it[singleTaskTimeoutKey] = BrowserToolDefaults.clampSingleTaskTimeoutMs(ms) }
     }
+
+    // --- Search engine ------------------------------------------------------------
+
+    /** Observable search engine index flow. */
+    fun searchEngineIndexFlow(): Flow<Int> = store.data.map { prefs ->
+        BrowserToolDefaults.clampSearchEngineIndex(
+            prefs[searchEngineIndexKey] ?: BrowserToolDefaults.DEFAULT_SEARCH_ENGINE_INDEX
+        )
+    }
+
+    /** Persist the search engine index. */
+    suspend fun setSearchEngineIndex(index: Int) {
+        store.edit { it[searchEngineIndexKey] = BrowserToolDefaults.clampSearchEngineIndex(index) }
+    }
+
+    // --- Tool toggles -------------------------------------------------------------
 
     /**
      * Reads the current toggle state for [toolName], falling back to
@@ -125,12 +149,6 @@ class BrowserPreferences(private val context: Context) {
      * Blocking variant of [snapshot] for callers that aren't already in a coroutine.
      * Used by [me.rerere.rikkahub.data.ai.tools.LocalTools.getTools] which is non-suspend
      * (called from ChatService / CronJobWorker / etc — all already on background dispatchers).
-     *
-     * DataStore caches the latest [Preferences] instance after the first read, so steady-state
-     * cost is a flow `.first()` against an in-memory replay — measured in microseconds. The
-     * ONLY scenario this could stall is the very first read after process start before the
-     * file is decoded; the alternative (forcing every getTools caller to be suspend) ripples
-     * through the entire generation path for what is, at most, a single-digit-millisecond hit.
      */
     fun snapshotBlocking(): Map<String, Boolean> = kotlinx.coroutines.runBlocking { snapshot() }
 }

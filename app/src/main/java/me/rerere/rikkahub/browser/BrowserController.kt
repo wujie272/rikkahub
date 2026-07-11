@@ -63,6 +63,34 @@ object BrowserController {
      */
     @Volatile
     var perToolTimeoutMs: Long = BrowserToolDefaults.DEFAULT_PER_TOOL_TIMEOUT_MS
+
+    /**
+     * Current search engine index (0-based into [BrowserToolDefaults.SEARCH_ENGINES]).
+     * Synced from [BrowserPreferences] at app start and on every edit.
+     */
+    @Volatile
+    var searchEngineIndex: Int = BrowserToolDefaults.DEFAULT_SEARCH_ENGINE_INDEX
+
+    /** Get the current search engine URL template. */
+    fun currentSearchEngineUrlTemplate(): String =
+        BrowserToolDefaults.SEARCH_ENGINES.getOrNull(searchEngineIndex)?.urlTemplate
+            ?: BrowserToolDefaults.SEARCH_ENGINES.first().urlTemplate
+    /**
+     * Desktop mode toggle: when true, the WebView sends a desktop-class User-Agent.
+     * Read by BrowserActivity on menu toggle; persisted in memory (not DataStore —
+     * a simple per-session toggle is intentional, matching Chrome's "Request Desktop
+     * Site" behaviour that resets on tab close).
+     */
+    @Volatile
+    var desktopMode: Boolean = false
+
+    /** Desktop-class User-Agent (Chrome on Windows). */
+    const val DESKTOP_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+
+    /** Mobile UA captured from configureWebViewForRikka, used to restore from desktop mode. */
+    @Volatile
+    var mobileUA: String? = null
+
     /** Cache subdir for streamed (headless) screenshots — separate from the `browser-shots`
      *  subdir the explicit browser_screenshot tool writes into so the streamer pipe can be
      *  swept independently if it ever grows unbounded. */

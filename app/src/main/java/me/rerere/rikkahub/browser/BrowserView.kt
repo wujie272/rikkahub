@@ -59,6 +59,8 @@ fun BrowserView(
     onForwardTap: () -> Unit,
     onRefreshTap: () -> Unit,
     onStopAi: () -> Unit,
+    onToggleDesktopMode: () -> Unit,
+    onOpenInBrowser: () -> Unit,
     onNavigate: (String) -> Unit,
     initialUrl: String,
     conversationId: Uuid?,
@@ -74,6 +76,8 @@ fun BrowserView(
                 onForward = onForwardTap,
                 onRefresh = onRefreshTap,
                 onStopAi = onStopAi,
+                onToggleDesktopMode = onToggleDesktopMode,
+                onOpenInBrowser = onOpenInBrowser,
                 onNavigate = onNavigate,
             )
         },

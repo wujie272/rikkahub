@@ -22,6 +22,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -51,7 +55,7 @@ import org.koin.androidx.compose.koinViewModel
  *     write tools default OFF, loop-control ON. Per the spec, the per-tool granularity
  *     is intentional — the AI controlling a real browser is the highest-trust surface
  *     in the app, so the user must be able to grant only what they trust.
- *  3. Defaults & limits — search engine (forward-compat dropdown, no-op in v1),
+ *  3. Defaults & limits — search engine (dropdown picker),
  *     per-tool timeout, single-task timeout. The two timeouts are editable (GitHub issue
  *     #4): values are clamped into a generous-but-bounded range in BrowserPreferences.
  */
@@ -169,6 +173,34 @@ fun SettingBrowserPage(
                 item(
                     headlineContent = { Text(stringResource(R.string.setting_browser_search_engine)) },
                     supportingContent = { Text(stringResource(R.string.setting_browser_search_engine_desc)) },
+                    trailingContent = {
+                        val currentIndex by vm.searchEngineIndex.collectAsStateWithLifecycle()
+                        val engines = remember { BrowserToolDefaults.SEARCH_ENGINES }
+                        var expanded by remember { mutableStateOf(false) }
+
+                        Box {
+                            Text(
+                                text = engines.getOrNull(currentIndex)?.name ?: engines.first().name,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.clickable { expanded = true },
+                            )
+                            DropdownMenu(
+                                expanded = expanded,
+                                onDismissRequest = { expanded = false },
+                            ) {
+                                engines.forEachIndexed { index, engine ->
+                                    DropdownMenuItem(
+                                        text = { Text(engine.name) },
+                                        onClick = {
+                                            vm.setSearchEngineIndex(index)
+                                            expanded = false
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                    },
                 )
                 // Per-tool timeout — editable, expressed in seconds. Clamped to 10 s..10 min
                 // in BrowserPreferences before persist (GitHub issue #4).

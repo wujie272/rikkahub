@@ -12,6 +12,28 @@ package me.rerere.rikkahub.browser
  */
 object BrowserToolDefaults {
 
+    // --- Search engine definitions ---------------------------------------------------
+
+    data class SearchEngine(
+        val name: String,
+        /** URL template: the search query will be URL-encoded and appended. */
+        val urlTemplate: String,
+    )
+
+    val SEARCH_ENGINES: List<SearchEngine> = listOf(
+        SearchEngine("DuckDuckGo", "https://duckduckgo.com/?q="),
+        SearchEngine("Google", "https://www.google.com/search?q="),
+        SearchEngine("Bing", "https://www.bing.com/search?q="),
+        SearchEngine("Brave", "https://search.brave.com/search?q="),
+        SearchEngine("Startpage", "https://www.startpage.com/do/dsearch?query="),
+    )
+
+    const val DEFAULT_SEARCH_ENGINE_INDEX = 0 // DuckDuckGo
+
+    /** Build a search URL from a query string using the given engine template. */
+    fun buildSearchUrl(query: String, engineUrlTemplate: String): String =
+        "$engineUrlTemplate${java.net.URLEncoder.encode(query, "UTF-8")}"
+
     // --- Read tools (default ON) --------------------------------------------------------------
     const val OPEN = "browser_open"
     const val CURRENT_URL = "browser_current_url"
@@ -107,4 +129,8 @@ object BrowserToolDefaults {
     /** Clamp a single-task timeout (ms) into the supported range. */
     fun clampSingleTaskTimeoutMs(ms: Long): Long =
         ms.coerceIn(MIN_SINGLE_TASK_TIMEOUT_MS, MAX_SINGLE_TASK_TIMEOUT_MS)
+
+    /** Clamp a search engine index into the supported range. */
+    fun clampSearchEngineIndex(index: Int): Int =
+        index.coerceIn(0, SEARCH_ENGINES.size - 1)
 }

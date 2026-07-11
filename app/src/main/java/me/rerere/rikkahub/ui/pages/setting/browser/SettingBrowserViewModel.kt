@@ -39,6 +39,13 @@ class SettingBrowserViewModel(
         initialValue = BrowserToolDefaults.DEFAULT_SINGLE_TASK_TIMEOUT_MS,
     )
 
+    /** Search engine index (0-based into [BrowserToolDefaults.SEARCH_ENGINES]). */
+    val searchEngineIndex: StateFlow<Int> = prefs.searchEngineIndexFlow().stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5_000),
+        initialValue = BrowserToolDefaults.DEFAULT_SEARCH_ENGINE_INDEX,
+    )
+
     fun setToolEnabled(toolName: String, enabled: Boolean) {
         viewModelScope.launch { prefs.setToolEnabled(toolName, enabled) }
     }
@@ -53,12 +60,14 @@ class SettingBrowserViewModel(
         viewModelScope.launch { prefs.setSingleTaskTimeoutMs(minutes * 60_000L) }
     }
 
+    /** Persist the search engine index. */
+    fun setSearchEngineIndex(index: Int) {
+        viewModelScope.launch { prefs.setSearchEngineIndex(index) }
+    }
+
     /**
      * Wipes the WebView profile dir + cookies. Tool-toggle state is intentionally NOT
      * cleared — those are user config, not browsing data.
-     *
-     * Done on Dispatchers.IO; the cookie API on the main thread is safe but the dir
-     * recursion isn't. [onDone] fires on the main thread once both have completed.
      */
     fun clearBrowsingData(context: Context, onDone: () -> Unit) {
         viewModelScope.launch {
@@ -71,8 +80,6 @@ class SettingBrowserViewModel(
                     profileDir.mkdirs()
                 }
             }
-            // CookieManager removeAllCookies dispatches its callback on the main thread; we
-            // don't need the callback's value, just need to issue the call.
             CookieManager.getInstance().removeAllCookies(null)
             CookieManager.getInstance().flush()
             onDone()
