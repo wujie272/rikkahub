@@ -174,14 +174,20 @@ private fun WebViewHost(
                 override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                     super.onPageStarted(view, url, favicon)
                     if (url != null) onUrlChange(url)
-                    // Inject anti-bot shim on every page load to hide WebView fingerprinting
-                    // signals. X/Twitter, Cloudflare, and other sites serve truncated pages
-                    // when they detect navigator.webdriver or missing chrome/runtime.
+                    // Inject anti-bot shim early. evaluateJavascript in onPageStarted
+                    // queues the script on the JS engine before the page's HTML is
+                    // fully parsed, so navigator.webdriver/plugins/chrome spoofing
+                    // is in place before X/Twitter/etc detection scripts execute.
                     view?.evaluateJavascript(ANTI_BOT_SHIM_JS, null)
                 }
                 override fun onPageFinished(view: WebView?, url: String?) {
                     super.onPageFinished(view, url)
                     if (url != null) onUrlChange(url)
+                    // Safety net: re-inject shim after page load. Some SPAs (X/Twitter)
+                    // use client-side routing and may not trigger onPageStarted for
+                    // sub-page navigations, so the shim might not be present on the
+                    // login page when navigating from home.
+                    view?.evaluateJavascript(ANTI_BOT_SHIM_JS, null)
                     onCanGoBackChange(view?.canGoBack() == true)
                     onCanGoForwardChange(view?.canGoForward() == true)
                     // Adb-friendly white-page diagnostic. Tag = "RikkaWebView". Filter:
