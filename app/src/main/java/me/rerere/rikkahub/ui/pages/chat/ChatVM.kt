@@ -13,6 +13,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
@@ -33,6 +35,8 @@ import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.data.model.NodeFavoriteTarget
 import me.rerere.rikkahub.data.repository.ConversationRepository
+import me.rerere.rikkahub.data.knowledge.KnowledgeBaseEntity
+import me.rerere.rikkahub.data.knowledge.KnowledgeService
 import me.rerere.rikkahub.data.repository.FavoriteRepository
 import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.service.ChatService
@@ -54,6 +58,7 @@ class ChatVM(
     val updateChecker: UpdateChecker,
     private val filesManager: FilesManager,
     private val favoriteRepository: FavoriteRepository,
+    private val knowledgeService: KnowledgeService,
 ) : ViewModel() {
     private val _conversationId: Uuid = Uuid.parse(id)
     val conversation: StateFlow<Conversation> = chatService.getConversationFlow(_conversationId)
@@ -109,6 +114,35 @@ class ChatVM(
         settings.getCurrentChatModel()
     }.stateIn(viewModelScope, SharingStarted.Lazily, null)
 
+    // 知识库相关
+    private val _knowledgeBases = MutableStateFlow<List<KnowledgeBaseEntity>>(emptyList())
+    val knowledgeBases: StateFlow<List<KnowledgeBaseEntity>> = _knowledgeBases.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            _knowledgeBases.value = knowledgeService.getAllKnowledgeBases()
+        }
+    }
+
+    fun setKnowledgeBase(kbId: String?) {
+        viewModelScope.launch {
+            val current = conversation.value
+            val newId = kbId?.let { kotlin.uuid.Uuid.parse(it) }
+            updateConversation(current.copy(knowledgeBaseId = newId))
+            saveConversationAsync()
+        }
+    }
+
+    fun removeKnowledgeBase() {
+        viewModelScope.launch {
+            val current = conversation.value
+            updateConversation(current.copy(knowledgeBaseId = null))
+            saveConversationAsync()
+        }
+    }
+
+    // 错误状态
+
     // 错误状态
     val errors: StateFlow<List<ChatError>> = chatService.errors
 
@@ -118,6 +152,11 @@ class ChatVM(
 
     // 生成完成
     val generationDoneFlow: SharedFlow<Uuid> = chatService.generationDoneFlow
+
+    // 当前对话的知识库引用来源
+    val knowledgeSources: StateFlow<List<me.rerere.rikkahub.service.KnowledgeSource>> = chatService.knowledgeSources
+        .map { sources -> sources[_conversationId] ?: emptyList() }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     // MCP管理器
     val mcpManager = chatService.mcpManager

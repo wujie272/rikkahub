@@ -203,7 +203,7 @@ private class CharaCardV2Parser : TavernCardParser {
         }
 
         // 知识库
-        val lorebooks = parseCharacterBook(data)
+        val lorebooks = parseCharacterBook(context, data)
 
         val prompt = buildPrompt(name, system, description, personality, scenario)
 
@@ -258,7 +258,7 @@ private class CharaCardV3Parser : TavernCardParser {
         }
 
         // 知识库
-        val lorebooks = parseCharacterBook(data)
+        val lorebooks = parseCharacterBook(context, data)
 
         val prompt = buildPrompt(name, system, description, personality, scenario)
 
@@ -285,7 +285,7 @@ private class CharaCardV3Parser : TavernCardParser {
 
 // ===== 知识库解析 =====
 
-private fun parseCharacterBook(data: JsonObject): List<Lorebook> {
+private fun parseCharacterBook(context: android.content.Context, data: JsonObject): List<Lorebook> {
     val lorebooks = mutableListOf<Lorebook>()
 
     // 从 character_book 解析
@@ -297,10 +297,10 @@ private fun parseCharacterBook(data: JsonObject): List<Lorebook> {
             }
         }
         if (entries.isNotEmpty()) {
-            val charName = data["name"]?.jsonPrimitive?.contentOrNull ?: "角色"
+            val charName = data["name"]?.jsonPrimitive?.contentOrNull ?: context.getString(R.string.assistant_importer_unknown_char)
             lorebooks.add(
                 Lorebook(
-                    name = "${charName}的知识库",
+                    name = context.getString(R.string.kb_assistant_lorebook_name, charName),
                     description = data["description"]?.jsonPrimitive?.contentOrNull ?: "",
                     entries = entries
                 )

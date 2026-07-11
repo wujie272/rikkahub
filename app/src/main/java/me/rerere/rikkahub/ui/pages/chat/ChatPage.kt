@@ -474,6 +474,7 @@ private fun ChatPageContent(
                 onToggleFavorite = { node ->
                     vm.toggleMessageFavorite(node)
                 },
+                knowledgeSources = vm.knowledgeSources.collectAsStateWithLifecycle().value,
                 onConversationSystemPromptChange = { newPrompt ->
                     vm.updateConversation(conversation.copy(customSystemPrompt = newPrompt))
                     vm.saveConversationAsync()
@@ -695,6 +696,9 @@ private fun ChatFilesPickerSheet(
             onPickVideo = { videoPickerLauncher.launch("video/*") },
             onPickAudio = { audioPickerLauncher.launch("audio/*") },
             onPickFile = { filePickerLauncher.launch(arrayOf("*/*")) },
+            knowledgeBases = vm.knowledgeBases.collectAsStateWithLifecycle().value,
+            currentKbId = conversation.knowledgeBaseId?.toString(),
+            onSelectKnowledgeBase = { vm.setKnowledgeBase(it) },
         )
     }
 }

@@ -250,6 +250,7 @@ val appModule = module {
             toolApprovalPreferences = get(),
             workspaceRepository = get(),
             folderRepository = get(),
+            knowledgeService = get(),
         )
     }
 

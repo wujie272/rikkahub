@@ -108,6 +108,14 @@ internal fun backgroundTextGenerationParams(
     customBody = model.customBodies,
 )
 
+/** 知识库引用来源 */
+data class KnowledgeSource(
+    val fileName: String,
+    val content: String,
+    val score: Float,
+    val chunkIndex: Int,
+)
+
 data class ChatError(
     val id: Uuid = Uuid.random(),
     val title: String? = null,
@@ -156,9 +164,13 @@ class ChatService(
     private val toolApprovalPreferences: me.rerere.rikkahub.data.preferences.ToolApprovalPreferences,
     private val workspaceRepository: WorkspaceRepository,
     private val folderRepository: FolderRepository,
+    private val knowledgeService: me.rerere.rikkahub.data.knowledge.KnowledgeService,
 ) {
     // workspace 系统提示注入 (依赖 workspaceRepository, 故在类内构造)
     private val workspaceReminderTransformer = WorkspaceReminderTransformer(workspaceRepository)
+
+    // 知识库来源缓存（每次发送消息时更新）
+    val knowledgeSources: MutableStateFlow<Map<Uuid, List<KnowledgeSource>>> = MutableStateFlow(emptyMap())
 
     // 统一会话管理
     private val sessions = ConcurrentHashMap<Uuid, ConversationSession>()
@@ -794,8 +806,18 @@ class ChatService(
                 // anything else) gets its runtime context into the system prompt without
                 // having to plumb a parameter all the way through sendMessage. Returns null
                 // for in-app conversations that didn't register one.
-                systemAddendum = me.rerere.rikkahub.data.ai.tools
-                    .ConversationSystemAddendum.get(conversationId),
+                systemAddendum = buildString {
+                    val existing = me.rerere.rikkahub.data.ai.tools
+                        .ConversationSystemAddendum.get(conversationId)
+                    if (!existing.isNullOrBlank()) append(existing).appendLine()
+
+                    // 知识库上下文注入
+                    val kbContext = injectKnowledgeBaseContext(
+                        conversationId = conversationId,
+                        messages = conversation.currentMessages,
+                    )
+                    if (kbContext != null) append(kbContext)
+                }.takeIf { it.isNotBlank() },
                 isToolAutoApproved = { toolName ->
                     // YOLO mode ("I AM STUPID" toggle in Settings → Tool approvals): every
                     // tool auto-approves. User opted into this explicitly. HARDLINE still
@@ -1726,6 +1748,54 @@ class ChatService(
 
             val updatedConversation = currentConversation.copy(messageNodes = updatedNodes)
             saveConversation(conversationId, updatedConversation)
+        }
+    }
+
+    /**
+     * 从关联的知识库中搜索相关上下文，格式化为 system prompt addendum
+     */
+    private suspend fun injectKnowledgeBaseContext(
+        conversationId: Uuid,
+        messages: List<UIMessage>,
+    ): String? {
+        val conversation = getConversationFlow(conversationId).value
+        val kbId = conversation.knowledgeBaseId?.toString() ?: return null
+
+        // 取最近几条用户消息作为搜索 query
+        val query = messages
+            .filter { it.role == MessageRole.USER }
+            .takeLast(3)
+            .joinToString("\n") { it.toText() }
+            .trim()
+        if (query.isBlank()) return null
+
+        val results = knowledgeService.search(kbId, query, limit = 5, minScore = 0.3f)
+
+        // 缓存知识库来源供 UI 展示
+        if (results.isNotEmpty()) {
+            knowledgeSources.value = knowledgeSources.value + (conversationId to results.map { r ->
+                KnowledgeSource(
+                    fileName = r.fileName,
+                    content = (if (r.expandedContext.isNotBlank()) r.expandedContext else r.content).take(300),
+                    score = r.score,
+                    chunkIndex = r.chunkIndex,
+                )
+            })
+        }
+
+        if (results.isEmpty()) return null
+
+        return buildString {
+            appendLine()
+            appendLine("<knowledge_base_context>")
+            results.forEachIndexed { i, r ->
+                appendLine("<context_item index=\"${i + 1}\" source=\"${r.fileName}\" relevance=\"${(r.score * 100).toInt()}%\">")
+                val ctx = if (r.expandedContext.isNotBlank()) r.expandedContext else r.content
+                appendLine(ctx.trim())
+                appendLine("</context_item>")
+            }
+            appendLine("</knowledge_base_context>")
+            appendLine("请基于上述知识库内容回答用户问题。如果知识库内容与问题无关，请忽略知识库并正常回答。")
         }
     }
 }

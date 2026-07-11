@@ -31,6 +31,8 @@ data class Conversation(
     val workspaceCwd: String? = null,
     // 所属文件夹（助手内分组），null 表示未归入任何文件夹
     val folderId: Uuid? = null,
+    // 关联的知识库 ID，null 表示未启用知识库
+    val knowledgeBaseId: Uuid? = null,
     @Transient
     val newConversation: Boolean = false
 ) {
