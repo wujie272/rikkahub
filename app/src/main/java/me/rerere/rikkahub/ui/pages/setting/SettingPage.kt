@@ -43,6 +43,7 @@ import me.rerere.hugeicons.stroke.Book01
 import me.rerere.hugeicons.stroke.Book03
 import me.rerere.hugeicons.stroke.Bookshelf01
 import me.rerere.hugeicons.stroke.Brain02
+import me.rerere.hugeicons.stroke.Zap
 import me.rerere.hugeicons.stroke.Clapping01
 import me.rerere.hugeicons.stroke.Clock02
 import me.rerere.hugeicons.stroke.Database02
@@ -220,6 +221,12 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         leadingContent = { Icon(HugeIcons.McpServer, null) },
                         supportingContent = { Text(stringResource(R.string.setting_page_mcp_desc)) },
                         headlineContent = { Text(stringResource(R.string.setting_page_mcp)) },
+                    )
+                    item(
+                        onClick = { navController.navigate(Screen.SettingDebate) },
+                        leadingContent = { Icon(HugeIcons.Zap, null) },
+                        supportingContent = { Text("AI角色辩论，多模型轮流交锋") },
+                        headlineContent = { Text("AI辩论") },
                     )
                     item(
                         onClick = { navController.navigate(Screen.SettingWeb) },

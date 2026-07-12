@@ -83,6 +83,8 @@ import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.replaceRegexes
 import me.rerere.rikkahub.data.model.toMessageNode
+import me.rerere.rikkahub.data.model.GroupChatTemplate
+import me.rerere.rikkahub.data.model.GroupChatRuntimeConfig
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.FolderRepository
 import me.rerere.rikkahub.data.repository.MemoryRepository
@@ -169,6 +171,14 @@ class ChatService(
     // workspace 系统提示注入 (依赖 workspaceRepository, 故在类内构造)
     private val workspaceReminderTransformer = WorkspaceReminderTransformer(workspaceRepository)
 
+
+    // 群聊执行引擎
+    val groupChatRunner: GroupChatRunner = GroupChatRunner(
+        appScope = appScope,
+        settingsStore = settingsStore,
+        chatService = this,
+        providerManager = providerManager,
+    )
     // 知识库来源缓存（每次发送消息时更新）
     val knowledgeSources: MutableStateFlow<Map<Uuid, List<KnowledgeSource>>> = MutableStateFlow(emptyMap())
 
@@ -400,17 +410,29 @@ class ChatService(
                 )
                 saveConversation(conversationId, withUser)
 
-                // Phase 16 — fast-path router. If the assistant has it enabled and the user's
-                // message matches a deterministic intent, run the matching tool and inject the
-                // result as a synthetic assistant message — skipping the LLM entirely.
-                // Conservative: any match failure (tool throws, no result) falls back to the
-                // normal LLM path. Headless conversations and non-text messages are skipped.
+                // Phase 16 — fast-path router.
                 val routedHandled = if (answer)
                     tryFastPathRoute(conversationId, processedContent, withUser, assistant)
                 else false
 
-                // 开始补全 — only if router didn't handle the turn
-                if (answer && !routedHandled) {
+                // ── Group chat check ──
+                // If this conversation is linked to a group chat template, delegate to the
+                // GroupChatRunner instead of the normal single-assistant LLM path.
+                val groupChatHandled = if (answer && !routedHandled && currentConversation.groupChatTemplateId != null) {
+                    val settings = settingsStore.settingsFlow.first()
+                    val template = settings.groupChatTemplates.find { it.id == currentConversation.groupChatTemplateId }
+                    if (template != null && template.seats.isNotEmpty()) {
+                        groupChatRunner.start(
+                            conversationId = conversationId,
+                            template = template,
+                            userMessage = processedContent,
+                        )
+                        true
+                    } else false
+                } else false
+
+                // 开始补全 — only if router didn't handle the turn and not group chat
+                if (answer && !routedHandled && !groupChatHandled) {
                     handleMessageComplete(conversationId)
                 }
 
@@ -1712,6 +1734,59 @@ class ChatService(
         }
 
         updateConversation(conversationId, currentConversation.copy(messageNodes = updatedNodes))
+    }
+
+    /**
+     * 创建并启动群聊对话
+     *
+     * 创建一个新的 Conversation，关联到指定群聊模板，并自动触发首轮发言
+     *
+     * @param templateId 群聊模板 ID
+     * @param userMessage 用户发送的第一条消息
+     * @return 新创建的对话 ID
+     */
+    suspend fun startGroupChatConversation(
+        templateId: kotlin.uuid.Uuid,
+        userMessage: List<UIMessagePart> = emptyList(),
+    ): kotlin.uuid.Uuid {
+        val settings = settingsStore.settingsFlow.first()
+        val template = settings.groupChatTemplates.find { it.id == templateId }
+            ?: throw IllegalArgumentException("Group chat template not found: $templateId")
+
+        val conversationId = kotlin.uuid.Uuid.random()
+        val firstAssistantId = template.seats.firstOrNull()?.assistantId
+            ?: settings.getCurrentAssistant().id
+
+        // 创建对话
+        val conversation = Conversation(
+            id = conversationId,
+            assistantId = firstAssistantId,
+            title = template.name.ifBlank { "群聊" },
+            groupChatTemplateId = templateId,
+            messageNodes = emptyList(),
+        )
+        saveConversation(conversationId, conversation)
+
+        // 如果有用户消息，自动启动群聊
+        if (userMessage.isNotEmpty() && !userMessage.isEmptyInputMessage()) {
+            groupChatRunner.start(
+                conversationId = conversationId,
+                template = template,
+                userMessage = userMessage,
+            )
+        }
+
+        // 生成标题
+        launchWithConversationReference(conversationId) {
+            generateTitle(conversationId, conversation)
+        }
+
+        return conversationId
+    }
+
+    // 停止群聊运行
+    fun stopGroupChat() {
+        groupChatRunner.stop()
     }
 
     // 停止当前会话生成任务（不清理会话缓存）

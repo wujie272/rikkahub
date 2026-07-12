@@ -136,6 +136,7 @@ import me.rerere.rikkahub.ui.pages.setting.SettingSearchPage
 import me.rerere.rikkahub.ui.pages.setting.SettingTTSPage
 import me.rerere.rikkahub.ui.pages.setting.SettingSpeechPage
 import me.rerere.rikkahub.ui.pages.setting.SettingSshPage
+import me.rerere.rikkahub.ui.pages.setting.SettingDebatePage
 import me.rerere.rikkahub.ui.pages.setting.SettingWebPage
 import me.rerere.rikkahub.ui.pages.share.handler.ShareHandlerPage
 import me.rerere.rikkahub.ui.pages.stats.StatsPage
@@ -559,6 +560,10 @@ class RouteActivity : ComponentActivity() {
                                 SettingFilesPage()
                             }
 
+                            entry<Screen.SettingDebate> {
+                                SettingDebatePage()
+                            }
+
                             entry<Screen.SettingWeb> {
                                 SettingWebPage()
                             }
@@ -857,6 +862,8 @@ sealed interface Screen : NavKey {
     data object SettingFiles : Screen
 
     @Serializable
+    data object SettingDebate : Screen
+
     data object SettingWeb : Screen
 
     @Serializable
