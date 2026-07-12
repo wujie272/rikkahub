@@ -2143,6 +2143,9 @@
     <string name="setting_app_data_bridge_status_not_exported">Service not exported correctly. Contact the app developer.</string>
     <string name="setting_app_data_bridge_status_unknown">Unknown status</string>
     <string name="setting_app_data_bridge_status_ready_toast">%s is ready. Enable it in Assistant → Local Tools.</string>
+    <string name="setting_app_data_bridge_add_title">Add by Package Name</string>
+    <string name="setting_app_data_bridge_added">Successfully added plugin: %s</string>
+    <string name="setting_app_data_bridge_not_found">No compatible app found for %s. The app must declare app_data_bridge metadata in its Receiver.</string>
     <string name="setting_app_data_bridge_grant_hint">Grant the %s permission in Settings, then come back to refresh.</string>
     <string name="setting_app_data_bridge_help_title">How to add a new data source</string>
     <string name="setting_app_data_bridge_help_item1">1. App support</string>

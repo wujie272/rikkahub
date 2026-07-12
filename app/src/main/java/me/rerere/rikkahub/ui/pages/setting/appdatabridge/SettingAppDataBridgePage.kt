@@ -5,12 +5,19 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
@@ -19,6 +26,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -27,6 +35,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.dokar.sonner.ToastType
+import kotlinx.coroutines.launch
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.tools.local.AppDataBridge
 import me.rerere.rikkahub.data.ai.tools.local.AppDataPlugin
@@ -51,7 +60,10 @@ fun SettingAppDataBridgePage() {
     var pluginStates by remember { mutableStateOf<Map<String, PluginState>>(emptyMap()) }
     var appLabels by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
 
-    LaunchedEffect(Unit) {
+    var pkgInput by remember { mutableStateOf("") }
+    val scope = rememberCoroutineScope()
+
+    fun reloadPlugins() {
         val loaded = bridge.loadPlugins()
         plugins = loaded
         val pm = ctx.packageManager
@@ -65,6 +77,8 @@ fun SettingAppDataBridgePage() {
             p.id to bridge.checkPluginState(p)
         }
     }
+
+    LaunchedEffect(Unit) { reloadPlugins() }
 
     fun refreshPlugin(plugin: AppDataPlugin) {
         val pm = ctx.packageManager
@@ -155,6 +169,15 @@ fun SettingAppDataBridgePage() {
                                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                                 )
                             },
+                            trailingContent = {
+                                IconButton(onClick = {
+                                    bridge.removePackage(plugin.packageName)
+                                    bridge.invalidateCache()
+                                    reloadPlugins()
+                                }) {
+                                    Icon(Icons.Default.Close, contentDescription = "Remove")
+                                }
+                            },
                             onClick = {
                                 when (val s = state) {
                                     is PluginState.NotInstalled -> {
@@ -188,6 +211,50 @@ fun SettingAppDataBridgePage() {
                                 }
                             },
                         )
+                    }
+                }
+            }
+
+            // 添加包名输入框
+            CardGroup(
+                title = { Text(stringResource(R.string.setting_app_data_bridge_add_title)) },
+            ) {
+                item {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        OutlinedTextField(
+                            value = pkgInput,
+                            onValueChange = { pkgInput = it },
+                            placeholder = { Text("com.jaye.didadida") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f),
+                        )
+                        IconButton(onClick = {
+                            val pkg = pkgInput.trim()
+                            if (pkg.isEmpty()) return@IconButton
+                            scope.launch {
+                                val plugin = bridge.discoverByPackage(pkg)
+                                if (plugin != null) {
+                                    bridge.savePackage(pkg)
+                                    bridge.invalidateCache()
+                                    pkgInput = ""
+                                    reloadPlugins()
+                                    toaster.show(
+                                        ctx.getString(R.string.setting_app_data_bridge_added, plugin.name),
+                                        type = ToastType.Success,
+                                    )
+                                } else {
+                                    toaster.show(
+                                        ctx.getString(R.string.setting_app_data_bridge_not_found, pkg),
+                                        type = ToastType.Error,
+                                    )
+                                }
+                            }
+                        }) {
+                            Icon(Icons.Default.Add, contentDescription = "Add")
+                        }
                     }
                 }
             }

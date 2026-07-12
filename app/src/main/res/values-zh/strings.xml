@@ -2013,6 +2013,9 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_app_data_bridge_status_not_exported">服务未正确导出，请联系应用开发者</string>
   <string name="setting_app_data_bridge_status_unknown">状态未知</string>
   <string name="setting_app_data_bridge_status_ready_toast">%s 已就绪，可在助手的本地工具中开启使用</string>
+    <string name="setting_app_data_bridge_add_title">按包名添加</string>
+    <string name="setting_app_data_bridge_added">成功添加插件：%s</string>
+    <string name="setting_app_data_bridge_not_found">未找到兼容应用 %s。该应用的 Receiver 必须声明 app_data_bridge metadata。</string>
   <string name="setting_app_data_bridge_grant_hint">请在设置中授予 %s 权限，然后返回本页刷新</string>
   <string name="setting_app_data_bridge_help_title">如何添加新数据源</string>
   <string name="setting_app_data_bridge_help_item1">1. 应用需支持</string>

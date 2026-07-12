@@ -5,7 +5,9 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.SharedPreferences
 import android.content.pm.PackageManager
+import android.content.pm.ResolveInfo
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
@@ -83,6 +85,25 @@ sealed class PluginState {
  */
 class AppDataBridge(private val context: Context) {
 
+    private val prefs: SharedPreferences =
+        context.getSharedPreferences("app_data_bridge", Context.MODE_PRIVATE)
+
+    /** 用户通过包名添加的插件列表 */
+    private fun getSavedPackages(): List<String> =
+        prefs.getStringSet("saved_packages", emptySet())?.toList() ?: emptyList()
+
+    fun savePackage(packageName: String) {
+        val set = prefs.getStringSet("saved_packages", emptySet())?.toMutableSet() ?: mutableSetOf()
+        set.add(packageName)
+        prefs.edit().putStringSet("saved_packages", set).apply()
+    }
+
+    fun removePackage(packageName: String) {
+        val set = prefs.getStringSet("saved_packages", emptySet())?.toMutableSet() ?: mutableSetOf()
+        set.remove(packageName)
+        prefs.edit().putStringSet("saved_packages", set).apply()
+    }
+
     private val json = Json { ignoreUnknownKeys = true }
     private val loadedPlugins = mutableListOf<AppDataPlugin>()
 
@@ -92,10 +113,10 @@ class AppDataBridge(private val context: Context) {
     fun loadPlugins(): List<AppDataPlugin> {
         if (loadedPlugins.isNotEmpty()) return loadedPlugins
 
+        // 1. 从 assets/app_data_plugins/ 加载预置插件
         try {
             val assets = context.assets
-            val files = assets.list("app_data_plugins") ?: return emptyList()
-
+            val files = assets.list("app_data_plugins") ?: emptyArray()
             for (file in files) {
                 if (!file.endsWith(".json")) continue
                 try {
@@ -104,16 +125,100 @@ class AppDataBridge(private val context: Context) {
                         .use { it.readText() }
                     val plugin = json.decodeFromString<AppDataPlugin>(text)
                     loadedPlugins.add(plugin)
-                    Log.i(TAG, "Loaded plugin: ${plugin.id} (${plugin.name})")
+                    Log.i(TAG, "Loaded asset plugin: ${plugin.id} (${plugin.name})")
                 } catch (e: Exception) {
                     Log.w(TAG, "Failed to load plugin $file", e)
                 }
             }
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to list plugin files", e)
+            Log.w(TAG, "Failed to list asset plugins", e)
+        }
+
+        // 2. 从用户保存的包名自动发现
+        for (pkg in getSavedPackages()) {
+            val existing = loadedPlugins.any { it.packageName == pkg }
+            if (existing) continue
+            val plugin = discoverByPackage(pkg)
+            if (plugin != null) {
+                loadedPlugins.add(plugin)
+                Log.i(TAG, "Discovered plugin from package: ${plugin.id} (${plugin.name})")
+            }
         }
 
         return loadedPlugins
+    }
+
+    /** 清空缓存，下次 loadPlugins 会重新扫描 */
+    fun invalidateCache() {
+
+        loadedPlugins.clear()
+    }
+
+    /**
+     * 根据包名自动发现 App 的数据查询 Receiver。
+     * 读取目标 App Manifest 中带 app_data_bridge metadata 且 exported=true 的 Receiver，
+     * 提取其 intent-filter action 列表，自动生成插件定义。
+     */
+    fun discoverByPackage(packageName: String): AppDataPlugin? {
+        val pm = context.packageManager
+
+        // 检查是否安装
+        val appInfo = try {
+            pm.getApplicationInfo(packageName, 0)
+        } catch (_: PackageManager.NameNotFoundException) {
+            return null
+        }
+
+        val appLabel = pm.getApplicationLabel(appInfo).toString()
+        val intent = Intent().setPackage(packageName)
+        val receivers: List<ResolveInfo> = pm.queryBroadcastReceivers(intent, 0)
+
+        for (resolve in receivers) {
+            val ri = resolve.activityInfo ?: continue
+            if (!ri.exported) continue
+            val meta = ri.metaData ?: continue
+            if (meta.getString("app_data_bridge") != "v1") continue
+
+            // 提取 intent-filter 中的 action
+            val actions = ri.intent?.filter?.actions().orEmpty()
+                .filter { it.startsWith("QUERY_") }
+            if (actions.isEmpty()) continue
+
+            // 自动生成 action 定义
+            val pluginActions = actions.map { action ->
+                val toolName = action.lowercase()
+                val desc = when (action) {
+                    "QUERY_LOGS" -> "查询所有记录"
+                    "QUERY_SETTINGS" -> "查询当前设置"
+                    "QUERY_MONTH" -> "查询某月汇总（需传 year, month 参数）"
+                    "QUERY_TODAY" -> "查询今日状态"
+                    else -> "查询数据: $action"
+                }
+                PluginAction(
+                    name = toolName,
+                    description = desc,
+                    intentAction = action,
+                    params = if (action == "QUERY_MONTH") mapOf(
+                        "year" to "int",
+                        "month" to "int"
+                    ) else emptyMap(),
+                )
+            }
+
+            val permission = ri.permission
+
+            return AppDataPlugin(
+                id = packageName,
+                name = appLabel,
+                packageName = packageName,
+                componentClass = ri.name,
+                requiredPermission = permission?.takeIf { it.isNotBlank() },
+                description = "通过 AppDataBridge 自动发现",
+                actions = pluginActions,
+            )
+        }
+
+        return null
     }
 
     /**
