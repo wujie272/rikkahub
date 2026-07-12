@@ -295,7 +295,8 @@ class KnowledgeVM(
             )
 
             val fileContents = mutableListOf<Triple<String, String, String>>()
-            for ((i, (content, filePath, fileName)) in files.withIndex()) {
+            for (i in files.indices) {
+                val (content, filePath, fileName) = files[i]
                 _importProgress.value = _importProgress.value.copy(
                     currentFileName = fileName,
                     currentStage = me.rerere.rikkahub.ui.components.settings.ProcessingStage.READING,

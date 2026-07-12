@@ -2102,6 +2102,7 @@
     <string name="kb_import_failed_count">失败 (%d)</string>
     <string name="kb_import_clear_all">清除</string>
     <string name="kb_retry">重试</string>
+    <string name="kb_dismiss">关闭</string>
     <string name="kb_import_empty">没有失败项</string>
     <string name="kb_stat_bases">知识库</string>
     <string name="kb_stat_documents">文档</string>

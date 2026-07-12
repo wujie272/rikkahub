@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.ui.components.settings
 
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row

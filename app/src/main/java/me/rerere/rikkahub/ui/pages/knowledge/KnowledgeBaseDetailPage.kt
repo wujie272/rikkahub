@@ -78,8 +78,6 @@ import me.rerere.rikkahub.ui.components.settings.FailedImportBanner
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.theme.CustomColors
 import org.koin.androidx.compose.koinViewModel
-import android.net.Uri
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun KnowledgeBaseDetailPage(
