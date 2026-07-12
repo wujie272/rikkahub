@@ -1133,10 +1133,8 @@ private fun generateBasicDebatePrompts(count: Int): List<String> {
 }
 
 private fun generateProfessionalDebatePrompts(count: Int): List<String> {
-    // 基础辩论 + 中立分析师
-    val prompts = generateBasicDebatePrompts(count)
+    val prompts = generateBasicDebatePrompts(count).toMutableList()
     if (count >= 4) {
-        prompts[2] = prompts[2] // keep moderator
         // Insert neutral analyst at position 2
         prompts.add(2, """你是一位客观中立的分析师。
 

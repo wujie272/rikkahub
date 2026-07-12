@@ -17,9 +17,10 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Add01
-import me.rerere.hugeicons.stroke.ArrowLeft
+import me.rerere.hugeicons.stroke.ArrowLeft01
 import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.Play
@@ -296,7 +297,7 @@ private fun DebateTemplateList(
     settingsStore: SettingsStore,
     chatService: ChatService,
     navController: me.rerere.rikkahub.ui.context.Navigator,
-    scope: rememberCoroutineScope,
+    scope: kotlinx.coroutines.CoroutineScope,
     onDelete: (GroupChatTemplate) -> Unit,
 ) {
     if (templates.isEmpty()) {
