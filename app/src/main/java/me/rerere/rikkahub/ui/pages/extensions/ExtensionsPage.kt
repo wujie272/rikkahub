@@ -87,6 +87,12 @@ fun ExtensionsPage() {
                         headlineContent = { Text(stringResource(R.string.extensions_page_workspace)) },
                         supportingContent = { Text(stringResource(R.string.extensions_page_workspace_desc)) },
                     )
+                    item(
+                        onClick = { navController.navigate(Screen.KnowledgeBase) },
+                        leadingContent = { Icon(HugeIcons.Book03, null) },
+                        headlineContent = { Text(stringResource(R.string.extensions_page_knowledge)) },
+                        supportingContent = { Text(stringResource(R.string.extensions_page_knowledge_desc)) },
+                    )
                 }
             }
         }

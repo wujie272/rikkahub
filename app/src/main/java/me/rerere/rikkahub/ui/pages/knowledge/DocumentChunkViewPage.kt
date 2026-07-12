@@ -70,7 +70,9 @@ fun DocumentChunkViewPage(
 
 
     LaunchedEffect(kbId, filePath) {
-        vm.loadChunks(kbId, filePath)
+        // filePath 从 navigation 传过来时可能被 Uri.encode 编码过，解码后再查询
+        val decodedPath = android.net.Uri.decode(filePath)
+        vm.loadChunks(kbId, decodedPath)
     }
 
     Scaffold(

@@ -323,12 +323,7 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         },
                         headlineContent = { Text(stringResource(R.string.setting_page_chat_storage)) },
                     )
-                    item(
-                        onClick = { navController.navigate(Screen.KnowledgeBase) },
-                        leadingContent = { Icon(HugeIcons.Book03, null) },
-                        supportingContent = { Text(stringResource(R.string.kb_setting_desc)) },
-                        headlineContent = { Text(stringResource(R.string.kb_setting_title)) },
-                    )
+
                 }
             }
 

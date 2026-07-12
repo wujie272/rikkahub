@@ -1776,6 +1776,8 @@
   <string name="workspace_terminal_not_installed">Please install Rootfs first</string>
   <string name="workspace_terminal_loading">Loading workspace…</string>
   <string name="workspace_terminal_exited">Terminal exited</string>
+    <string name="extensions_page_knowledge">知识库</string>
+    <string name="extensions_page_knowledge_desc">管理知识库，上传文档进行语义搜索</string>
   <string name="extensions_page_workspace">Workspace</string>
   <string name="extensions_page_workspace_desc">Manage local working directories accessible by Agent</string>
   <string name="workspace_select">Select Workspace</string>
