@@ -77,5 +77,6 @@ sealed class LocalToolOption {
     @Serializable @SerialName("archive")              data object Archive             : LocalToolOption()
     @Serializable @SerialName("keyboard_control")     data object KeyboardControl     : LocalToolOption()
     @Serializable @SerialName("screen_time")          data object ScreenTime           : LocalToolOption()
+    @Serializable @SerialName("app_data_bridge")   data object AppDataBridge   : LocalToolOption()
     @Serializable @SerialName("calendar")           data object Calendar             : LocalToolOption()
 }

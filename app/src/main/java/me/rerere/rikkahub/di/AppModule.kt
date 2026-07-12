@@ -53,6 +53,8 @@ val appModule = module {
     single { me.rerere.rikkahub.browser.BrowserPreferences(get()) }
     single { me.rerere.rikkahub.data.preferences.TermuxPreferences(get()) }
 
+    single { me.rerere.rikkahub.data.ai.tools.local.AppDataBridge(get()) }
+
 
     // Pass 3 — NoOp implementations for headless screenshot streaming. The real
     // Telegram-backed implementations were removed; these fallbacks silently no-op.
@@ -187,6 +189,7 @@ val appModule = module {
             safPickerResultBuffer = get(),
             storageVolumeGrantStore = get(),
             okHttpClient = get(),
+            appDataBridge = get(),
             keyboardApiClient = get(),
             ttsManager = get(),
         )

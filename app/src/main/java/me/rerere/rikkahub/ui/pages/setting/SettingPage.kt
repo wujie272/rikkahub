@@ -247,6 +247,12 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         headlineContent = { Text(stringResource(R.string.setting_page_browser)) },
                     )
                     item(
+                        onClick = { navController.navigate(Screen.SettingAppDataBridge) },
+                        leadingContent = { Icon(HugeIcons.Connect, null) },
+                        supportingContent = { Text(stringResource(R.string.setting_page_app_data_bridge_desc)) },
+                        headlineContent = { Text(stringResource(R.string.setting_page_app_data_bridge)) },
+                    )
+                    item(
                         onClick = { navController.navigate(Screen.SettingTermux) },
                         leadingContent = { Icon(HugeIcons.Console, null) },
                         supportingContent = { Text(stringResource(R.string.setting_page_termux_desc)) },

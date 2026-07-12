@@ -1032,6 +1032,20 @@ private fun AssistantLocalToolContent(
                     )
                 }
             )
+            item(
+                headlineContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_app_data_bridge_title))
+                },
+                supportingContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_app_data_bridge_desc))
+                },
+                trailingContent = {
+                    PermissionedSwitch(
+                        checked = assistant.localTools.contains(LocalToolOption.AppDataBridge),
+                        onCheckedChange = { toggleLocalTool(LocalToolOption.AppDataBridge, it) },
+                    )
+                }
+            )
         }
 
         // Phase 25 — Phase 3 second cut + ExternalStorage + Archive.

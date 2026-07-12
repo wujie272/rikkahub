@@ -487,7 +487,7 @@ class RouteActivity : ComponentActivity() {
                             }
 
                             entry<Screen.WebView> { key ->
-                                WebViewPage(key.url, key.content)
+                                WebViewPage(key.url, key.contentId)
                             }
 
                             entry<Screen.SettingTheme> {
@@ -585,6 +585,10 @@ class RouteActivity : ComponentActivity() {
 
                             entry<Screen.SettingBrowser> {
                                 me.rerere.rikkahub.ui.pages.setting.browser.SettingBrowserPage()
+                            }
+
+                            entry<Screen.SettingAppDataBridge> {
+                                me.rerere.rikkahub.ui.pages.setting.appdatabridge.SettingAppDataBridgePage()
                             }
 
                             entry<Screen.SettingTermux> {
@@ -799,7 +803,7 @@ sealed interface Screen : NavKey {
     data object ImageGen : Screen
 
     @Serializable
-    data class WebView(val url: String = "", val content: String = "") : Screen
+    data class WebView(val url: String = "", val contentId: String = "") : Screen
 
     @Serializable
     data object SettingTheme : Screen
@@ -869,6 +873,9 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object SettingBrowser : Screen
+
+    @Serializable
+    data object SettingAppDataBridge : Screen
 
     @Serializable
     data object SettingTermux : Screen
