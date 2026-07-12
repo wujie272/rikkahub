@@ -149,7 +149,17 @@ import me.rerere.rikkahub.ui.pages.knowledge.DocumentChunkViewPage
 
 private const val TAG = "RouteActivity"
 
+internal const val EXTRA_DIRECT_CHAT_TARGET_TYPE = "direct_chat_target_type"
+internal const val EXTRA_DIRECT_CHAT_TARGET_ID = "direct_chat_target_id"
+internal const val EXTRA_DIRECT_CHAT_TEXT = "direct_chat_text"
+internal const val EXTRA_DIRECT_CHAT_AUTO_SEND = "direct_chat_auto_send"
+internal const val DIRECT_CHAT_TARGET_TYPE_ASSISTANT = "assistant"
+internal const val DIRECT_CHAT_TARGET_TYPE_GROUP_CHAT = "group_chat"
+
 class RouteActivity : ComponentActivity() {
+    companion object {
+        const val EXTRA_OPEN_CODEX_SETTINGS = "open_codex_settings"
+    }
     private val highlighter by inject<Highlighter>()
     private val okHttpClient by inject<OkHttpClient>()
     private val settingsStore by inject<SettingsStore>()
