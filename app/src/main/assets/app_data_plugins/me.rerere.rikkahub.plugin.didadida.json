@@ -2,7 +2,7 @@
   "id": "didadida",
   "name": "滴答滴答",
   "packageName": "com.jaye.didadida",
-  "serviceClass": "com.jaye.didadida.bridge.DataQueryService",
+  "componentClass": "com.jaye.didadida.bridge.DataQueryReceiver",
   "requiredPermission": "com.jaye.didadida.permission.READ_DATA",
   "minAppVersion": "1.0.0",
   "description": "工时打卡与考勤分析 App。提供每日打卡记录、工时统计、设置查询等功能。",

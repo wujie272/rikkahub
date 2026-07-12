@@ -33,7 +33,7 @@ data class AppDataPlugin(
     val id: String,
     val name: String,
     val packageName: String,
-    val serviceClass: String,
+    val componentClass: String,
     val requiredPermission: String? = null,
     val minAppVersion: String? = null,
     val description: String = "",
@@ -78,7 +78,7 @@ sealed class PluginState {
  *
  * 1. 从 assets/app_data_plugins/ 加载插件描述文件
  * 2. 检查目标 App 是否已安装 + 是否授予权限
- * 3. 通过 startService + PendingIntent + BroadcastReceiver 查询数据
+ * 3. 通过 sendBroadcast + PendingIntent + BroadcastReceiver 查询数据
  * 4. 为每个插件生成 LLM 可调用的 Tool 列表
  */
 class AppDataBridge(private val context: Context) {
@@ -137,16 +137,16 @@ class AppDataBridge(private val context: Context) {
             if (!granted) return PluginState.NoPermission(perm)
         }
 
-        val serviceDeclared = try {
-            val info = pm.getServiceInfo(
-                android.content.ComponentName(plugin.packageName, plugin.serviceClass),
+        val receiverDeclared = try {
+            val info = pm.getReceiverInfo(
+                android.content.ComponentName(plugin.packageName, plugin.componentClass),
                 0
             )
             info.exported
         } catch (_: PackageManager.NameNotFoundException) {
             false
         }
-        if (!serviceDeclared) return PluginState.NotExported
+        if (!receiverDeclared) return PluginState.NotExported
 
         return PluginState.Ready
     }
@@ -164,7 +164,7 @@ class AppDataBridge(private val context: Context) {
         when (state) {
             is PluginState.NotInstalled -> return BridgeResult.AppNotInstalled(plugin.packageName)
             is PluginState.NoPermission -> return BridgeResult.PermissionDenied(state.permission)
-            is PluginState.NotExported -> return BridgeResult.OtherError("Service not exported")
+            is PluginState.NotExported -> return BridgeResult.OtherError("Receiver not exported or not found")
             is PluginState.Ready -> {} // 继续
         }
 
@@ -204,7 +204,7 @@ class AppDataBridge(private val context: Context) {
 
         val intentActionStr = action.intentAction
         val intent = Intent().apply {
-            setClassName(plugin.packageName, plugin.serviceClass)
+            setClassName(plugin.packageName, plugin.componentClass)
             setAction(intentActionStr)
             putExtra("callback", pi)
             args.forEach { (key, value) ->
@@ -219,7 +219,7 @@ class AppDataBridge(private val context: Context) {
         }
 
         return try {
-            context.startService(intent)
+            context.sendBroadcast(intent)
             val bundle = withTimeoutOrNull(timeoutMs) { resultDeferred.await() }
 
             if (bundle == null) {
