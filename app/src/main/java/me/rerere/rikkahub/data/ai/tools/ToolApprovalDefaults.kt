@@ -9,9 +9,9 @@ package me.rerere.rikkahub.data.ai.tools
  * "Allow for this chat" allow-list, then the persistent "Always Allow" allow-list (in that
  * order); the prompt only fires when none of those let it through.
  *
- * MCP-relayed tools (any name starting with `mcp__`) are gated separately at the
- * GenerationHandler level — this set covers only locally-defined tools. See
- * [requiresApproval] for the combined logic.
+ * MCP-relayed tools are gated by the per-tool `needsApproval` flag stored in the
+ * McpServerConfig — each MCP server decides which of its tools need approval.
+ * See [requiresApproval] for the combined logic.
  *
  * If you add a new LLM-callable tool, decide:
  *   - Is it side-effecting (writes to disk, runs shell, controls hardware, posts to a
@@ -276,11 +276,9 @@ object ToolApprovalDefaults {
 
     /**
      * True if [toolName] requires approval. Local tools are looked up in [ALWAYS_ASK];
-     * MCP-relayed tools (`mcp__*`) are always gated because the MCP server's tool surface
-     * is opaque to us — we can't know which calls are destructive. An MCP server that
-     * exposes purely-read tools costs the user one approval per session via "Always
-     * Allow", which is a fair trade for the floor.
+     * MCP-relayed tools are gated by the per-tool `needsApproval` flag stored in the
+     * McpServerConfig — each MCP server decides which of its tools need approval.
      */
     fun requiresApproval(toolName: String): Boolean =
-        toolName in ALWAYS_ASK || toolName.startsWith("mcp__")
+        toolName in ALWAYS_ASK
 }
