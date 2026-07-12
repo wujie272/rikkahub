@@ -180,7 +180,7 @@ class AppDataBridge(private val context: Context) {
             if (meta.getString("app_data_bridge") != "v1") continue
 
             // 提取 intent-filter 中的 action
-            val actions = ri.intent?.filter?.actions().orEmpty()
+            val actions = (resolve.filter?.actions()?.asSequence()?.toList() ?: emptyList())
                 .filter { it.startsWith("QUERY_") }
             if (actions.isEmpty()) continue
 
