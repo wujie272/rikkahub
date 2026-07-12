@@ -567,6 +567,10 @@ class RouteActivity : ComponentActivity() {
                                 me.rerere.rikkahub.ui.pages.setting.browser.SettingBrowserPage()
                             }
 
+                                                        entry<Screen.SettingAppDataBridge> {
+                                me.rerere.rikkahub.ui.pages.setting.appdatabridge.SettingAppDataBridgePage()
+                            }
+
                             entry<Screen.SettingTermux> {
                                 me.rerere.rikkahub.ui.pages.setting.termux.SettingTermuxPage()
                             }
@@ -838,6 +842,9 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object SettingBrowser : Screen
+
+    @Serializable
+    data object SettingAppDataBridge : Screen
 
     @Serializable
     data object SettingTermux : Screen

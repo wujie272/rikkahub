@@ -2132,4 +2132,27 @@
     <string name="kb_import_skip">跳过 %s: %s</string>
     <string name="kb_import_no_docs">所选目录没有支持的文档</string>
     <string name="kb_chunks_label">共 %d 个块</string>
+
+    <!-- AppDataBridge plugin management page -->
+    <string name="setting_app_data_bridge_title">External Data Sources</string>
+    <string name="setting_app_data_bridge_desc">Automatically discover installed apps that support data querying services and provide corresponding tools in the assistant. Tap a plugin to view details or fix its status.</string>
+    <string name="setting_app_data_bridge_no_plugins">No plugins discovered yet.\nOther apps need to declare the app_data_bridge protocol to be auto-detected.</string>
+    <string name="setting_app_data_bridge_status_ready">%d tools available · Ready</string>
+    <string name="setting_app_data_bridge_status_not_installed">Not installed — tap to open app info</string>
+    <string name="setting_app_data_bridge_status_no_permission">Missing permission: %s</string>
+    <string name="setting_app_data_bridge_status_not_exported">Service not exported correctly. Contact the app developer.</string>
+    <string name="setting_app_data_bridge_status_unknown">Unknown status</string>
+    <string name="setting_app_data_bridge_status_ready_toast">%s is ready. Enable it in Assistant → Local Tools.</string>
+    <string name="setting_app_data_bridge_grant_hint">Grant the %s permission in Settings, then come back to refresh.</string>
+    <string name="setting_app_data_bridge_help_title">How to add a new data source</string>
+    <string name="setting_app_data_bridge_help_item1">1. App support</string>
+    <string name="setting_app_data_bridge_help_item1_desc">The target app must declare the app_data_bridge metadata in its AndroidManifest.xml and provide an exported Service.</string>
+    <string name="setting_app_data_bridge_help_item2">2. Plugin descriptor</string>
+    <string name="setting_app_data_bridge_help_item2_desc">Place a JSON descriptor file in RikkaHub assets/app_data_plugins/ directory describing the app package name, Service class, and available actions.</string>
+    <string name="setting_app_data_bridge_help_item3">3. Enable in assistant</string>
+    <string name="setting_app_data_bridge_help_item3_desc">Go to Assistant Details → Local Tools → enable the AppDataBridge toggle. The assistant will then have access to the corresponding tools.</string>
+    <string name="setting_page_app_data_bridge_desc">Manage external app plugins that support data queries</string>
+    <string name="setting_page_app_data_bridge">External Data Sources</string>
+    <string name="assistant_page_local_tools_app_data_bridge_title">AppDataBridge External Data Sources</string>
+    <string name="assistant_page_local_tools_app_data_bridge_desc">Read data from installed apps (e.g. clock-in records, settings). Requires app-side support and authorization.</string>
 </resources>

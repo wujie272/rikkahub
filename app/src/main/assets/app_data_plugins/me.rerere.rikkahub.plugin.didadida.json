@@ -1,0 +1,35 @@
+{
+  "id": "didadida",
+  "name": "滴答滴答",
+  "packageName": "com.jaye.didadida",
+  "serviceClass": "com.jaye.didadida.bridge.DataQueryService",
+  "requiredPermission": "com.jaye.didadida.permission.READ_DATA",
+  "minAppVersion": "1.0.0",
+  "description": "工时打卡与考勤分析 App。提供每日打卡记录、工时统计、设置查询等功能。",
+  "actions": [
+    {
+      "name": "query_logs",
+      "description": "查询所有打卡记录。返回完整的 WorkLog 列表（上班时间、下班时间、备注等）。",
+      "intentAction": "QUERY_LOGS"
+    },
+    {
+      "name": "query_settings",
+      "description": "查询当前设置。返回标准工时、默认上班时间、休息规则、时薪、加班倍率等配置。",
+      "intentAction": "QUERY_SETTINGS"
+    },
+    {
+      "name": "query_month",
+      "description": "查询某个月的每日工时汇总。返回 DailySummary 列表（每天的有效工时、加班时长等）。",
+      "intentAction": "QUERY_MONTH",
+      "params": {
+        "year": "int",
+        "month": "int"
+      }
+    },
+    {
+      "name": "query_today",
+      "description": "查询今日打卡状态。返回今日的打卡记录和工时摘要。",
+      "intentAction": "QUERY_TODAY"
+    }
+  ]
+}

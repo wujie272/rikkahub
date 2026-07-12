@@ -2001,6 +2001,30 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="text_selection_add_action">添加动作</string>
   <string name="reset">重置为默认</string>
   <string name="none">无</string>
+
+  <!-- AppDataBridge 插件管理页面 -->
+  <string name="setting_app_data_bridge_title">外部数据源</string>
+  <string name="setting_app_data_bridge_desc">自动发现已安装应用中支持数据查询的服务，并在助手中提供对应的查询工具。点击插件可查看详情或修复状态。</string>
+  <string name="setting_app_data_bridge_no_plugins">尚未发现任何插件
+其他应用需声明 app_data_bridge 协议才能被自动识别</string>
+  <string name="setting_app_data_bridge_status_ready">%d 个可用工具 · 已就绪</string>
+  <string name="setting_app_data_bridge_status_not_installed">未安装 — 点击前往应用信息</string>
+  <string name="setting_app_data_bridge_status_no_permission">缺少权限 %s</string>
+  <string name="setting_app_data_bridge_status_not_exported">服务未正确导出，请联系应用开发者</string>
+  <string name="setting_app_data_bridge_status_unknown">状态未知</string>
+  <string name="setting_app_data_bridge_status_ready_toast">%s 已就绪，可在助手的本地工具中开启使用</string>
+  <string name="setting_app_data_bridge_grant_hint">请在设置中授予 %s 权限，然后返回本页刷新</string>
+  <string name="setting_app_data_bridge_help_title">如何添加新数据源</string>
+  <string name="setting_app_data_bridge_help_item1">1. 应用需支持</string>
+  <string name="setting_app_data_bridge_help_item1_desc">目标应用需要在 AndroidManifest.xml 中声明 app_data_bridge 元数据，并提供一个导出的 Service。</string>
+  <string name="setting_app_data_bridge_help_item2">2. 安装插件描述文件</string>
+  <string name="setting_app_data_bridge_help_item2_desc">在 RikkaHub 的 assets/app_data_plugins/ 目录下放置 JSON 描述文件，描述该应用的包名、Service 类和可用操作。</string>
+  <string name="setting_app_data_bridge_help_item3">3. 在助手设置中开启</string>
+  <string name="setting_app_data_bridge_help_item3_desc">前往助手详情 → 本地工具 → 开启 AppDataBridge 开关，助手即可调用对应工具。</string>
+  <string name="setting_page_app_data_bridge_desc">管理支持数据查询的外部应用插件</string>
+  <string name="setting_page_app_data_bridge">外部数据源</string>
+  <string name="assistant_page_local_tools_app_data_bridge_title">AppDataBridge 外部数据源</string>
+  <string name="assistant_page_local_tools_app_data_bridge_desc">读取已安装应用的数据（如打卡记录、设置等），需应用侧支持并授权</string>
   <string name="save">保存</string>
   <string name="undo">撤销</string>
 </resources>

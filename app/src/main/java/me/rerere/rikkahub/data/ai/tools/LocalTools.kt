@@ -23,6 +23,7 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.ai.tools.local.BiometricResultBuffer
 import me.rerere.rikkahub.data.ai.tools.local.CameraResultBuffer
 import me.rerere.rikkahub.data.ai.tools.local.InteractiveToolStreamer
+import me.rerere.rikkahub.data.ai.tools.local.AppDataBridge
 import me.rerere.rikkahub.data.ai.tools.local.audioInfoTool
 import me.rerere.rikkahub.data.ai.tools.local.batteryTool
 import me.rerere.rikkahub.data.ai.tools.local.callLogTool
@@ -251,6 +252,8 @@ class LocalTools(
     // agent-keyboard IPC client — backs the keyboard_* tools (drives the active text field).
     private val keyboardApiClient: me.rerere.rikkahub.data.keyboard.KeyboardApiClient,
     // Text-to-speech engine — backs the text_to_speech tool.
+    // AppDataBridge — 自动发现并注册外部 App 数据查询插件
+    private val appDataBridge: AppDataBridge,
     private val ttsManager: TTSManager,
 ) {
     val javascriptTool by lazy { buildJavascriptTool() }
@@ -288,6 +291,9 @@ class LocalTools(
         }
         if (options.contains(LocalToolOption.ScreenTime)) {
             tools.add(screenTimeTool)
+        }
+        if (options.contains(LocalToolOption.AppDataBridge)) {
+            tools.addAll(appDataBridge.toTools())
         }
         if (options.contains(LocalToolOption.Calendar)) {
             tools.add(calendarQueryTool)
