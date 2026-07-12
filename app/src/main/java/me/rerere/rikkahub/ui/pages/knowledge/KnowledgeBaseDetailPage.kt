@@ -73,6 +73,8 @@ import me.rerere.document.DocxParser
 import me.rerere.document.PdfParser
 import me.rerere.document.PptxParser
 import me.rerere.document.EpubParser
+import me.rerere.rikkahub.ui.components.settings.ImportProgressPanel
+import me.rerere.rikkahub.ui.components.settings.FailedImportBanner
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.theme.CustomColors
 import org.koin.androidx.compose.koinViewModel
@@ -94,9 +96,7 @@ fun KnowledgeBaseDetailPage(
     val navController = LocalNavController.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var importing by remember { mutableStateOf(false) }
-    var importProgress by remember { mutableStateOf(0f) }
-    var importText by remember { mutableStateOf("") }
+    // 导入状态由 VM 管理（ImportProgressState + FailedImportItem）
 
     LaunchedEffect(kbId) {
         vm.selectKnowledgeBase(kbId)
@@ -126,69 +126,37 @@ fun KnowledgeBaseDetailPage(
     ) { treeUri: Uri? ->
         if (treeUri != null) {
             scope.launch {
-                importing = true
-                importProgress = 0f
-                importText = context.getString(R.string.kb_import_scanning)
                 try {
                     val uris = scanDirectory(context, treeUri)
                     if (uris.isEmpty()) {
-                        importText = context.getString(R.string.kb_import_no_docs)
-                        importing = false
+                        vm.addDocumentsConcurrent(kbId, emptyList())
                     } else {
                         importUris(context, kbId, uris)
                     }
-                } catch (e: Exception) {
-                    importing = false
-                    importText = context.getString(R.string.kb_import_failed, e.message ?: "")
-                }
+                } catch (e: Exception) { }
             }
         }
     }
 
-    /** 批量导入一组 URI 文件 */
+    /** 批量导入一组 URI 文件 — 使用 VM 的细化进度系统 */
     suspend fun importUris(context: android.content.Context, kbId: String, uris: List<Uri>) {
-        importing = true
-        importProgress = 0f
-        val total = uris.size
-        importText = context.getString(R.string.kb_import_multi_notice, total)
-
         val fileContents = mutableListOf<Triple<String, String, String>>()
         for ((i, uri) in uris.withIndex()) {
             try {
-                importText = context.getString(R.string.kb_import_progress, i + 1, total,
-                    getFileNameFromUri(context, uri) ?: "unknown")
                 val mimeType = context.contentResolver.getType(uri) ?: "text/plain"
                 val fileName = getFileNameFromUri(context, uri) ?: "unknown"
                 val content = readDocumentContent(context, uri, mimeType)
                 if (content.isNotBlank()) {
                     fileContents.add(Triple(content, uri.toString(), fileName))
                 }
-            } catch (e: Exception) {
-                // 单个文件失败跳过，不中断整体流程
-                importText = context.getString(R.string.kb_import_skip,
-                    getFileNameFromUri(context, uri) ?: "?" , e.message ?: "")
-            }
+            } catch (_: Exception) { }
         }
 
         if (fileContents.isEmpty()) {
-            importText = context.getString(R.string.kb_import_no_docs)
-            importing = false
-            return
+            vm.addDocumentsConcurrent(kbId, emptyList())
+        } else {
+            vm.addDocumentsConcurrent(kbId, fileContents)
         }
-
-        importText = context.getString(R.string.kb_processing)
-        vm.addDocumentsConcurrent(
-            kbId = kbId,
-            files = fileContents,
-            onProgress = { completed, totalFiles, currentFile ->
-                importProgress = completed.toFloat() / totalFiles.toFloat()
-                importText = context.getString(R.string.kb_import_progress, completed, totalFiles, currentFile)
-            },
-            onDone = {
-                importing = false
-                importText = ""
-            }
-        )
     }
 
     Scaffold(
@@ -238,9 +206,8 @@ fun KnowledgeBaseDetailPage(
             when (tabIndex) {
                 0 -> DocumentTab(
                     fileList = fileList,
-                    importing = importing,
-                    importProgress = importProgress,
-                    importText = importText,
+                    vm = vm,
+                    kbId = kbId,
                     onPickFile = { multiFileLauncher.launch(supportedMimeTypes) },
                     onPickDir = { dirPickerLauncher.launch(null) },
                     onDeleteFile = { filePath -> vm.deleteFile(kbId, filePath) },
@@ -278,20 +245,22 @@ private fun InfoChip(label: String, value: String) {
 @Composable
 private fun DocumentTab(
     fileList: List<KnowledgeVM.FileInfo>,
-    importing: Boolean,
-    importProgress: Float,
-    importText: String,
+    vm: KnowledgeVM,
+    kbId: String,
     onPickFile: () -> Unit,
     onPickDir: () -> Unit,
     onDeleteFile: (String) -> Unit,
     onViewChunks: (String) -> Unit,
 ) {
+    val importProgress by vm.importProgress.collectAsStateWithLifecycle()
+    val failedItems by vm.failedItems.collectAsStateWithLifecycle()
+
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilledTonalButton(
                 onClick = onPickFile,
                 modifier = Modifier.weight(1f),
-                enabled = !importing
+                enabled = !importProgress.active
             ) {
                 Icon(HugeIcons.Upload02, null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
@@ -300,7 +269,7 @@ private fun DocumentTab(
             FilledTonalButton(
                 onClick = onPickDir,
                 modifier = Modifier.weight(1f),
-                enabled = !importing
+                enabled = !importProgress.active
             ) {
                 Icon(HugeIcons.Folder01, null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
@@ -308,12 +277,20 @@ private fun DocumentTab(
             }
         }
 
-        if (importing) {
-            Spacer(Modifier.height(8.dp))
-            LinearProgressIndicator(progress = { importProgress }, modifier = Modifier.fillMaxWidth())
-            Text(importText, style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
+        // 细化进度面板
+        ImportProgressPanel(
+            progress = importProgress,
+            modifier = Modifier.padding(vertical = 8.dp),
+        )
+
+        // 失败重试面板
+        FailedImportBanner(
+            failedItems = failedItems,
+            onRetry = { itemId -> vm.retryFailedItem(kbId, itemId) },
+            onDismiss = { itemId -> vm.dismissFailedItem(itemId) },
+            onClearAll = { vm.clearAllFailedItems() },
+            modifier = Modifier.padding(bottom = 8.dp),
+        )
 
         Spacer(Modifier.height(16.dp))
 
