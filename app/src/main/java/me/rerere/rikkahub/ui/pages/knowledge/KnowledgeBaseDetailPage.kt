@@ -109,6 +109,27 @@ fun KnowledgeBaseDetailPage(
         "application/epub+zip",
     )
 
+    /** 批量导入一组 URI 文件 — 使用 VM 的细化进度系统 */
+    suspend fun importUris(context: android.content.Context, kbId: String, uris: List<Uri>) {
+        val fileContents = mutableListOf<Triple<String, String, String>>()
+        for (uri in uris) {
+            try {
+                val mimeType = context.contentResolver.getType(uri) ?: "text/plain"
+                val fileName = getFileNameFromUri(context, uri) ?: "unknown"
+                val content = readDocumentContent(context, uri, mimeType)
+                if (content.isNotBlank()) {
+                    fileContents.add(Triple(content, uri.toString(), fileName))
+                }
+            } catch (_: Exception) { }
+        }
+
+        if (fileContents.isEmpty()) {
+            vm.addDocumentsConcurrent(kbId, emptyList())
+        } else {
+            vm.addDocumentsConcurrent(kbId, fileContents)
+        }
+    }
+
     // 多文件选择器
     val multiFileLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenMultipleDocuments()
@@ -133,27 +154,6 @@ fun KnowledgeBaseDetailPage(
                     }
                 } catch (e: Exception) { }
             }
-        }
-    }
-
-    /** 批量导入一组 URI 文件 — 使用 VM 的细化进度系统 */
-    suspend fun importUris(context: android.content.Context, kbId: String, uris: List<Uri>) {
-        val fileContents = mutableListOf<Triple<String, String, String>>()
-        for ((i, uri) in uris.withIndex()) {
-            try {
-                val mimeType = context.contentResolver.getType(uri) ?: "text/plain"
-                val fileName = getFileNameFromUri(context, uri) ?: "unknown"
-                val content = readDocumentContent(context, uri, mimeType)
-                if (content.isNotBlank()) {
-                    fileContents.add(Triple(content, uri.toString(), fileName))
-                }
-            } catch (_: Exception) { }
-        }
-
-        if (fileContents.isEmpty()) {
-            vm.addDocumentsConcurrent(kbId, emptyList())
-        } else {
-            vm.addDocumentsConcurrent(kbId, fileContents)
         }
     }
 
