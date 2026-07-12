@@ -112,9 +112,9 @@ fun KnowledgeEditPage(
                     onValueChange = { newName ->
                         vm.updateEditForm { f -> f.copy(name = newName) }
                     },
-                    label = { Text("知识库名称") },
+                    label = { Text(stringResource(R.string.kb_name)) },
                     modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("例如：项目文档、学习笔记") }
+                    placeholder = { Text(stringResource(R.string.kb_name_placeholder)) }
                 )
             }
 

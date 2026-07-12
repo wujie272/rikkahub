@@ -38,6 +38,7 @@
   <string name="assistant_importer_read_json_failed">Failed to read JSON</string>
   <string name="assistant_importer_unsupported_file_type">Unsupported file type: %s</string>
   <string name="assistant_importer_unsupported_spec">Unsupported spec: %s</string>
+  <string name="assistant_importer_unknown_char">角色</string>
   <string name="assistant_page_actions">Actions</string>
   <string name="assistant_page_add">Add</string>
   <string name="assistant_page_add_body">Add Body</string>
@@ -2092,4 +2093,15 @@
   <string name="kb_relevance">匹配度: %d%% · 块 #%d</string>
   <string name="kb_expand">展开</string>
   <string name="kb_collapse">收起</string>
+    <string name="kb_assistant_lorebook_name">%s的知识库</string>
+    <string name="kb_setting_title">知识库</string>
+    <string name="kb_setting_desc">管理知识库，上传文档进行语义搜索</string>
+    <string name="kb_import_docs">导入文件</string>
+    <string name="kb_import_dir">导入目录</string>
+    <string name="kb_import_multi_notice">读取 %d 个文件中...</string>
+    <string name="kb_import_scanning">正在扫描目录...</string>
+    <string name="kb_import_progress">[%d/%d] %s</string>
+    <string name="kb_import_skip">跳过 %s: %s</string>
+    <string name="kb_import_no_docs">所选目录没有支持的文档</string>
+    <string name="kb_chunks_label">共 %d 个块</string>
 </resources>

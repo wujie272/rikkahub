@@ -15,6 +15,8 @@ import me.rerere.rikkahub.data.knowledge.KnowledgeBaseEntity
 import me.rerere.rikkahub.data.knowledge.KnowledgeDocumentEntity
 import me.rerere.rikkahub.data.knowledge.KnowledgeService
 import me.rerere.rikkahub.data.knowledge.SearchResult
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.stateIn
 import kotlin.uuid.Uuid
 
 class KnowledgeVM(
@@ -24,8 +26,8 @@ class KnowledgeVM(
 ) : ViewModel() {
 
     // ============ 列表页状态 ============
-    private val _knowledgeBases = MutableStateFlow<List<KnowledgeBaseEntity>>(emptyList())
-    val knowledgeBases: StateFlow<List<KnowledgeBaseEntity>> = _knowledgeBases.asStateFlow()
+    val knowledgeBases: StateFlow<List<KnowledgeBaseEntity>> = knowledgeService.observeAllKnowledgeBases()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _loading = MutableStateFlow(false)
     val loading: StateFlow<Boolean> = _loading.asStateFlow()
@@ -93,20 +95,10 @@ class KnowledgeVM(
     )
 
     init {
-        loadKnowledgeBases()
         loadEmbeddingModels()
     }
 
     fun dismissSnackbar() { _snackbar.value = null }
-
-    // ============ 列表 ============
-    fun loadKnowledgeBases() {
-        viewModelScope.launch {
-            _loading.value = true
-            _knowledgeBases.value = knowledgeService.getAllKnowledgeBases()
-            _loading.value = false
-        }
-    }
 
     // ============ 创建/编辑 ============
     fun loadEmbeddingModels() {
@@ -197,7 +189,6 @@ class KnowledgeVM(
                     )
                     _snackbar.value = context.getString(R.string.kb_created)
                 }
-                loadKnowledgeBases()
                 onDone()
             } catch (e: Exception) {
                 _snackbar.value = context.getString(R.string.kb_save_failed, e.message ?: "")
@@ -209,7 +200,6 @@ class KnowledgeVM(
         viewModelScope.launch {
             knowledgeService.deleteKnowledgeBase(id)
             _snackbar.value = context.getString(R.string.kb_deleted)
-            loadKnowledgeBases()
         }
     }
 
@@ -259,6 +249,25 @@ class KnowledgeVM(
             knowledgeService.deleteFile(kbId, filePath)
             _snackbar.value = context.getString(R.string.kb_file_deleted)
             selectKnowledgeBase(kbId)
+        }
+    }
+
+    /** 批量导入多个文档（content, filePath, fileName） */
+    fun addDocumentsConcurrent(
+        kbId: String,
+        files: List<Triple<String, String, String>>,
+        onProgress: (completed: Int, total: Int, currentFile: String) -> Unit = { _, _, _ -> },
+        onDone: (Int) -> Unit = {},
+    ) {
+        viewModelScope.launch {
+            val result = knowledgeService.addDocumentsConcurrent(kbId, files, onProgress)
+            result.onSuccess { total ->
+                _snackbar.value = context.getString(R.string.kb_added_chunks, total)
+                selectKnowledgeBase(kbId)
+                onDone(total)
+            }.onFailure {
+                _snackbar.value = context.getString(R.string.kb_add_failed, it.message ?: "")
+            }
         }
     }
 

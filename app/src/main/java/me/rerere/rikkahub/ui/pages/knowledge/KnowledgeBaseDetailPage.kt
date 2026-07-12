@@ -57,13 +57,17 @@ import me.rerere.hugeicons.stroke.AlertCircle
 import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.Edit01
 import me.rerere.hugeicons.stroke.File02
+import me.rerere.hugeicons.stroke.Folder01
 import me.rerere.hugeicons.stroke.GlobalSearch
 import me.rerere.hugeicons.stroke.Tick01
 import me.rerere.hugeicons.stroke.Upload02
 import me.rerere.rikkahub.data.knowledge.SearchResult
 import androidx.compose.ui.res.stringResource
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
+import androidx.documentfile.provider.DocumentFile
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.document.DocxParser
 import me.rerere.document.PdfParser
@@ -72,9 +76,7 @@ import me.rerere.document.EpubParser
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.theme.CustomColors
 import org.koin.androidx.compose.koinViewModel
-import java.io.File
-import java.io.BufferedReader
-import java.io.InputStreamReader
+import android.net.Uri
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -100,38 +102,40 @@ fun KnowledgeBaseDetailPage(
         vm.selectKnowledgeBase(kbId)
     }
 
-    // File picker
-    val filePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
-    ) { uri: Uri? ->
-        if (uri != null) {
+    // 支持的文档 MIME 类型
+    val supportedMimeTypes = arrayOf(
+        "text/*", "text/markdown", "application/octet-stream",
+        "application/pdf",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "application/epub+zip",
+    )
+
+    // 多文件选择器
+    val multiFileLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris: List<Uri> ->
+        if (uris.isNotEmpty()) {
+            scope.launch { importUris(context, kbId, uris) }
+        }
+    }
+
+    // 目录选择器（递归扫描子目录）
+    val dirPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { treeUri: Uri? ->
+        if (treeUri != null) {
             scope.launch {
                 importing = true
                 importProgress = 0f
-                importText = context.getString(R.string.kb_reading_file)
+                importText = context.getString(R.string.kb_import_scanning)
                 try {
-                    val mimeType = context.contentResolver.getType(uri) ?: "text/plain"
-                    // 从 content:// URI 中提取真实的文件名
-                    val fileName = getFileNameFromUri(context, uri) ?: "unknown"
-                    val content = readDocumentContent(context, uri, mimeType)
-                    if (content.isBlank()) {
-                        importText = "文件内容为空或无法读取"
+                    val uris = scanDirectory(context, treeUri)
+                    if (uris.isEmpty()) {
+                        importText = context.getString(R.string.kb_import_no_docs)
                         importing = false
                     } else {
-                        importText = context.getString(R.string.kb_processing)
-                        vm.addDocument(
-                            kbId = kbId,
-                            content = content,
-                            filePath = uri.toString(),
-                            fileName = fileName,
-                            onProgress = { current, total ->
-                                importProgress = current.toFloat() / total.toFloat()
-                            },
-                            onDone = {
-                                importing = false
-                                importText = ""
-                            }
-                        )
+                        importUris(context, kbId, uris)
                     }
                 } catch (e: Exception) {
                     importing = false
@@ -139,6 +143,52 @@ fun KnowledgeBaseDetailPage(
                 }
             }
         }
+    }
+
+    /** 批量导入一组 URI 文件 */
+    suspend fun importUris(context: android.content.Context, kbId: String, uris: List<Uri>) {
+        importing = true
+        importProgress = 0f
+        val total = uris.size
+        importText = context.getString(R.string.kb_import_multi_notice, total)
+
+        val fileContents = mutableListOf<Triple<String, String, String>>()
+        for ((i, uri) in uris.withIndex()) {
+            try {
+                importText = context.getString(R.string.kb_import_progress, i + 1, total,
+                    getFileNameFromUri(context, uri) ?: "unknown")
+                val mimeType = context.contentResolver.getType(uri) ?: "text/plain"
+                val fileName = getFileNameFromUri(context, uri) ?: "unknown"
+                val content = readDocumentContent(context, uri, mimeType)
+                if (content.isNotBlank()) {
+                    fileContents.add(Triple(content, uri.toString(), fileName))
+                }
+            } catch (e: Exception) {
+                // 单个文件失败跳过，不中断整体流程
+                importText = context.getString(R.string.kb_import_skip,
+                    getFileNameFromUri(context, uri) ?: "?" , e.message ?: "")
+            }
+        }
+
+        if (fileContents.isEmpty()) {
+            importText = context.getString(R.string.kb_import_no_docs)
+            importing = false
+            return
+        }
+
+        importText = context.getString(R.string.kb_processing)
+        vm.addDocumentsConcurrent(
+            kbId = kbId,
+            files = fileContents,
+            onProgress = { completed, totalFiles, currentFile ->
+                importProgress = completed.toFloat() / totalFiles.toFloat()
+                importText = context.getString(R.string.kb_import_progress, completed, totalFiles, currentFile)
+            },
+            onDone = {
+                importing = false
+                importText = ""
+            }
+        )
     }
 
     Scaffold(
@@ -191,7 +241,8 @@ fun KnowledgeBaseDetailPage(
                     importing = importing,
                     importProgress = importProgress,
                     importText = importText,
-                    onPickFile = { filePickerLauncher.launch(arrayOf("text/*", "text/markdown", "application/octet-stream")) },
+                    onPickFile = { multiFileLauncher.launch(supportedMimeTypes) },
+                    onPickDir = { dirPickerLauncher.launch(null) },
                     onDeleteFile = { filePath -> vm.deleteFile(kbId, filePath) },
                     onViewChunks = { filePath ->
                         vm.loadChunks(kbId, filePath)
@@ -231,18 +282,30 @@ private fun DocumentTab(
     importProgress: Float,
     importText: String,
     onPickFile: () -> Unit,
+    onPickDir: () -> Unit,
     onDeleteFile: (String) -> Unit,
     onViewChunks: (String) -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        FilledTonalButton(
-            onClick = onPickFile,
-            modifier = Modifier.fillMaxWidth(),
-            enabled = !importing
-        ) {
-            Icon(HugeIcons.Upload02, null, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
-            Text(if (importing) stringResource(R.string.kb_importing) else stringResource(R.string.kb_import_doc))
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilledTonalButton(
+                onClick = onPickFile,
+                modifier = Modifier.weight(1f),
+                enabled = !importing
+            ) {
+                Icon(HugeIcons.Upload02, null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(R.string.kb_import_docs))
+            }
+            FilledTonalButton(
+                onClick = onPickDir,
+                modifier = Modifier.weight(1f),
+                enabled = !importing
+            ) {
+                Icon(HugeIcons.Folder01, null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(R.string.kb_import_dir))
+            }
         }
 
         if (importing) {
@@ -282,7 +345,7 @@ private fun DocumentTab(
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(file.fileName, maxLines = 1, overflow = TextOverflow.Ellipsis,
                                     style = MaterialTheme.typography.bodyLarge)
-                                Text("${file.chunkCount} 个块",
+                                Text(stringResource(R.string.kb_chunks_label, file.chunkCount),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
@@ -499,3 +562,34 @@ fun readDocumentContent(
         tempFile.delete()
     }
 }
+
+/** 判断文件扩展名是否属于支持的文档类型 */
+private fun isSupportedExtension(fileName: String?): Boolean {
+    if (fileName == null) return false
+    val ext = fileName.substringAfterLast('.', "").lowercase()
+    return ext in listOf("txt", "md", "markdown", "pdf", "docx", "pptx", "epub", "csv", "json", "xml", "yaml", "yml")
+}
+
+/**
+ * 递归扫描 DocumentFile 目录，收集所有支持的文档
+ */
+private suspend fun scanDirectory(context: android.content.Context, treeUri: android.net.Uri): List<android.net.Uri> {
+    return withContext(Dispatchers.IO) {
+        val result = mutableListOf<android.net.Uri>()
+        val root = DocumentFile.fromTreeUri(context, treeUri) ?: return@withContext result
+        scanDirRecursive(root, result)
+        result
+    }
+}
+
+private fun scanDirRecursive(dir: DocumentFile, result: MutableList<android.net.Uri>) {
+    for (child in dir.listFiles()) {
+        when {
+            child.isDirectory -> scanDirRecursive(child, result)
+            child.isFile && isSupportedExtension(child.name) -> {
+                result.add(child.uri)
+            }
+        }
+    }
+}
+
