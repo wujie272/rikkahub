@@ -24,6 +24,11 @@ import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.data.model.buildSeatDisplayNames
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.GroupChatMode
 import me.rerere.rikkahub.data.model.GroupChatRuntimeConfig
@@ -190,22 +195,52 @@ class GroupChatRunner(
         )
 
         // ── 2. 主循环 ──
+        // 收集用户消息中的 @提及
+        val userText = userMessage.filterIsInstance<UIMessagePart.Text>()
+            .joinToString(" ") { it.text }
+        val mentionedSeatIds = resolveMentionedSeatIds(template, userText)
+
         while (currentRound <= config.maxRounds && shouldContinue && isActive) {
             Log.d(TAG, "=== Round $currentRound ===")
 
-            for ((seatIndex, seat) in enabledSeats.withIndex()) {
+            // 决定本轮发言者
+            val speakerSeatIds = when {
+                // 如果用户 @了特定成员，只让被@的成员发言
+                mentionedSeatIds.isNotEmpty() -> mentionedSeatIds.filter { id ->
+                    enabledSeats.any { it.id == id }
+                }
+                // 有路由模型时用路由模型决定
+                config.mode != GroupChatMode.DEBATE && template.hostModelId != null && currentRound <= 1 -> {
+                    routeGroupChatSpeakers(
+                        template = template,
+                        userText = userText,
+                        conversationHistory = conversationHistory,
+                    ).filter { id -> enabledSeats.any { it.id == id } }
+                }
+                // 默认：所有启用座位轮流发言
+                else -> enabledSeats.map { it.id }
+            }
+
+            if (speakerSeatIds.isEmpty()) {
+                speakerSeatIds.let { enabledSeats.map { it.id } }
+            }
+
+            for ((seatIndex, seatId) in speakerSeatIds.withIndex()) {
                 if (!isActive || !shouldContinue) break
+
+                val seat = enabledSeats.firstOrNull { it.id == seatId } ?: continue
+                val displayName = buildSeatDisplayName(template, seat, seatIndex)
 
                 _runState.value = GroupChatRunState.Running(
                     currentRound = currentRound,
                     maxRounds = config.maxRounds,
-                    currentSeatName = buildSeatDisplayName(template, seat, seatIndex),
+                    currentSeatName = displayName,
                     currentSeatIndex = seatIndex,
-                    totalSeats = enabledSeats.size,
+                    totalSeats = speakerSeatIds.size,
                 )
 
-                // 构建上下文
-                val context = buildContext(
+                // 构建上下文（含群聊信息）
+                val context = buildGroupChatContext(
                     template = template,
                     seat = seat,
                     currentRound = currentRound,
@@ -220,9 +255,9 @@ class GroupChatRunner(
                     context = context,
                 )
 
-                if (response == null) continue // 跳过失败的座位
+                if (response == null) continue
 
-                conversationHistory.add("${buildSeatDisplayName(template, seat, seatIndex)}：${response}")
+                conversationHistory.add("${displayName}：${response}")
 
                 // 检测主持人结束指令（仅 DEBATE）
                 if (config.mode == GroupChatMode.DEBATE && config.moderatorEndCheckEnabled) {
@@ -237,6 +272,37 @@ class GroupChatRunner(
 
                 // 轮间延迟
                 if (isActive && shouldContinue) {
+                    delay(config.interSeatDelayMs)
+                }
+            }
+
+            // 互怼检测：如果某位成员反对另一位，自动触发回怼
+            if (config.mode == GroupChatMode.DEBATE && shouldContinue && isActive) {
+                val interReplies = detectInterReplies(
+                    template = template,
+                    history = conversationHistory,
+                    enabledSeats = enabledSeats,
+                )
+                for ((replier, targetText) in interReplies) {
+                    if (!isActive) break
+                    val displayName = buildSeatDisplayName(template, replier, 0)
+                    val context = buildString {
+                        appendLine("你是${displayName}。")
+                        appendLine()
+                        appendLine("你被点名要求回应以下内容：")
+                        appendLine(targetText)
+                        appendLine()
+                        appendLine("请直接回应对方观点，简洁有力，不超过200字。")
+                    }
+                    val response = callSeatLlm(
+                        conversationId = conversationId,
+                        template = template,
+                        seat = replier,
+                        context = context,
+                    )
+                    if (response != null) {
+                        conversationHistory.add("${displayName}（回怼）：${response}")
+                    }
                     delay(config.interSeatDelayMs)
                 }
             }
@@ -513,6 +579,293 @@ ${history.joinToString("\n\n")}
         )
         val roleResponses = responses[stance] ?: responses["neutral"]!!
         return roleResponses[java.util.Random().nextInt(roleResponses.size)]
+    }
+
+    // ──── @Name 提及系统 ────
+
+    /**
+     * 从文本中解析 @提及的座位 ID
+     * 支持 @Name 和 @Name#2 语法
+     */
+    private fun resolveMentionedSeatIds(
+        template: GroupChatTemplate,
+        text: String,
+    ): List<kotlin.uuid.Uuid> {
+        if (text.isBlank() || !text.contains('@')) return emptyList()
+
+        val assistantsById = mutableMapOf<kotlin.uuid.Uuid, Assistant?>()
+        val settings = settingsStore.settingsFlow.value
+        template.seats.forEach { seat ->
+            assistantsById[seat.assistantId] = settings.assistants.firstOrNull { it.id == seat.assistantId }
+        }
+
+        val seatDisplayNames = template.buildSeatDisplayNames(
+            assistantsById = settings.assistants.associateBy { it.id },
+            defaultName = "助手",
+        )
+
+        val keyToSeatIds = mutableMapOf<String, MutableList<kotlin.uuid.Uuid>>()
+        template.seats.forEach { seat ->
+            val key = seatDisplayNames[seat.id]?.trim()?.takeIf { it.isNotBlank() } ?: return@forEach
+            val normalized = key.lowercase(java.util.Locale.ROOT)
+            keyToSeatIds.getOrPut(normalized) { mutableListOf() }.add(seat.id)
+        }
+
+        if (keyToSeatIds.isEmpty()) return emptyList()
+
+        val sortedKeys = keyToSeatIds.keys.sortedByDescending { it.length }
+        val result = mutableListOf<kotlin.uuid.Uuid>()
+        val lowerText = text.lowercase(java.util.Locale.ROOT)
+
+        var cursor = 0
+        while (true) {
+            val atIndex = lowerText.indexOf('@', startIndex = cursor)
+            if (atIndex < 0) break
+
+            val after = lowerText.substring(atIndex + 1)
+            val matchedKey = sortedKeys.firstOrNull { after.startsWith(it) }
+            if (matchedKey != null) {
+                keyToSeatIds[matchedKey]?.forEach { seatId ->
+                    if (seatId !in result) result.add(seatId)
+                }
+                cursor = atIndex + 1 + matchedKey.length
+            } else {
+                cursor = atIndex + 1
+            }
+        }
+
+        return result
+    }
+
+    // ──── 路由模型 ────
+
+    /**
+     * 使用路由模型决定本次由谁发言
+     * 当 template.hostModelId 配置时调用
+     */
+    private suspend fun routeGroupChatSpeakers(
+        template: GroupChatTemplate,
+        userText: String,
+        conversationHistory: List<String>,
+    ): List<kotlin.uuid.Uuid> {
+        val settings = settingsStore.settingsFlow.value
+        val enabledSeats = template.seats
+        if (enabledSeats.isEmpty()) return emptyList()
+
+        // 没有路由模型则返回前3个座位
+        val hostModelId = template.hostModelId ?: return enabledSeats.take(3).map { it.id }
+        val hostModel = settings.findModelById(hostModelId) ?: return enabledSeats.take(3).map { it.id }
+
+        val assistantsById = settings.assistants.associateBy { it.id }
+        val seatDisplayNames = template.buildSeatDisplayNames(
+            assistantsById = assistantsById,
+            defaultName = "助手",
+        )
+
+        val seatLines = enabledSeats.mapNotNull { seat ->
+            val assistant = assistantsById[seat.assistantId] ?: return@mapNotNull null
+            val name = seatDisplayNames[seat.id]?.trim().orEmpty()
+                .ifBlank { assistant.name.ifBlank { "助手" } }
+            "- ${seat.id}: $name"
+        }
+
+        val recentHistory = conversationHistory.takeLast(4).joinToString("\n")
+        
+
+
+        val routerPrompt = buildString {
+            appendLine("你是群聊的路由模型。你只输出 JSON，不回复用户。")
+            appendLine()
+            appendLine("规则：")
+            appendLine("- 从座位列表中选择 1 到 3 个最相关的发言人")
+            appendLine("- 避免重复选择同一人")
+            appendLine("""输出格式：{"speakers":["<seatId>", ...]}""")
+            appendLine()
+            appendLine("可用座位：")
+            seatLines.forEach { appendLine(it) }
+            appendLine()
+            if (recentHistory.isNotBlank()) {
+                appendLine("最近发言：")
+                appendLine(recentHistory)
+                appendLine()
+            }
+            appendLine("用户消息：")
+            appendLine(userText.take(2000))
+        }
+
+        return try {
+            val provider = hostModel.findProvider(settings.providers) ?: return enabledSeats.take(3).map { it.id }
+            if (!provider.enabled) return enabledSeats.take(3).map { it.id }
+
+            val providerHandler = providerManager.getProviderByType(provider)
+            val result = providerHandler.generateText(
+                providerSetting = provider,
+                messages = listOf(UIMessage.user(routerPrompt)),
+                params = TextGenerationParams(model = hostModel),
+            )
+
+            val text = result.choices.firstOrNull()?.message?.toText()?.trim() ?: ""
+            if (text.isBlank()) return enabledSeats.take(3).map { it.id }
+
+            // 解析 JSON 输出
+            val jsonStart = text.indexOf('{')
+            val jsonEnd = text.lastIndexOf('}')
+            if (jsonStart < 0 || jsonEnd < 0) return enabledSeats.take(3).map { it.id }
+
+            val jsonStr = text.substring(jsonStart, jsonEnd + 1)
+            val json = kotlinx.serialization.json.Json.parseToJsonElement(jsonStr).jsonObject
+            val speakerIds = json["speakers"]?.jsonArray?.map { it.jsonPrimitive.content }
+                ?.mapNotNull { runCatching { kotlin.uuid.Uuid.parse(it) }.getOrNull() }
+                ?.filter { id -> enabledSeats.any { it.id == id } }
+                ?: enabledSeats.take(3).map { it.id }
+
+            speakerIds.take(3)
+        } catch (e: Exception) {
+            Log.w(TAG, "routeGroupChatSpeakers failed", e)
+            enabledSeats.take(3).map { it.id }
+        }
+    }
+
+    // ──── 互怼检测 ────
+
+    /**
+     * 检测发言中是否存在反对/驳斥，返回需要回怼的座位和对应内容
+     */
+    private fun detectInterReplies(
+        template: GroupChatTemplate,
+        history: List<String>,
+        enabledSeats: List<GroupChatSeat>,
+    ): List<Pair<GroupChatSeat, String>> {
+        if (history.size < 2) return emptyList()
+
+        val disagreementMarkers = listOf(
+            "我不同意", "不同意", "不认同", "反对", "有误", "不对", "错误", "不准确",
+            "i disagree", "disagree with", "that's wrong", "incorrect", "not correct",
+        )
+
+        val result = mutableListOf<Pair<GroupChatSeat, String>>()
+        val settings = settingsStore.settingsFlow.value
+
+        // 只检查最近 2 条发言
+        val recentEntries = history.takeLast(2)
+        for (entry in recentEntries) {
+            val normalized = entry.lowercase(java.util.Locale.ROOT)
+            val hasDisagreement = disagreementMarkers.any { normalized.contains(it) }
+            if (!hasDisagreement) continue
+
+            // 找到被怼的座位（前一条发言的发言人）
+            val previousEntry = history.getOrNull(history.indexOf(entry) - 1) ?: continue
+            val previousSpeakerName = previousEntry.substringBefore("：").trim()
+            if (previousSpeakerName.isBlank()) continue
+
+            // 找到对应的座位
+            val targetSeat = enabledSeats.firstOrNull { seat ->
+                val name = buildSeatDisplayName(template, seat, 0)
+                previousSpeakerName.contains(name) || name.contains(previousSpeakerName)
+            } ?: continue
+
+            // 避免重复回怼
+            if (result.any { it.first.id == targetSeat.id }) continue
+            result.add(targetSeat to previousEntry)
+        }
+
+        return result.take(2) // 最多 2 轮互怼
+    }
+
+    // ──── 群聊上下文构建 ────
+
+    /**
+     * 为座位构建 LLM 上下文（含群聊信息 + @Name 说明）
+     */
+    private fun buildGroupChatContext(
+        template: GroupChatTemplate,
+        seat: GroupChatSeat,
+        currentRound: Int,
+        history: List<String>,
+    ): String {
+        val settings = settingsStore.settingsFlow.value
+        val assistant = resolveAssistant(settings, seat)
+        val basePrompt = seat.overrides.systemPrompt ?: assistant?.systemPrompt ?: ""
+        val displayName = buildSeatDisplayName(template, seat, 0)
+
+        // 构建成员列表
+        val seatDisplayNames = template.buildSeatDisplayNames(
+            assistantsById = settings.assistants.associateBy { it.id },
+            defaultName = "助手",
+        )
+        val memberNames = template.seats.mapNotNull { s -> seatDisplayNames[s.id] }
+        val membersLine = if (memberNames.isEmpty()) "未知" else memberNames.joinToString(", ")
+
+        // 检测立场
+        val isModerator = basePrompt.contains("moderator", ignoreCase = true) ||
+            basePrompt.contains("主持人", ignoreCase = true)
+        val isPro = basePrompt.contains("pro", ignoreCase = true) ||
+            basePrompt.contains("正方", ignoreCase = true)
+        val isCon = basePrompt.contains("con", ignoreCase = true) ||
+            basePrompt.contains("反方", ignoreCase = true)
+        val isNeutral = basePrompt.contains("neutral", ignoreCase = true) ||
+            basePrompt.contains("中立", ignoreCase = true)
+
+        return buildString {
+            appendLine("你是${displayName}。")
+            appendLine()
+
+            // 群聊信息
+            if (template.name.isNotBlank()) {
+                appendLine("群聊：${template.name}")
+            }
+            appendLine("成员：${membersLine}")
+            appendLine("你的身份：${displayName}")
+            appendLine()
+            appendLine("规则：")
+            appendLine("- 保持自己的风格，不要模仿其他成员")
+            appendLine("- 使用 @Name 可以点名让某位成员回应")
+            appendLine("- 其他成员的消息来自他们自己，不是用户")
+            appendLine()
+
+            // 立场提示
+            if (isModerator) {
+                appendLine("📋 **你的角色：辩论主持人**")
+                appendLine("- 当前辩论进度：第${currentRound}轮，已有${history.size}次发言")
+                if (currentRound < 2) {
+                    appendLine("- 辩论刚开始，请推动讨论深入")
+                } else if (currentRound < 3) {
+                    appendLine("- 辩论进行中，继续引导各方深入交流")
+                } else {
+                    appendLine("- 可考虑是否已充分讨论")
+                }
+                appendLine()
+                appendLine("🔚 如果认为讨论充分，可在回复末尾添加 ${DEBATE_END_MARKER} 结束辩论。")
+            } else if (isPro) {
+                appendLine("🎯 **立场：正方** — 支持观点，提供证据和逻辑论证")
+            } else if (isCon) {
+                appendLine("🎯 **立场：反方** — 反对观点，提出反驳和质疑")
+            } else if (isNeutral) {
+                appendLine("🎯 **角色：中立分析师** — 客观分析双方观点")
+            }
+
+            if (basePrompt.isNotBlank() && !isModerator && !isPro && !isCon && !isNeutral) {
+                appendLine()
+                appendLine("---")
+                appendLine(basePrompt)
+            }
+
+            if (template.intro.isNotBlank()) {
+                appendLine()
+                appendLine("讨论背景：${template.intro}")
+            }
+
+            if (history.isNotEmpty()) {
+                appendLine()
+                appendLine("前面的发言：")
+                history.takeLast(10).forEach { line ->
+                    appendLine(line)
+                }
+            }
+
+            appendLine()
+            appendLine("请基于以上内容回应，简洁有力，不超过300字。")
+        }
     }
 
     // ──── 工具方法 ────// ──── 工具方法 ────
