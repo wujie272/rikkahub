@@ -2121,8 +2121,7 @@
     <string name="kb_setting_import_success">导入成功</string>
     <string name="kb_setting_clear_success">数据已清除</string>
     <string name="kb_assistant_lorebook_name">%s的知识库</string>
-    <string name="kb_setting_title">知识库</string>
-    <string name="kb_setting_desc">管理知识库，上传文档进行语义搜索</string>
+
     <string name="kb_import_docs">导入文件</string>
     <string name="kb_import_dir">导入目录</string>
     <string name="kb_import_multi_notice">读取 %d 个文件中...</string>
