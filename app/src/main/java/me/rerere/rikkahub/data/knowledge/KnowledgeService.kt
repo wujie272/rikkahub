@@ -12,10 +12,10 @@ class KnowledgeService(
     private val documentDao: KnowledgeDocumentDao,
     private val embeddingService: EmbeddingService,
     private val searchService: KnowledgeSearchService,
+) {
 
     /** 可观察的知识库列表（Room Flow 自动响应增删改） */
     fun observeAllKnowledgeBases(): Flow<List<KnowledgeBaseEntity>> = knowledgeBaseDao.getAllFlow()
-) {
     // ============ 知识库 CRUD ============
 
     suspend fun getAllKnowledgeBases(): List<KnowledgeBaseEntity> = knowledgeBaseDao.getAll()
