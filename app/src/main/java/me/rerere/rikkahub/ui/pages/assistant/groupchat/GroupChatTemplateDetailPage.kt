@@ -465,23 +465,32 @@ fun GroupChatTemplateDetailPage(id: String) {
                 if (showModeDialog) {
                     var showTopicInput by remember { mutableStateOf(false) }
                     var topicText by remember { mutableStateOf("") }
+                    var selectedMode by remember { mutableStateOf<GroupChatMode?>(null) }
 
                     if (showTopicInput) {
+                        val isDebate = selectedMode == GroupChatMode.DEBATE
                         AlertDialog(
                             onDismissRequest = {
                                 showTopicInput = false
                                 showModeDialog = false
+                                selectedMode = null
                             },
                             title = { Text("开始群聊") },
                             text = {
-                                OutlinedTextField(
-                                    value = topicText,
-                                    onValueChange = { topicText = it },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    label = { Text("输入讨论主题或问题") },
-                                    placeholder = { Text("例如：人工智能对人类未来的影响") },
-                                    minLines = 3,
-                                )
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text(
+                                        text = if (isDebate) "🎯 辩论模式" else "💬 自由讨论",
+                                        style = MaterialTheme.typography.titleSmall,
+                                    )
+                                    OutlinedTextField(
+                                        value = topicText,
+                                        onValueChange = { topicText = it },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        label = { Text("输入讨论主题或问题") },
+                                        placeholder = { Text("例如：人工智能对人类未来的影响") },
+                                        minLines = 3,
+                                    )
+                                }
                             },
                             confirmButton = {
                                 TextButton(
@@ -492,14 +501,21 @@ fun GroupChatTemplateDetailPage(id: String) {
                                             } else {
                                                 emptyList()
                                             }
+                                            val config = if (isDebate) {
+                                                GroupChatRuntimeConfig.debateDefaults()
+                                            } else {
+                                                GroupChatRuntimeConfig.roundRobinDefaults()
+                                            }
                                             val convId = chatService.startGroupChatConversation(
                                                 templateId = currentTemplate.id,
                                                 userMessage = userMsg,
+                                                runtimeConfig = config,
                                             )
                                             navController.navigate(Screen.Chat(id = convId.toString()))
                                         }
                                         showTopicInput = false
                                         showModeDialog = false
+                                        selectedMode = null
                                     }
                                 ) {
                                     Text("开始")
@@ -509,6 +525,7 @@ fun GroupChatTemplateDetailPage(id: String) {
                                 TextButton(onClick = {
                                     showTopicInput = false
                                     showModeDialog = false
+                                    selectedMode = null
                                 }) {
                                     Text("取消")
                                 }
@@ -522,6 +539,7 @@ fun GroupChatTemplateDetailPage(id: String) {
                                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                     TextButton(
                                         onClick = {
+                                            selectedMode = GroupChatMode.ROUND_ROBIN
                                             showTopicInput = true
                                         },
                                         modifier = Modifier.fillMaxWidth(),
@@ -530,6 +548,7 @@ fun GroupChatTemplateDetailPage(id: String) {
                                     }
                                     TextButton(
                                         onClick = {
+                                            selectedMode = GroupChatMode.DEBATE
                                             showTopicInput = true
                                         },
                                         modifier = Modifier.fillMaxWidth(),

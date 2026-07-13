@@ -1753,6 +1753,7 @@ class ChatService(
     suspend fun startGroupChatConversation(
         templateId: kotlin.uuid.Uuid,
         userMessage: List<UIMessagePart> = emptyList(),
+        runtimeConfig: GroupChatRuntimeConfig = GroupChatRuntimeConfig.roundRobinDefaults(),
     ): kotlin.uuid.Uuid {
         val settings = settingsStore.settingsFlow.first()
         val template = settings.groupChatTemplates.find { it.id == templateId }
@@ -1778,6 +1779,7 @@ class ChatService(
                 conversationId = conversationId,
                 template = template,
                 userMessage = userMessage,
+                runtimeConfig = runtimeConfig,
             )
         }
 

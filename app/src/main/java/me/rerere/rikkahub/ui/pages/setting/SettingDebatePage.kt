@@ -25,6 +25,7 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Add01
 
 import me.rerere.hugeicons.stroke.Delete01
+import me.rerere.hugeicons.stroke.PencilEdit01
 import me.rerere.hugeicons.stroke.Play
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.SettingsStore
@@ -388,6 +389,7 @@ private fun DebateTemplateList(
                         navController.navigate(Screen.Chat(id = convId.toString()))
                     }
                 },
+                onEdit = { navController.navigate(Screen.GroupChatTemplateDetail(id = template.id.toString())) },
                 onDelete = { onDelete(template) },
             )
         }
@@ -399,6 +401,7 @@ private fun DebateTemplateCard(
     template: GroupChatTemplate,
     settings: me.rerere.rikkahub.data.datastore.Settings,
     onStart: (String) -> Unit,
+    onEdit: () -> Unit = {},
     onDelete: () -> Unit,
 ) {
     var showTopicInput by remember { mutableStateOf(false) }
@@ -431,6 +434,9 @@ private fun DebateTemplateCard(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                }
+                IconButton(onClick = onEdit) {
+                    Icon(HugeIcons.PencilEdit01, "编辑", tint = MaterialTheme.colorScheme.primary)
                 }
                 IconButton(onClick = onDelete) {
                     Icon(HugeIcons.Delete01, "删除", tint = MaterialTheme.colorScheme.error)
