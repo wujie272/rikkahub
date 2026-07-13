@@ -3,6 +3,9 @@ package me.rerere.rikkahub.ui.pages.setting
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -20,11 +23,9 @@ import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Add01
-import me.rerere.hugeicons.stroke.ArrowLeft01
-import me.rerere.hugeicons.stroke.Cancel01
+
 import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.Play
-import me.rerere.hugeicons.stroke.Zap
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.model.DEBATE_TOPICS
@@ -52,7 +53,7 @@ fun SettingDebatePage() {
     var showCreateDialog by remember { mutableStateOf(false) }
     var showTopicDialog by remember { mutableStateOf(false) }
     var selectedTopic by remember { mutableStateOf("") }
-    var customTopic by remember { mutableStateOf("") }
+
     var expandedCategory by remember { mutableStateOf<String?>(null) }
     var startTitle by remember { mutableStateOf("") }
 
@@ -130,18 +131,21 @@ fun SettingDebatePage() {
     if (showCreateDialog) {
         var templateName by remember { mutableStateOf("") }
         var selectedPreset by remember { mutableStateOf("basic") }
-        var assistant1 by remember { mutableStateOf(settings.assistants.firstOrNull()?.id) }
-        var assistant2 by remember { mutableStateOf(settings.assistants.getOrNull(1)?.id) }
-        var assistant3 by remember { mutableStateOf<Uuid?>(null) }
-        var assistant4 by remember { mutableStateOf<Uuid?>(null) }
+        val selectedAssistantIds = remember { mutableStateListOf<Uuid>() }
 
-        val availableAssistants = settings.assistants.filter { it.id !in DEFAULT_ASSISTANTS_IDS || it.id == assistant1 || it.id == assistant2 }
+        // 预设角色名预览
+        val presetRoleLabels = remember(selectedPreset) {
+            generatePresetRoleLabels(selectedPreset)
+        }
 
         AlertDialog(
             onDismissRequest = { showCreateDialog = false },
             title = { Text("新建辩论模板") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
                     OutlinedTextField(
                         value = templateName,
                         onValueChange = { templateName = it },
@@ -170,22 +174,53 @@ fun SettingDebatePage() {
                         )
                     }
 
-                    Text("选择助手角色", style = MaterialTheme.typography.labelMedium)
-                    availableAssistants.forEach { a ->
+                    // 预设角色预览
+                    if (presetRoleLabels.isNotEmpty()) {
+                        Text("角色分配预览", style = MaterialTheme.typography.labelMedium)
+                        presetRoleLabels.forEachIndexed { index, label ->
+                            val seatNum = index + 1
+                            val assigned = selectedAssistantIds.getOrNull(index)
+                            val assistantName = assigned?.let { id ->
+                                settings.assistants.firstOrNull { it.id == id }?.name?.ifBlank { "助手" }
+                            } ?: "（待选择）"
+                            Text(
+                                "${seatNum}. $assistantName → $label",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (assigned != null) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+
+                    Text(
+                        "选择助手角色（选${selectedAssistantIds.size}人，点击已选可取消）",
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                    settings.assistants.forEach { a ->
+                        val isSelected = a.id in selectedAssistantIds
                         Row(
-                            modifier = Modifier.fillMaxWidth().clickable {
-                                when {
-                                    assistant1 == null -> assistant1 = a.id
-                                    assistant2 == null && a.id != assistant1 -> assistant2 = a.id
-                                    assistant3 == null && a.id != assistant1 && a.id != assistant2 -> assistant3 = a.id
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    if (isSelected) {
+                                        selectedAssistantIds.remove(a.id)
+                                    } else if (selectedAssistantIds.size < 8) {
+                                        selectedAssistantIds.add(a.id)
+                                    }
                                 }
-                            }.padding(vertical = 4.dp),
+                                .padding(vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
+                            Checkbox(
+                                checked = isSelected,
+                                onCheckedChange = { checked ->
+                                    if (checked && selectedAssistantIds.size < 8) {
+                                        selectedAssistantIds.add(a.id)
+                                    } else {
+                                        selectedAssistantIds.remove(a.id)
+                                    }
+                                },
+                            )
                             Text(a.name.ifBlank { "助手" }, modifier = Modifier.weight(1f))
-                            if (a.id == assistant1 || a.id == assistant2 || a.id == assistant3 || a.id == assistant4) {
-                                Text("已选", color = MaterialTheme.colorScheme.primary)
-                            }
                         }
                     }
                 }
@@ -194,14 +229,10 @@ fun SettingDebatePage() {
                 TextButton(
                     onClick = {
                         scope.launch(Dispatchers.IO) {
-                            val seats = buildList {
-                                assistant1?.let { id -> add(GroupChatSeat(assistantId = id)) }
-                                assistant2?.let { id -> add(GroupChatSeat(assistantId = id)) }
-                                assistant3?.let { id -> add(GroupChatSeat(assistantId = id)) }
-                                assistant4?.let { id -> add(GroupChatSeat(assistantId = id)) }
+                            val seats = selectedAssistantIds.map { id ->
+                                GroupChatSeat(assistantId = id)
                             }
 
-                            // Apply debate prompts based on preset
                             val prompts = generatePresetPrompts(selectedPreset, seats.size)
                             val seatsWithPrompts = seats.mapIndexed { index, seat ->
                                 if (index < prompts.size) {
@@ -220,7 +251,7 @@ fun SettingDebatePage() {
                         }
                         showCreateDialog = false
                     },
-                    enabled = templateName.isNotBlank() && assistant1 != null && assistant2 != null,
+                    enabled = templateName.isNotBlank() && selectedAssistantIds.size >= 2,
                 ) { Text("创建") }
             },
             dismissButton = {
@@ -539,5 +570,14 @@ private fun generatePresetPrompts(preset: String, count: Int): List<String> {
     }.take(count)
 }
 
-// Need DEFAULT_ASSISTANTS_IDS for the create dialog filter
-private val DEFAULT_ASSISTANTS_IDS = me.rerere.rikkahub.data.datastore.DEFAULT_ASSISTANTS_IDS
+/**
+ * 生成预设角色标签（用于新建对话框中的角色分配预览）
+ */
+private fun generatePresetRoleLabels(preset: String): List<String> {
+    return when (preset) {
+        "basic" -> listOf("正方", "反方", "主持人")
+        "professional" -> listOf("正方", "反方", "分析师", "主持人")
+        "expert" -> listOf("法律专家", "经济学专家", "技术专家", "主持人")
+        else -> listOf("正方", "反方", "主持人")
+    }
+}
