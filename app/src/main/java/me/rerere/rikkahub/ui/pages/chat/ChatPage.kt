@@ -6,6 +6,8 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
+
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.lazy.LazyListState
 
 import androidx.compose.foundation.rememberScrollState
@@ -56,6 +58,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.core.content.FileProvider
 import androidx.core.net.toUri
 import com.dokar.sonner.ToastType
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.ui.Alignment
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
@@ -82,6 +87,8 @@ import me.rerere.rikkahub.data.model.analyzeGroupChatMentionText
 import me.rerere.rikkahub.data.model.resolveMentionSeatOverride
 import me.rerere.rikkahub.data.model.buildSeatDisplayNames
 import me.rerere.rikkahub.data.model.Conversation
+
+import me.rerere.rikkahub.service.GroupChatRunState
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.ui.components.ai.ChatInput
@@ -296,6 +303,9 @@ private fun ChatPageContent(
     var previewMode by rememberSaveable { mutableStateOf(false) }
     val hazeState = rememberHazeState()
     val assistant = setting.getCurrentAssistant()
+
+    // 群聊运行状态
+    val groupChatRunState by vm.groupChatRunState.collectAsStateWithLifecycle()
     var showFilesSheet by remember { mutableStateOf(false) }
 
     val completionProviders = remember(assistant.workspaceId, conversation.workspaceCwd, workspaceRepository) {
@@ -532,6 +542,50 @@ private fun ChatPageContent(
                     vm.saveConversationAsync()
                 },
             )
+        }
+
+        // 群聊运行进度条（在输入框上方）
+        val isGroupChatRunning = groupChatRunState is GroupChatRunState.Running
+        AnimatedVisibility(visible = isGroupChatRunning) {
+            val running = groupChatRunState as? GroupChatRunState.Running
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                ),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        val modeLabel = if (groupChatTemplate != null) {
+                            if (conversation.groupChatTemplateId != null) "🎯 群聊" else "💬 "
+                        } else ""
+                        Text(
+                            text = "${modeLabel}第${running?.currentRound ?: 0}/${running?.maxRounds ?: 0}轮 — ${running?.currentSeatName ?: "..."}发言中",
+                            style = MaterialTheme.typography.labelMedium,
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        LinearProgressIndicator(
+                            progress = {
+                                val r = running
+                                if (r != null && r.maxRounds > 0) {
+                                    (r.currentRound - 1 + r.currentSeatIndex.toFloat() / r.totalSeats.coerceAtLeast(1)) / r.maxRounds
+                                } else 0f
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    IconButton(
+                        onClick = { vm.stopGeneration() },
+                        modifier = Modifier.size(32.dp),
+                    ) {
+                        Icon(HugeIcons.Cancel01, "停止", tint = MaterialTheme.colorScheme.error)
+                    }
+                }
+            }
         }
 
         // @Name 消歧义底部弹窗
