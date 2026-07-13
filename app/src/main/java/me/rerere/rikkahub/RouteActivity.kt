@@ -247,14 +247,21 @@ class RouteActivity : ComponentActivity() {
                 action = intent?.action
                 putExtra(Intent.EXTRA_TEXT, intent?.getStringExtra(Intent.EXTRA_TEXT))
                 putExtra(Intent.EXTRA_STREAM, intent?.getStringExtra(Intent.EXTRA_STREAM))
+                putExtra(Intent.EXTRA_PROCESS_TEXT, intent?.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT))
             }
         }
 
         LaunchedEffect(backStack) {
-            if (shareIntent.action == Intent.ACTION_SEND) {
-                val text = shareIntent.getStringExtra(Intent.EXTRA_TEXT) ?: ""
-                val imageUri = shareIntent.getStringExtra(Intent.EXTRA_STREAM)
-                backStack.add(Screen.ShareHandler(text, imageUri))
+            when (shareIntent.action) {
+                Intent.ACTION_SEND -> {
+                    val text = shareIntent.getStringExtra(Intent.EXTRA_TEXT) ?: ""
+                    val imageUri = shareIntent.getStringExtra(Intent.EXTRA_STREAM)
+                    backStack.add(Screen.ShareHandler(text, imageUri))
+                }
+                Intent.ACTION_PROCESS_TEXT -> {
+                    val text = shareIntent.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)?.toString() ?: ""
+                    backStack.add(Screen.ShareHandler(text, null))
+                }
             }
         }
     }
