@@ -5,12 +5,15 @@ import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyListState
+
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.Icon
@@ -30,6 +33,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.adaptive.currentWindowDpSize
 import androidx.compose.material3.rememberBottomSheetState
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -39,6 +43,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -51,6 +56,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.core.content.FileProvider
 import androidx.core.net.toUri
 import com.dokar.sonner.ToastType
+import androidx.compose.ui.Alignment
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.coroutines.Job
@@ -70,6 +76,11 @@ import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.data.model.MentionAnalysis
+import me.rerere.rikkahub.data.model.GroupChatTemplate
+import me.rerere.rikkahub.data.model.analyzeGroupChatMentionText
+import me.rerere.rikkahub.data.model.resolveMentionSeatOverride
+import me.rerere.rikkahub.data.model.buildSeatDisplayNames
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.rikkahub.service.ChatError
@@ -299,6 +310,24 @@ private fun ChatPageContent(
         }.orEmpty()
     }
 
+    // 群聊消息发送者颜色映射：根据 senderName 生成确定性颜色
+    // @Name 提及消歧义状态
+    var mentionDisambiguationState by remember { mutableStateOf<MentionDisambiguationState?>(null) }
+    val groupChatTemplate = remember(conversation.groupChatTemplateId, setting.groupChatTemplates) {
+        conversation.groupChatTemplateId?.let { id ->
+            setting.groupChatTemplates.firstOrNull { it.id == id }
+        }
+    }
+    val assistantsById = remember(setting.assistants) {
+        setting.assistants.associateBy { it.id }
+    }
+    val senderColors = remember(conversation.messageNodes) {
+        conversation.messageNodes
+            .mapNotNull { it.senderName }
+            .distinct()
+            .associateWith { name -> generateSenderColor(name) }
+    }
+
     TTSAutoPlay(vm = vm, setting = setting, conversation = conversation)
 
     Surface(
@@ -352,11 +381,22 @@ private fun ChatPageContent(
                                 parts = inputState.getContents(),
                                 messageId = inputState.editingMessage!!,
                             )
-                        } else {
-                            vm.handleMessageSend(inputState.getContents())
-                            scope.launch {
-                                chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
-                            }
+                            inputState.clearInput()
+                            return@ChatInput
+                        }
+                        // 群聊 @Name 检测
+                        if (handleGroupChatMentionCheck(
+                                inputState = inputState,
+                                template = groupChatTemplate,
+                                assistantsById = assistantsById,
+                                onDisambiguationNeeded = { state -> mentionDisambiguationState = state },
+                            )
+                        ) {
+                            return@ChatInput
+                        }
+                        vm.handleMessageSend(inputState.getContents())
+                        scope.launch {
+                            chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
                         }
                         inputState.clearInput()
                     },
@@ -366,11 +406,22 @@ private fun ChatPageContent(
                                 parts = inputState.getContents(),
                                 messageId = inputState.editingMessage!!,
                             )
-                        } else {
-                            vm.handleMessageSend(content = inputState.getContents(), answer = false)
-                            scope.launch {
-                                chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
-                            }
+                            inputState.clearInput()
+                            return@ChatInput
+                        }
+                        // 群聊 @Name 检测
+                        if (handleGroupChatMentionCheck(
+                                inputState = inputState,
+                                template = groupChatTemplate,
+                                assistantsById = assistantsById,
+                                onDisambiguationNeeded = { state -> mentionDisambiguationState = state },
+                            )
+                        ) {
+                            return@ChatInput
+                        }
+                        vm.handleMessageSend(content = inputState.getContents(), answer = false)
+                        scope.launch {
+                            chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
                         }
                         inputState.clearInput()
                     },
@@ -412,6 +463,7 @@ private fun ChatPageContent(
                 processingStatus = processingStatus,
                 previewMode = previewMode,
                 settings = setting,
+                senderColors = senderColors,
                 hazeState = hazeState,
                 errors = errors,
                 onDismissError = onDismissError,
@@ -479,6 +531,20 @@ private fun ChatPageContent(
                     vm.updateConversation(conversation.copy(customSystemPrompt = newPrompt))
                     vm.saveConversationAsync()
                 },
+            )
+        }
+
+        // @Name 消歧义底部弹窗
+        mentionDisambiguationState?.let { state ->
+            ChatPageMentionDisambiguation(
+                state = state,
+                vm = vm,
+                inputState = inputState,
+                chatListState = chatListState,
+                conversation = conversation,
+                settings = setting,
+                assistantsById = assistantsById,
+                onDismiss = { mentionDisambiguationState = null },
             )
         }
 
@@ -823,4 +889,243 @@ private fun TopBar(
             }
         )
     }
+}
+
+@Composable
+private fun ChatPageMentionDisambiguation(
+    state: MentionDisambiguationState,
+    vm: ChatVM,
+    inputState: ChatInputState,
+    chatListState: LazyListState,
+    conversation: Conversation,
+    settings: Settings,
+    assistantsById: Map<Uuid, Assistant>,
+    onDismiss: () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val toaster = LocalToaster.current
+    val context = LocalContext.current
+    val defaultAssistantName = stringResource(R.string.assistant_page_default_assistant)
+    val mutableSelection = remember(state) { state.toMutableSelected() }
+
+    GroupChatMentionDisambiguationSheet(
+        template = state.template,
+        analysis = state.analysis,
+        settings = settings,
+        assistantsById = assistantsById,
+        defaultAssistantName = defaultAssistantName,
+        selectedSeatIdsByKey = mutableSelection.mapValues { (_, v) -> v.toSet() },
+        onUpdateSelection = { key, seatIds ->
+            mutableSelection[key] = seatIds.toMutableSet()
+        },
+        onConfirm = {
+            val resolvedSeatIds = resolveMentionSeatOverride(
+                analysis = state.analysis,
+                selectedSeatIdsByKey = mutableSelection.mapValues { (_, v) -> v.toSet() },
+                template = state.template,
+            )
+            if (resolvedSeatIds.isEmpty()) {
+                toaster.show(
+                    "请至少为每个 @Name 选择一个成员",
+                    type = ToastType.Warning
+                )
+                return@GroupChatMentionDisambiguationSheet
+            }
+            onDismiss()
+            vm.handleMessageSend(
+                content = inputState.getContents(),
+                groupChatSpeakerSeatIdsOverride = resolvedSeatIds,
+            )
+            scope.launch {
+                chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
+            }
+            inputState.clearInput()
+        },
+        onDismiss = onDismiss,
+    )
+}
+
+/**
+ * @Name 消歧义状态
+ */
+private data class MentionDisambiguationState(
+    val template: GroupChatTemplate,
+    val analysis: MentionAnalysis,
+    val selectedSeatIdsByKey: Map<String, Set<Uuid>>,
+) {
+    fun toMutableSelected(): MutableMap<String, MutableSet<Uuid>> =
+        selectedSeatIdsByKey.mapValues { (_, v) -> v.toMutableSet() }.toMutableMap()
+}
+
+/**
+ * 检测群聊输入中的 @Name 提及，如果存在同名歧义则阻塞发送并设置消歧义状态。
+ * 返回 true 表示已拦截（需要消歧义），false 表示可以继续发送。
+ */
+private fun handleGroupChatMentionCheck(
+    inputState: ChatInputState,
+    template: GroupChatTemplate?,
+    assistantsById: Map<Uuid, Assistant>,
+    onDisambiguationNeeded: (MentionDisambiguationState) -> Unit,
+): Boolean {
+    if (template == null || inputState.isEditing()) return false
+
+    val userText = inputState.getContents()
+        .filterIsInstance<UIMessagePart.Text>()
+        .joinToString("\n") { it.text }
+        .trim()
+    if (!userText.contains('@')) return false
+
+    val analysis = analyzeGroupChatMentionText(
+        text = userText,
+        template = template,
+        assistantsById = assistantsById,
+        defaultName = "助手",
+    )
+    if (analysis.ambiguousKeysInOrder.isNotEmpty()) {
+        onDisambiguationNeeded(
+            MentionDisambiguationState(
+                template = template,
+                analysis = analysis,
+                selectedSeatIdsByKey = analysis.ambiguousKeysInOrder.associateWith { key ->
+                    analysis.keyToInfo[key]?.seatIds?.firstOrNull()?.let(::setOf).orEmpty()
+                },
+            )
+        )
+        return true
+    }
+    return false
+}
+
+/**
+ * @Name 消歧义底部弹窗
+ */
+@Composable
+private fun GroupChatMentionDisambiguationSheet(
+    template: GroupChatTemplate,
+    analysis: MentionAnalysis,
+    settings: Settings,
+    assistantsById: Map<Uuid, Assistant>,
+    defaultAssistantName: String,
+    selectedSeatIdsByKey: Map<String, Set<Uuid>>,
+    onUpdateSelection: (key: String, seatIds: Set<Uuid>) -> Unit,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val seatDisplayNames = remember(template, assistantsById, defaultAssistantName) {
+        template.buildSeatDisplayNames(
+            assistantsById = assistantsById,
+            defaultName = defaultAssistantName,
+        )
+    }
+    val seatsById = remember(template) {
+        template.seats.associateBy { it.id }
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxSize(0.7f)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                text = "选择要 @ 的具体成员",
+                style = MaterialTheme.typography.titleLarge,
+            )
+            Text(
+                text = "「@${analysis.ambiguousKeysInOrder.firstOrNull() ?: ""}」匹配到多个同名成员，请选择具体要@的座位：",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                analysis.ambiguousKeysInOrder.forEach { key ->
+                    val info = analysis.keyToInfo[key] ?: return@forEach
+                    val selectedSeatIds = selectedSeatIdsByKey[key].orEmpty()
+
+                    Text(
+                        text = "@${info.displayName}",
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+
+                    info.seatIds.forEach { seatId ->
+                        val seat = seatsById[seatId]
+                        val name = seatDisplayNames[seatId]
+                            ?: assistantsById[seat?.assistantId]?.name?.ifBlank { info.displayName }
+                            ?: info.displayName
+                        val isChecked = seatId in selectedSeatIds
+
+                        Surface(
+                            onClick = {
+                                val updated = if (isChecked) selectedSeatIds - seatId else selectedSeatIds + seatId
+                                onUpdateSelection(key, updated)
+                            },
+                            shape = MaterialTheme.shapes.medium,
+                            color = MaterialTheme.colorScheme.surfaceContainerLow,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                Checkbox(
+                                    checked = isChecked,
+                                    onCheckedChange = null,
+                                )
+                                Column {
+                                    Text(
+                                        text = name,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Button(
+                onClick = onConfirm,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("发送")
+            }
+        }
+    }
+}
+
+/**
+ * 根据 senderName 生成确定性颜色，同一名字始终得到相同颜色。
+ * 使用 HSL 空间均匀分布色相，保证颜色之间有足够的视觉区分度。
+ */
+private val SENDER_COLOR_PALETTE = listOf(
+    Color(0xFF4FC3F7), // 浅蓝
+    Color(0xFF81C784), // 浅绿
+    Color(0xFFFFB74D), // 橙色
+    Color(0xFFE57373), // 红色
+    Color(0xFFBA68C8), // 紫色
+    Color(0xFF4DB6AC), // 青绿
+    Color(0xFFFF8A65), // 珊瑚
+    Color(0xFFA1887F), // 棕色
+    Color(0xFF90A4AE), // 蓝灰
+    Color(0xFFF06292), // 粉红
+    Color(0xFFAED581), // 黄绿
+    Color(0xFF7986CB), // 靛蓝
+)
+
+private fun generateSenderColor(name: String): Color {
+    val hash = name.hashCode() and Int.MAX_VALUE
+    return SENDER_COLOR_PALETTE[hash % SENDER_COLOR_PALETTE.size]
 }

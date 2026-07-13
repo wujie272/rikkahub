@@ -380,7 +380,12 @@ class ChatService(
 
     // ---- 发送消息 ----
 
-    fun sendMessage(conversationId: Uuid, content: List<UIMessagePart>, answer: Boolean = true) {
+    fun sendMessage(
+        conversationId: Uuid,
+        content: List<UIMessagePart>,
+        answer: Boolean = true,
+        groupChatSpeakerSeatIdsOverride: List<Uuid>? = null,
+    ) {
         if (content.isEmptyInputMessage()) return
 
         val session = getOrCreateSession(conversationId)
@@ -426,6 +431,7 @@ class ChatService(
                             conversationId = conversationId,
                             template = template,
                             userMessage = processedContent,
+                            speakerSeatIdsOverride = groupChatSpeakerSeatIdsOverride,
                         )
                         true
                     } else false

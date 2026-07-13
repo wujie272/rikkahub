@@ -95,12 +95,14 @@ class GroupChatRunner(
      * @param template 群聊模板
      * @param userMessage 触发的用户消息
      * @param runtimeConfig 运行配置
+     * @param speakerSeatIdsOverride 如果用户通过 @Name 指定了发言人，这些 seatIds 会覆盖默认轮询
      */
     fun start(
         conversationId: kotlin.uuid.Uuid,
         template: GroupChatTemplate,
         userMessage: List<UIMessagePart>,
         runtimeConfig: GroupChatRuntimeConfig = GroupChatRuntimeConfig.roundRobinDefaults(),
+        speakerSeatIdsOverride: List<kotlin.uuid.Uuid>? = null,
     ) {
         if (isRunning) {
             Log.w(TAG, "start: already running, ignoring")
@@ -110,7 +112,7 @@ class GroupChatRunner(
         engineJob?.cancel()
         engineJob = appScope.launch {
             try {
-                runEngine(conversationId, template, userMessage, runtimeConfig)
+                runEngine(conversationId, template, userMessage, runtimeConfig, speakerSeatIdsOverride)
             } catch (e: CancellationException) {
                 Log.i(TAG, "runEngine cancelled")
                 _runState.value = GroupChatRunState.Finished("cancelled", 0)
@@ -134,6 +136,7 @@ class GroupChatRunner(
         template: GroupChatTemplate,
         userMessage: List<UIMessagePart>,
         config: GroupChatRuntimeConfig,
+        speakerSeatIdsOverride: List<kotlin.uuid.Uuid>? = null,
     ) = coroutineScope {
         val enabledSeats = template.seats.filter { it.id !in config.disabledSeatIds }
         if (enabledSeats.isEmpty()) {
@@ -198,7 +201,8 @@ class GroupChatRunner(
         // 收集用户消息中的 @提及
         val userText = userMessage.filterIsInstance<UIMessagePart.Text>()
             .joinToString(" ") { it.text }
-        val mentionedSeatIds = resolveMentionedSeatIds(template, userText)
+        val mentionedSeatIds = speakerSeatIdsOverride
+            ?: resolveMentionedSeatIds(template, userText)
 
         while (currentRound <= config.maxRounds && shouldContinue && isActive) {
             Log.d(TAG, "=== Round $currentRound ===")
@@ -805,6 +809,8 @@ ${history.joinToString("\n\n")}
             basePrompt.contains("反方", ignoreCase = true)
         val isNeutral = basePrompt.contains("neutral", ignoreCase = true) ||
             basePrompt.contains("中立", ignoreCase = true)
+        val isSummary = basePrompt.contains("summary", ignoreCase = true) ||
+            basePrompt.contains("总结", ignoreCase = true)
 
         return buildString {
             appendLine("你是${displayName}。")
@@ -842,9 +848,14 @@ ${history.joinToString("\n\n")}
                 appendLine("🎯 **立场：反方** — 反对观点，提出反驳和质疑")
             } else if (isNeutral) {
                 appendLine("🎯 **角色：中立分析师** — 客观分析双方观点")
+            } else if (isSummary) {
+                appendLine("🎯 **角色：总结分析师**")
+                appendLine("- 总结整个辩论过程")
+                appendLine("- 识别争议焦点和共识")
+                appendLine("- 提供平衡的结论")
             }
 
-            if (basePrompt.isNotBlank() && !isModerator && !isPro && !isCon && !isNeutral) {
+            if (basePrompt.isNotBlank() && !isModerator && !isPro && !isCon && !isNeutral && !isSummary) {
                 appendLine()
                 appendLine("---")
                 appendLine(basePrompt)
@@ -862,120 +873,17 @@ ${history.joinToString("\n\n")}
                     appendLine(line)
                 }
             }
-
             appendLine()
-            appendLine("请基于以上内容回应，简洁有力，不超过300字。")
-        }
-    }
-
-    // ──── 工具方法 ────// ──── 工具方法 ────
-
-    /**
-     * 为座位构建 LLM 上下文（立场感知）
-     * 
-     * 根据座位角色（正反方/主持人/中立）生成不同的上下文，
-     * 主持人会收到辩论进度信息，正反方会收到各自立场提示
-     */
-    private fun buildContext(
-        template: GroupChatTemplate,
-        seat: GroupChatSeat,
-        currentRound: Int,
-        history: List<String>,
-    ): String {
-        val assistant = resolveAssistant(settingsStore.settingsFlow.value, seat)
-        val basePrompt = seat.overrides.systemPrompt ?: assistant?.systemPrompt ?: ""
-        val displayName = buildSeatDisplayName(template, seat, 0)
-
-        // 检测立场
-        val isModerator = basePrompt.contains("moderator", ignoreCase = true) ||
-            basePrompt.contains("主持人", ignoreCase = true)
-        val isPro = basePrompt.contains("pro", ignoreCase = true) ||
-            basePrompt.contains("正方", ignoreCase = true)
-        val isCon = basePrompt.contains("con", ignoreCase = true) ||
-            basePrompt.contains("反方", ignoreCase = true)
-        val isNeutral = basePrompt.contains("neutral", ignoreCase = true) ||
-            basePrompt.contains("中立", ignoreCase = true)
-        val isSummary = basePrompt.contains("summary", ignoreCase = true) ||
-            basePrompt.contains("总结", ignoreCase = true)
-
-        return buildString {
-            appendLine("你是${displayName}。")
-            appendLine()
-
-            // 立场提示
-            if (isModerator) {
-                appendLine("📋 **你的角色：辩论主持人**")
-                appendLine("- 公正中立，引导辩论方向")
-                appendLine("- 总结各方要点，推动讨论深入")
-                appendLine("- 当前辩论进度：第${currentRound}轮，已有${history.size}次发言")
-                if (currentRound < 2) {
-                    appendLine("- 辩论刚开始，请推动讨论深入，不要急于结束")
-                } else if (currentRound < 3) {
-                    appendLine("- 辩论进行中，继续引导各方深入交流")
-                } else {
-                    appendLine("- 可以考虑是否已充分讨论，必要时可建议结束")
-                }
-                appendLine()
-                appendLine("🔚 **结束指令**：如果认为讨论已充分，可在回复末尾添加 ${DEBATE_END_MARKER} 来结束辩论。")
-            } else if (isPro) {
-                appendLine("🎯 **你的立场：正方** — 支持辩论观点")
-                appendLine("- 提供有力的证据和逻辑论证")
-                appendLine("- 反驳对方的质疑")
-                appendLine("- 保持理性和专业")
-            } else if (isCon) {
-                appendLine("🎯 **你的立场：反方** — 反对辩论观点")
-                appendLine("- 揭示对方论证的漏洞")
-                appendLine("- 提出有力的反驳和质疑")
-                appendLine("- 保持批判性思维")
-            } else if (isNeutral) {
-                appendLine("🎯 **你的角色：中立分析师**")
-                appendLine("- 客观分析双方观点")
-                appendLine("- 指出论证中的逻辑问题")
-                appendLine("- 提供平衡的视角")
-            } else if (isSummary) {
-                appendLine("🎯 **你的角色：总结分析师**")
-                appendLine("- 总结整个辩论过程")
-                appendLine("- 识别争议焦点和共识")
-                appendLine("- 提供平衡的结论")
-            }
-
-            if (basePrompt.isNotBlank()) {
-                appendLine()
-                appendLine("---")
-                appendLine(basePrompt)
-            }
-
-            appendLine()
-            appendLine("---")
-            appendLine("当前是第${currentRound}轮辩论。")
-
-            if (template.intro.isNotBlank()) {
-                appendLine()
-                appendLine("讨论背景：${template.intro}")
-            }
-
-            if (history.isNotEmpty()) {
-                appendLine()
-                appendLine("前面的发言：")
-                history.takeLast(8).forEach { line ->
-                    appendLine(line)
-                }
-            }
-
-            appendLine()
-            if (isModerator) {
-                appendLine("请基于以上内容主持辩论，每个发言控制在200字以内。")
-            } else if (isSummary) {
+            if (isSummary) {
                 appendLine("请提供全面、深入、平衡的总结分析。")
+            } else if (isModerator) {
+                appendLine("请基于以上内容主持辩论，每个发言控制在200字以内。")
             } else {
-                appendLine("请基于以上内容回应，简洁有力，不超过200字。")
+                appendLine("请基于以上内容回应，简洁有力，不超过300字。")
             }
         }
-    }
 
-    /**
-     * 构建座位显示名
-     */
+    }
     private fun buildSeatDisplayName(
         template: GroupChatTemplate,
         seat: GroupChatSeat,

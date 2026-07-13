@@ -208,11 +208,16 @@ class ChatVM(
      *
      * @param content 消息内容
      * @param answer 是否触发消息生成，如果为false，则仅添加消息到消息列表中
+     * @param groupChatSpeakerSeatIdsOverride 群聊模式下 @Name 指定发言人时传入座位 IDs
      */
-    fun handleMessageSend(content: List<UIMessagePart>,answer: Boolean = true) {
+    fun handleMessageSend(
+        content: List<UIMessagePart>,
+        answer: Boolean = true,
+        groupChatSpeakerSeatIdsOverride: List<Uuid>? = null,
+    ) {
         if (content.isEmptyInputMessage()) return
 
-        chatService.sendMessage(_conversationId, content, answer)
+        chatService.sendMessage(_conversationId, content, answer, groupChatSpeakerSeatIdsOverride)
     }
 
     fun handleMessageEdit(parts: List<UIMessagePart>, messageId: Uuid) {
