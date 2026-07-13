@@ -179,6 +179,12 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         headlineContent = { Text(stringResource(R.string.setting_page_assistant)) },
                     )
                     item(
+                        onClick = { navController.navigate(Screen.SettingDebate) },
+                        leadingContent = { Icon(HugeIcons.Zap, null) },
+                        supportingContent = { Text("AI角色辩论，多模型轮流交锋") },
+                        headlineContent = { Text("AI辩论") },
+                    )
+                    item(
                         onClick = { navController.navigate(Screen.Extensions) },
                         leadingContent = { Icon(HugeIcons.Package, null) },
                         supportingContent = { Text(stringResource(R.string.setting_page_extensions_desc)) },
@@ -221,12 +227,6 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         leadingContent = { Icon(HugeIcons.McpServer, null) },
                         supportingContent = { Text(stringResource(R.string.setting_page_mcp_desc)) },
                         headlineContent = { Text(stringResource(R.string.setting_page_mcp)) },
-                    )
-                    item(
-                        onClick = { navController.navigate(Screen.SettingDebate) },
-                        leadingContent = { Icon(HugeIcons.Zap, null) },
-                        supportingContent = { Text("AI角色辩论，多模型轮流交锋") },
-                        headlineContent = { Text("AI辩论") },
                     )
                     item(
                         onClick = { navController.navigate(Screen.SettingWeb) },
