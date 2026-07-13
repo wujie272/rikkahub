@@ -8,6 +8,7 @@ import me.rerere.rikkahub.ui.pages.chat.ChatVM
 import me.rerere.rikkahub.ui.pages.debug.DebugVM
 import me.rerere.rikkahub.ui.pages.developer.DeveloperVM
 import me.rerere.rikkahub.ui.pages.favorite.FavoriteVM
+import me.rerere.rikkahub.ui.pages.assistant.groupchat.GroupChatTemplateDetailVM
 import me.rerere.rikkahub.ui.pages.search.SearchVM
 import me.rerere.rikkahub.ui.pages.history.HistoryVM
 import me.rerere.rikkahub.ui.pages.stats.StatsVM
@@ -52,6 +53,12 @@ val viewModelModule = module {
     viewModelOf(::DeveloperVM)
     viewModelOf(::HistoryVM)
     viewModelOf(::AssistantVM)
+    viewModel<GroupChatTemplateDetailVM> { params ->
+        GroupChatTemplateDetailVM(
+            id = params.get(),
+            settingsStore = get(),
+        )
+    }
     viewModel<AssistantDetailVM> {
         AssistantDetailVM(
             id = it.get(),
