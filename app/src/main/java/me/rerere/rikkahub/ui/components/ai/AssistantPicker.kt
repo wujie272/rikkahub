@@ -217,20 +217,45 @@ private fun AssistantPickerSheet(
                 }
 
                 // 群聊模板分区
-                if (settings.groupChatTemplates.isNotEmpty()) {
-                    item(key = "group_chat_divider") {
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                    }
+                item(key = "group_chat_divider") {
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                }
 
-                    item(key = "group_chat_header") {
-                        Text(
-                            text = stringResource(R.string.group_chat_title),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(start = 4.dp, bottom = 4.dp),
-                        )
-                    }
+                item(key = "group_chat_header") {
+                    Text(
+                        text = stringResource(R.string.group_chat_title),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(start = 4.dp, bottom = 4.dp),
+                    )
+                }
 
+                if (settings.groupChatTemplates.isEmpty()) {
+                    item(key = "group_chat_empty") {
+                        Card(
+                            onClick = {
+                                val newId = kotlin.uuid.Uuid.random()
+                                navController.navigate(Screen.GroupChatTemplateDetail(id = newId.toString()))
+                                onDismiss()
+                            },
+                            modifier = Modifier.animateItem(),
+                            shape = MaterialTheme.shapes.large,
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surface,
+                                contentColor = MaterialTheme.colorScheme.onSurface,
+                            ),
+                        ) {
+                            Text(
+                                text = stringResource(R.string.group_chat_template_create),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                            )
+                        }
+                    }
+                } else {
                     items(settings.groupChatTemplates, key = { it.id }) { template ->
                         Card(
                             onClick = {
