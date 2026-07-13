@@ -300,6 +300,9 @@ fun ChatDrawerContent(
                         navigateToChatPage(navigator = navController, chatId = id)
                     }
                 },
+                onGroupChatSelected = { template ->
+                    navController.navigate(Screen.GroupChatTemplateDetail(id = template.id.toString()))
+                },
                 modifier = Modifier.fillMaxWidth(),
                 onClickSetting = {
                     val currentAssistantId = settings.assistantId

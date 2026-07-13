@@ -1,6 +1,8 @@
 package me.rerere.rikkahub.ui.components.ai
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -17,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
@@ -35,6 +38,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -47,6 +51,7 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.data.model.GroupChatTemplate
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.hooks.rememberAssistantState
@@ -58,6 +63,7 @@ fun AssistantPicker(
     onUpdateSettings: (Settings) -> Unit,
     modifier: Modifier = Modifier,
     onClickSetting: () -> Unit,
+    onGroupChatSelected: ((GroupChatTemplate) -> Unit)? = null,
 ) {
     val state = rememberAssistantState(settings, onUpdateSettings)
     val defaultAssistantName = stringResource(R.string.assistant_page_default_assistant)
@@ -101,6 +107,10 @@ fun AssistantPicker(
                 showPicker = false
                 state.setSelectAssistant(assistant)
             },
+            onGroupChatSelected = { template ->
+                showPicker = false
+                onGroupChatSelected?.invoke(template)
+            },
             onDismiss = {
                 showPicker = false
             }
@@ -113,6 +123,7 @@ private fun AssistantPickerSheet(
     settings: Settings,
     currentAssistant: Assistant,
     onAssistantSelected: (Assistant) -> Unit,
+    onGroupChatSelected: ((GroupChatTemplate) -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
     val sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden, enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded))
@@ -204,6 +215,41 @@ private fun AssistantPickerSheet(
                         )
                     }
                 }
+
+                // 群聊模板分区
+                if (settings.groupChatTemplates.isNotEmpty()) {
+                    item(key = "group_chat_divider") {
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                    }
+
+                    item(key = "group_chat_header") {
+                        Text(
+                            text = stringResource(R.string.group_chat_title),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(start = 4.dp, bottom = 4.dp),
+                        )
+                    }
+
+                    items(settings.groupChatTemplates, key = { it.id }) { template ->
+                        Card(
+                            onClick = {
+                                onGroupChatSelected?.invoke(template)
+                            },
+                            modifier = Modifier.animateItem(),
+                            shape = MaterialTheme.shapes.large,
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surface,
+                                contentColor = MaterialTheme.colorScheme.onSurface,
+                            ),
+                        ) {
+                            GroupChatTemplateItem(
+                                template = template,
+                                defaultAssistantName = defaultAssistantName
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -244,4 +290,46 @@ private fun AssistantItem(
         },
         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
     )
+}
+
+@Composable
+private fun GroupChatTemplateItem(
+    template: GroupChatTemplate,
+    defaultAssistantName: String,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(32.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(MaterialTheme.colorScheme.primaryContainer),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = HugeIcons.LookTop,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                modifier = Modifier.size(18.dp),
+            )
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = template.name.ifBlank { stringResource(R.string.group_chat_default_name) },
+                style = MaterialTheme.typography.bodyLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = stringResource(R.string.group_chat_members_count, template.seats.size),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
 }
