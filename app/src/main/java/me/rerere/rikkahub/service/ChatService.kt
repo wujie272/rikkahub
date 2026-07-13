@@ -971,14 +971,13 @@ class ChatService(
                                 name = mcpToolName,
                                 description = tool.description ?: "",
                                 parameters = { tool.inputSchema },
-                                // MCP servers' tool surfaces are opaque to us — we can't
-                                // tell read from write or safe from destructive — so
-                                // every MCP call is approval-gated by default. The user
-                                // can grant Always-Allow per-tool to suppress prompts on
-                                // a known-safe MCP server. The HARDLINE floor still
-                                // applies via HardlineCommandGuard's `mcp__*` branch,
-                                // which scans every string arg for shell-content
-                                // patterns (rm -rf /, mkfs, shutdown, encoded payloads).
+                                // MCP tools default to NO approval — the per-tool `needsApproval`
+                                // flag (settable in Settings → MCP → Tools tab, defaults to false)
+                                // is the single source of truth. The user can flip individual MCP
+                                // tools to require approval when they're known to be destructive.
+                                // HARDLINE still applies via HardlineCommandGuard's `mcp__*` branch,
+                                // which scans every string arg for shell-content patterns
+                                // (rm -rf /, mkfs, shutdown, encoded payloads).
                                 needsApproval = {
                                     me.rerere.rikkahub.data.ai.tools
                                         .ToolApprovalDefaults.requiresApproval(mcpToolName) ||

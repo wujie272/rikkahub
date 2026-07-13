@@ -275,12 +275,12 @@ object ToolApprovalDefaults {
     fun allowsAlwaysAllow(toolName: String): Boolean = toolName !in NO_ALWAYS_ALLOW
 
     /**
-     * True if [toolName] requires approval. Local tools are looked up in [ALWAYS_ASK];
-     * MCP-relayed tools (`mcp__*`) are always gated because the MCP server's tool surface
-     * is opaque to us — we can't know which calls are destructive. An MCP server that
-     * exposes purely-read tools costs the user one approval per session via "Always
-     * Allow", which is a fair trade for the floor.
+     * True if [toolName] requires approval. Local tools are looked up in [ALWAYS_ASK].
+     * MCP-relayed tools (`mcp__*`) are gated by their own per-tool `needsApproval`
+     * flag (settable in Settings → MCP → Tools tab), which defaults to `false`.
+     * The user can flip individual MCP tools to require approval when they're known
+     * to be destructive.
      */
     fun requiresApproval(toolName: String): Boolean =
-        toolName in ALWAYS_ASK || toolName.startsWith("mcp__")
+        toolName in ALWAYS_ASK
 }
