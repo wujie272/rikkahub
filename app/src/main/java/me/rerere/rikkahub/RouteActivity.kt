@@ -5,6 +5,8 @@ import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.view.KeyEvent
+import android.view.View
+import android.view.WindowInsets
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -60,6 +62,8 @@ import com.dokar.sonner.Toaster
 import com.dokar.sonner.rememberToasterState
 import kotlinx.serialization.Serializable
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import androidx.lifecycle.lifecycleScope
 import me.rerere.highlight.Highlighter
 import me.rerere.highlight.LocalHighlighter
 import me.rerere.rikkahub.data.datastore.SettingsStore
@@ -181,6 +185,7 @@ class RouteActivity : ComponentActivity() {
     private val highlighter by inject<Highlighter>()
     private val okHttpClient by inject<OkHttpClient>()
     private val settingsStore by inject<SettingsStore>()
+
     private var navStack: MutableList<NavKey>? = null
     private val _pendingDirectChat = mutableStateOf<DirectChatData?>(null)
 
@@ -203,6 +208,7 @@ class RouteActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         disableNavigationBarContrast()
+        applyStatusBarVisibility()
         super.onCreate(savedInstanceState)
         if (CrashHandler.hasCrashed(this)) {
             startActivity(Intent(this, SafeModeActivity::class.java))
@@ -237,6 +243,32 @@ class RouteActivity : ComponentActivity() {
     private fun disableNavigationBarContrast() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             window.isNavigationBarContrastEnforced = false
+        }
+    }
+
+    /**
+     * Observe the displaySetting.hideStatusBar toggle and hide/show the status bar accordingly.
+     */
+    private fun applyStatusBarVisibility() {
+        lifecycleScope.launch {
+            settingsStore.settingsFlow.collect { settings ->
+                if (settings.init) return@collect
+                if (settings.displaySetting.hideStatusBar) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        window.insetsController?.hide(WindowInsets.Type.statusBars())
+                    } else {
+                        @Suppress("DEPRECATION")
+                        window.decorView.systemUiVisibility = window.decorView.systemUiVisibility or View.SYSTEM_UI_FLAG_FULLSCREEN
+                    }
+                } else {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        window.insetsController?.show(WindowInsets.Type.statusBars())
+                    } else {
+                        @Suppress("DEPRECATION")
+                        window.decorView.systemUiVisibility = window.decorView.systemUiVisibility and View.SYSTEM_UI_FLAG_FULLSCREEN.inv()
+                    }
+                }
+            }
         }
     }
 

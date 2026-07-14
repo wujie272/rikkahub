@@ -780,6 +780,7 @@ data class DisplaySetting(
     val chatCustomFontPath: String = "",
     val chatCustomFontName: String = "",
     val enableVolumeKeyScroll: Boolean = false,
+    val hideStatusBar: Boolean = false,
     val volumeKeyScrollRatio: Float = 1.0f,
 )
 

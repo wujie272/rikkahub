@@ -253,6 +253,18 @@ fun SettingPreferencesGeneralPage(vm: SettingVM = koinViewModel()) {
                             }
                         )
                     }
+                    item(
+                        headlineContent = { Text(stringResource(R.string.setting_display_page_hide_status_bar_title)) },
+                        supportingContent = { Text(stringResource(R.string.setting_display_page_hide_status_bar_desc)) },
+                        trailingContent = {
+                            Switch(
+                                checked = displaySetting.hideStatusBar,
+                                onCheckedChange = {
+                                    updateDisplaySetting(displaySetting.copy(hideStatusBar = it))
+                                }
+                            )
+                        },
+                    )
                 }
             }
 

@@ -760,6 +760,8 @@
   <string name="setting_display_page_volume_key_scroll_desc">Scroll pages with volume keys, ideal for e-ink screens</string>
   <string name="setting_display_page_volume_key_scroll_ratio">Scroll Amount</string>
   <string name="setting_display_page_volume_key_scroll_title">Volume Key Page Scroll</string>
+  <string name="setting_display_page_hide_status_bar_title">Immersive Mode</string>
+  <string name="setting_display_page_hide_status_bar_desc">Hide the system status bar for an immersive reading experience, applies in chat pages</string>
   <string name="setting_files_page_cancel_action">Cancel</string>
   <string name="setting_files_page_delete_action">Delete</string>
   <string name="setting_files_page_delete_content_description">Delete</string>

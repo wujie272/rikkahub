@@ -752,6 +752,8 @@
   <string name="setting_display_page_volume_key_scroll_desc">使用音量键翻页，非常适合电子墨水屏</string>
   <string name="setting_display_page_volume_key_scroll_ratio">滚动幅度</string>
   <string name="setting_display_page_volume_key_scroll_title">音量键翻页</string>
+  <string name="setting_display_page_hide_status_bar_title">沉浸式状态栏</string>
+  <string name="setting_display_page_hide_status_bar_desc">隐藏系统状态栏，获得沉浸式阅读体验，在聊天页面中生效</string>
   <string name="setting_files_page_cancel_action">取消</string>
   <string name="setting_files_page_delete_action">删除</string>
   <string name="setting_files_page_delete_content_description">删除</string>

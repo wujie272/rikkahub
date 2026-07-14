@@ -177,6 +177,19 @@ private const val MAX_LOOP_GUARD_TRIPS_PER_TURN = 6
 private const val IMAGE_KEEP_LAST_N_TOOL_RESULTS = 2
 
 /**
+ * Tool name patterns that indicate the agent is browsing the web.
+ * When a tool name contains any of these substrings, the overlay shows "正在上网浏览"
+ * instead of the generic "正在调用工具".
+ */
+private val BROWSING_TOOL_PATTERNS = setOf(
+    "browser_", "browse_",
+    "web_", "web_",
+    "search_",
+    "open_url", "open_url",
+    "fetch", "scrape",
+)
+
+/**
  * Some read-only tools measure a real-time signal where re-calling after a TTL is
  * legitimate (battery drains, screens change, sensors update). For these, the loop guard
  * lets identical calls through if the most recent identical call is older than the TTL.
@@ -401,6 +414,7 @@ class GenerationHandler(
 
             // Skip generation if we have approved/denied tool calls to handle
             if (pendingTools.isEmpty()) {
+                AgentOverlay.updateText("AI 正在思考…")
                 try {
                     generateInternal(
                         assistant = assistant,
@@ -788,6 +802,13 @@ class GenerationHandler(
                             // wall-clock envelope instead of even attempting.
                             val remainingMs = ToolRuntimeLimits.turnBudgetMs -
                                 (android.os.SystemClock.elapsedRealtime() - turnStartMs)
+                            // Classify the tool into one of three human-readable states.
+                            val overlayLabel = if (BROWSING_TOOL_PATTERNS.any { toolDef.name.contains(it) }) {
+                                "正在上网浏览"
+                            } else {
+                                "正在调用工具"
+                            }
+                            AgentOverlay.updateText(overlayLabel)
                             val result = if (remainingMs <= 0L) {
                                 Log.w(TAG, "generateText: ${toolDef.name} skipped — wall-clock budget already exceeded")
                                 listOf(UIMessagePart.Text(json.encodeToString(buildJsonObject {

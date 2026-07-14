@@ -13,6 +13,7 @@ import android.util.TypedValue
 import android.view.Gravity
 import android.view.WindowManager
 import android.widget.TextView
+import android.util.DisplayMetrics
 
 /**
  * Lightweight top-of-screen pill that shows while a generation turn is active so the
@@ -24,12 +25,14 @@ object AgentOverlay {
     private const val TAG = "AgentOverlay"
 
     @Volatile private var view: TextView? = null
+    @Volatile private var appContext: Context? = null
     private val mainHandler = Handler(Looper.getMainLooper())
 
     fun canShow(context: Context): Boolean = Settings.canDrawOverlays(context)
 
-    fun show(context: Context, text: String = "The agent is working") {
+    fun show(context: Context, text: String = "正在执行自动化操作…") {
         val app = context.applicationContext
+        appContext = app
         if (!canShow(app)) {
             Log.d(TAG, "show: SYSTEM_ALERT_WINDOW not granted, no-op")
             return
@@ -37,8 +40,18 @@ object AgentOverlay {
         mainHandler.post { showInternal(app, text) }
     }
 
+    /**
+     * Update the overlay text on the fly. No-op if the overlay isn't currently showing.
+     */
+    fun updateText(text: String) {
+        mainHandler.post {
+            view?.text = text
+        }
+    }
+
     fun hide(context: Context) {
         val app = context.applicationContext
+        appContext = null
         mainHandler.post { hideInternal(app) }
     }
 
@@ -68,6 +81,13 @@ object AgentOverlay {
             @Suppress("DEPRECATION")
             WindowManager.LayoutParams.TYPE_PHONE
         }
+        // Get the status bar height dynamically so the pill always sits right below it.
+        val statusBarHeight = runCatching {
+            val resourceId = app.resources.getIdentifier("status_bar_height", "dimen", "android")
+            if (resourceId > 0) app.resources.getDimensionPixelSize(resourceId)
+            else (24 * app.resources.displayMetrics.density).toInt()
+        }.getOrDefault((24 * app.resources.displayMetrics.density).toInt())
+
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -77,10 +97,10 @@ object AgentOverlay {
                 or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             android.graphics.PixelFormat.TRANSLUCENT,
         ).apply {
-            gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-            // Far enough below the status bar / camera punch-hole that the pill never
-            // overlaps the system clock or notch on edge-to-edge devices.
-            y = (64 * app.resources.displayMetrics.density).toInt()
+            gravity = Gravity.TOP or Gravity.LEFT
+            // Auto-detect status bar height so the pill sits right below it on any device.
+            x = (16 * app.resources.displayMetrics.density).toInt()
+            y = statusBarHeight + (4 * app.resources.displayMetrics.density).toInt()
         }
         try {
             wm.addView(tv, params)
