@@ -142,7 +142,12 @@ class AppDataBridge(private val context: Context) {
 
         val appLabel = pm.getApplicationLabel(appInfo).toString()
         val intent = Intent().setPackage(packageName)
-        val receivers: List<ResolveInfo> = pm.queryBroadcastReceivers(intent, 0)
+        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            PackageManager.GET_META_DATA or PackageManager.MATCH_ALL
+        } else {
+            PackageManager.GET_META_DATA
+        }
+        val receivers: List<ResolveInfo> = pm.queryBroadcastReceivers(intent, flags)
 
         for (resolve in receivers) {
             val ri = resolve.activityInfo ?: continue

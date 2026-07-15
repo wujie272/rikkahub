@@ -14,6 +14,8 @@ import android.view.Gravity
 import android.view.WindowManager
 import android.widget.TextView
 import android.util.DisplayMetrics
+import androidx.core.view.WindowInsetsCompat
+import android.view.View
 
 /**
  * Lightweight top-of-screen pill that shows while a generation turn is active so the
@@ -81,12 +83,8 @@ object AgentOverlay {
             @Suppress("DEPRECATION")
             WindowManager.LayoutParams.TYPE_PHONE
         }
-        // Get the status bar height dynamically so the pill always sits right below it.
-        val statusBarHeight = runCatching {
-            val resourceId = app.resources.getIdentifier("status_bar_height", "dimen", "android")
-            if (resourceId > 0) app.resources.getDimensionPixelSize(resourceId)
-            else (24 * app.resources.displayMetrics.density).toInt()
-        }.getOrDefault((24 * app.resources.displayMetrics.density).toInt())
+        // 初始 y 设为 0，后续通过 insets 监听器拿到真实状态栏高度再校正
+        // 不再用 getIdentifier 猜 status_bar_height，那玩意儿在双行状态栏上会翻车
 
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -100,10 +98,21 @@ object AgentOverlay {
             gravity = Gravity.TOP or Gravity.LEFT
             // Auto-detect status bar height so the pill sits right below it on any device.
             x = (16 * app.resources.displayMetrics.density).toInt()
-            y = statusBarHeight + (4 * app.resources.displayMetrics.density).toInt()
+            y = 0 // 初始值，等 insets 回调校正
         }
         try {
             wm.addView(tv, params)
+            // 使用 WindowInsets 监听器精确获取状态栏高度，兼容双行状态栏/挖孔屏/刘海屏
+            tv.setOnApplyWindowInsetsListener { v, insets ->
+                val compat = WindowInsetsCompat.toWindowInsetsCompat(insets, v)
+                val statusBarInsets = compat.getInsets(WindowInsetsCompat.Type.statusBars())
+                val lp = v.layoutParams as WindowManager.LayoutParams
+                lp.y = statusBarInsets.top + (4 * app.resources.displayMetrics.density).toInt()
+                wm.updateViewLayout(v, lp)
+                insets
+            }
+            // 触发 insets 分发，让 listener 尽快回调
+            tv.requestApplyInsets()
             view = tv
         } catch (t: Throwable) {
             Log.w(TAG, "addView failed", t)

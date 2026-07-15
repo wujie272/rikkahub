@@ -8,6 +8,7 @@ import me.rerere.rikkahub.ui.pages.chat.ChatVM
 import me.rerere.rikkahub.ui.pages.debug.DebugVM
 import me.rerere.rikkahub.ui.pages.developer.DeveloperVM
 import me.rerere.rikkahub.ui.pages.favorite.FavoriteVM
+import me.rerere.rikkahub.ui.pages.groupchat.GroupChatVM
 import me.rerere.rikkahub.ui.pages.assistant.groupchat.GroupChatTemplateDetailVM
 import me.rerere.rikkahub.ui.pages.search.SearchVM
 import me.rerere.rikkahub.ui.pages.history.HistoryVM
@@ -105,6 +106,15 @@ val viewModelModule = module {
     viewModelOf(::SettingBrowserViewModel)
     viewModelOf(::SettingTermuxViewModel)
 
+    viewModel<GroupChatVM> { params ->
+        GroupChatVM(
+            id = params.get(),
+            context = get(),
+            settingsStore = get(),
+            conversationRepo = get(),
+            chatService = get(),
+        )
+    }
     // Phase 22A: parameterised by LocalRuntime — one VM instance per provider tile.
     viewModel<SettingLocalLlmViewModel> { params ->
         SettingLocalLlmViewModel(

@@ -189,6 +189,13 @@ class GroupChatRunner(
         var shouldContinue = true
         val conversationHistory = mutableListOf<String>()
 
+        // 将用户消息加入对话历史，让 AI 知道辩论主题
+        val userText = userMessage.filterIsInstance<UIMessagePart.Text>()
+            .joinToString(" ") { it.text }
+        if (userText.isNotBlank()) {
+            conversationHistory.add("用户：${userText}")
+        }
+
         _runState.value = GroupChatRunState.Running(
             currentRound = currentRound,
             maxRounds = config.maxRounds,
@@ -199,8 +206,6 @@ class GroupChatRunner(
 
         // ── 2. 主循环 ──
         // 收集用户消息中的 @提及
-        val userText = userMessage.filterIsInstance<UIMessagePart.Text>()
-            .joinToString(" ") { it.text }
         val mentionedSeatIds = speakerSeatIdsOverride
             ?: resolveMentionedSeatIds(template, userText)
 

@@ -137,6 +137,12 @@ class McpManager(
 
     suspend fun syncAll() = sessionRegistry.syncAll()
 
+    suspend fun forceResync(serverId: Uuid) {
+        val config = settingsStore.settingsFlow.value.mcpServers.firstOrNull { it.id == serverId }
+            ?: return
+        sessionRegistry.addClient(config)
+    }
+
     fun startAuthorization(config: McpServerConfig, context: Context) {
         oauthCoordinator.startAuthorization(config, context)
     }

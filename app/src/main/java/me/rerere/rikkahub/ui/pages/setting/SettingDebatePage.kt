@@ -308,7 +308,7 @@ fun SettingDebatePage() {
                                     templateId = template.id,
                                     userMessage = listOf(me.rerere.ai.ui.UIMessagePart.Text(selectedTopic)),
                                 )
-                                navController.navigate(Screen.Chat(id = convId.toString()))
+                                navController.navigate(Screen.GroupChat(id = convId.toString()))
                             }
                         }
                         showTopicDialog = false
@@ -386,7 +386,7 @@ private fun DebateTemplateList(
                                 listOf(me.rerere.ai.ui.UIMessagePart.Text(topic))
                             } else emptyList(),
                         )
-                        navController.navigate(Screen.Chat(id = convId.toString()))
+                        navController.navigate(Screen.GroupChat(id = convId.toString()))
                     }
                 },
                 onEdit = { navController.navigate(Screen.GroupChatTemplateDetail(id = template.id.toString())) },

@@ -96,6 +96,7 @@ import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantPromptPage
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantRequestPage
 import me.rerere.rikkahub.ui.pages.backup.BackupPage
 import me.rerere.rikkahub.ui.pages.chat.ChatPage
+import me.rerere.rikkahub.ui.pages.groupchat.GroupChatPage
 import me.rerere.rikkahub.ui.pages.debug.DebugPage
 import me.rerere.rikkahub.ui.pages.developer.DeveloperPage
 import me.rerere.rikkahub.ui.pages.extensions.ExtensionsPage
@@ -231,7 +232,8 @@ class RouteActivity : ComponentActivity() {
                             } else {
                                 add(GifDecoder.Factory())
                             }
-                            add(SvgDecoder.Factory(scaleToDensity = true))
+
+                                                        add(SvgDecoder.Factory(scaleToDensity = true))
                         }
                         .build()
                 }
@@ -456,6 +458,15 @@ class RouteActivity : ComponentActivity() {
                                     files = key.files.map { it.toUri() },
                                     nodeId = key.nodeId?.let { Uuid.parse(it) },
                                     autoSend = key.autoSend,
+                                )
+                            }
+
+                            entry<Screen.GroupChat>(
+                                metadata = NavDisplay.transitionSpec { fadeIn() togetherWith fadeOut() }
+                                        + NavDisplay.popTransitionSpec { fadeIn() togetherWith fadeOut() }
+                            ) { key ->
+                                GroupChatPage(
+                                    id = Uuid.parse(key.id),
                                 )
                             }
 
@@ -796,6 +807,11 @@ sealed interface Screen : NavKey {
         val files: List<String> = emptyList(),
         val nodeId: String? = null,
         val autoSend: Boolean = false
+    ) : Screen
+
+    @Serializable
+    data class GroupChat(
+        val id: String,
     ) : Screen
 
     @Serializable

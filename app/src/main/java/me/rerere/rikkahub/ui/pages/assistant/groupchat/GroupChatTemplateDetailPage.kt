@@ -511,7 +511,7 @@ fun GroupChatTemplateDetailPage(id: String) {
                                                 userMessage = userMsg,
                                                 runtimeConfig = config,
                                             )
-                                            navController.navigate(Screen.Chat(id = convId.toString()))
+                                            navController.navigate(Screen.GroupChat(id = convId.toString()))
                                         }
                                         showTopicInput = false
                                         showModeDialog = false

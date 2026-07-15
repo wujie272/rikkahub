@@ -81,14 +81,7 @@ import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Assistant
-import me.rerere.rikkahub.data.model.MentionAnalysis
-import me.rerere.rikkahub.data.model.GroupChatTemplate
-import me.rerere.rikkahub.data.model.analyzeGroupChatMentionText
-import me.rerere.rikkahub.data.model.resolveMentionSeatOverride
-import me.rerere.rikkahub.data.model.buildSeatDisplayNames
 import me.rerere.rikkahub.data.model.Conversation
-
-import me.rerere.rikkahub.service.GroupChatRunState
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.ui.components.ai.ChatInput
@@ -305,7 +298,6 @@ private fun ChatPageContent(
     val assistant = setting.getCurrentAssistant()
 
     // 群聊运行状态
-    val groupChatRunState by vm.groupChatRunState.collectAsStateWithLifecycle()
     var showFilesSheet by remember { mutableStateOf(false) }
 
     val completionProviders = remember(assistant.workspaceId, conversation.workspaceCwd, workspaceRepository) {
@@ -322,22 +314,6 @@ private fun ChatPageContent(
 
     // 群聊消息发送者颜色映射：根据 senderName 生成确定性颜色
     // @Name 提及消歧义状态
-    var mentionDisambiguationState by remember { mutableStateOf<MentionDisambiguationState?>(null) }
-    val groupChatTemplate = remember(conversation.groupChatTemplateId, setting.groupChatTemplates) {
-        conversation.groupChatTemplateId?.let { id ->
-            setting.groupChatTemplates.firstOrNull { it.id == id }
-        }
-    }
-    val assistantsById = remember(setting.assistants) {
-        setting.assistants.associateBy { it.id }
-    }
-    val senderColors = remember(conversation.messageNodes) {
-        conversation.messageNodes
-            .mapNotNull { it.senderName }
-            .distinct()
-            .associateWith { name -> generateSenderColor(name) }
-    }
-
     TTSAutoPlay(vm = vm, setting = setting, conversation = conversation)
 
     Surface(
@@ -406,15 +382,6 @@ private fun ChatPageContent(
                             return@ChatInput
                         }
                         // 群聊 @Name 检测
-                        if (handleGroupChatMentionCheck(
-                                inputState = inputState,
-                                template = groupChatTemplate,
-                                assistantsById = assistantsById,
-                                onDisambiguationNeeded = { state -> mentionDisambiguationState = state },
-                            )
-                        ) {
-                            return@ChatInput
-                        }
                         vm.handleMessageSend(inputState.getContents())
                         scope.launch {
                             chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
@@ -431,15 +398,6 @@ private fun ChatPageContent(
                             return@ChatInput
                         }
                         // 群聊 @Name 检测
-                        if (handleGroupChatMentionCheck(
-                                inputState = inputState,
-                                template = groupChatTemplate,
-                                assistantsById = assistantsById,
-                                onDisambiguationNeeded = { state -> mentionDisambiguationState = state },
-                            )
-                        ) {
-                            return@ChatInput
-                        }
                         vm.handleMessageSend(content = inputState.getContents(), answer = false)
                         scope.launch {
                             chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
@@ -476,141 +434,68 @@ private fun ChatPageContent(
             },
             containerColor = Color.Transparent,
         ) { innerPadding ->
-            ChatList(
-                innerPadding = innerPadding,
-                conversation = conversation,
-                state = chatListState,
-                loading = loadingJob != null,
-                processingStatus = processingStatus,
-                previewMode = previewMode,
-                settings = setting,
-                senderColors = senderColors,
-                hazeState = hazeState,
-                errors = errors,
-                onDismissError = onDismissError,
-                onClearAllErrors = onClearAllErrors,
-                onRegenerate = {
-                    vm.regenerateAtMessage(it)
-                },
-                onEdit = {
-                    inputState.editingMessage = it.id
-                    inputState.setContents(it.parts)
-                },
-                onForkMessage = {
-                    scope.launch {
-                        val fork = vm.forkMessage(message = it)
-                        navigateToChatPage(navController, chatId = fork.id)
-                    }
-                },
-                onDelete = {
-                    if (loadingJob != null) {
-                        vm.showDeleteBlockedWhileGeneratingError()
-                    } else {
-                        vm.deleteMessage(it)
-                    }
-                },
-                onUpdateMessage = { newNode ->
-                    vm.updateConversation(
-                        conversation.copy(
-                            messageNodes = conversation.messageNodes.map { node ->
-                                if (node.id == newNode.id) {
-                                    newNode
-                                } else {
-                                    node
-                                }
+            Column(modifier = Modifier.fillMaxSize()) {
+                // 群聊运行进度条（顶部）
+                // 消息列表
+                Box(modifier = Modifier.weight(1f)) {
+                    ChatList(
+                        innerPadding = innerPadding,
+                        conversation = conversation,
+                        state = chatListState,
+                        loading = loadingJob != null,
+                        processingStatus = processingStatus,
+                        previewMode = previewMode,
+                        settings = setting,
+                        hazeState = hazeState,
+                        errors = errors,
+                        onDismissError = onDismissError,
+                        onClearAllErrors = onClearAllErrors,
+                        onRegenerate = { vm.regenerateAtMessage(it) },
+                        onEdit = {
+                            inputState.editingMessage = it.id
+                            inputState.setContents(it.parts)
+                        },
+                        onForkMessage = {
+                            scope.launch {
+                                val fork = vm.forkMessage(message = it)
+                                navigateToChatPage(navController, chatId = fork.id)
                             }
-                        ))
-                    vm.saveConversationAsync()
-                },
-                onClickSuggestion = { suggestion ->
-                    inputState.editingMessage = null
-                    inputState.setMessageText(suggestion)
-                },
-                onTranslate = { message, locale ->
-                    vm.translateMessage(message, locale)
-                },
-                onClearTranslation = { message ->
-                    vm.clearTranslationField(message.id)
-                },
-                onJumpToMessage = { index ->
-                    previewMode = false
-                    scope.launch {
-                        chatListState.requestScrollToItem(index)
-                    }
-                },
-                onToolApproval = { toolCallId, approved, reason, scope, toolName ->
-                    vm.handleToolApproval(toolCallId, approved, reason, scope, toolName)
-                },
-                onToolAnswer = { toolCallId, answer ->
-                    vm.handleToolAnswer(toolCallId, answer)
-                },
-                onToggleFavorite = { node ->
-                    vm.toggleMessageFavorite(node)
-                },
-                knowledgeSources = vm.knowledgeSources.collectAsStateWithLifecycle().value,
-                onConversationSystemPromptChange = { newPrompt ->
-                    vm.updateConversation(conversation.copy(customSystemPrompt = newPrompt))
-                    vm.saveConversationAsync()
-                },
-            )
-        }
-
-        // 群聊运行进度条（在输入框上方）
-        val isGroupChatRunning = groupChatRunState is GroupChatRunState.Running
-        AnimatedVisibility(visible = isGroupChatRunning) {
-            val running = groupChatRunState as? GroupChatRunState.Running
-            Card(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                ),
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        val modeLabel = if (groupChatTemplate != null) {
-                            if (conversation.groupChatTemplateId != null) "🎯 群聊" else "💬 "
-                        } else ""
-                        Text(
-                            text = "${modeLabel}第${running?.currentRound ?: 0}/${running?.maxRounds ?: 0}轮 — ${running?.currentSeatName ?: "..."}发言中",
-                            style = MaterialTheme.typography.labelMedium,
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        LinearProgressIndicator(
-                            progress = {
-                                val r = running
-                                if (r != null && r.maxRounds > 0) {
-                                    (r.currentRound - 1 + r.currentSeatIndex.toFloat() / r.totalSeats.coerceAtLeast(1)) / r.maxRounds
-                                } else 0f
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    IconButton(
-                        onClick = { vm.stopGeneration() },
-                        modifier = Modifier.size(32.dp),
-                    ) {
-                        Icon(HugeIcons.Cancel01, "停止", tint = MaterialTheme.colorScheme.error)
-                    }
+                        },
+                        onDelete = {
+                            if (loadingJob != null) vm.showDeleteBlockedWhileGeneratingError()
+                            else vm.deleteMessage(it)
+                        },
+                        onUpdateMessage = { newNode ->
+                            vm.updateConversation(conversation.copy(
+                                messageNodes = conversation.messageNodes.map { node ->
+                                    if (node.id == newNode.id) newNode else node
+                                }
+                            ))
+                            vm.saveConversationAsync()
+                        },
+                        onClickSuggestion = { suggestion ->
+                            inputState.editingMessage = null
+                            inputState.setMessageText(suggestion)
+                        },
+                        onTranslate = { message, locale -> vm.translateMessage(message, locale) },
+                        onClearTranslation = { message -> vm.clearTranslationField(message.id) },
+                        onJumpToMessage = { index ->
+                            previewMode = false
+                            scope.launch { chatListState.requestScrollToItem(index) }
+                        },
+                        onToolApproval = { toolCallId, approved, reason, scope, toolName ->
+                            vm.handleToolApproval(toolCallId, approved, reason, scope, toolName)
+                        },
+                        onToolAnswer = { toolCallId, answer -> vm.handleToolAnswer(toolCallId, answer) },
+                        onToggleFavorite = { node -> vm.toggleMessageFavorite(node) },
+                        knowledgeSources = vm.knowledgeSources.collectAsStateWithLifecycle().value,
+                        onConversationSystemPromptChange = { newPrompt ->
+                            vm.updateConversation(conversation.copy(customSystemPrompt = newPrompt))
+                            vm.saveConversationAsync()
+                        },
+                    )
                 }
             }
-        }
-
-        // @Name 消歧义底部弹窗
-        mentionDisambiguationState?.let { state ->
-            ChatPageMentionDisambiguation(
-                state = state,
-                vm = vm,
-                inputState = inputState,
-                chatListState = chatListState,
-                conversation = conversation,
-                settings = setting,
-                assistantsById = assistantsById,
-                onDismiss = { mentionDisambiguationState = null },
-            )
         }
 
         if (showFilesSheet) {
@@ -956,241 +841,3 @@ private fun TopBar(
     }
 }
 
-@Composable
-private fun ChatPageMentionDisambiguation(
-    state: MentionDisambiguationState,
-    vm: ChatVM,
-    inputState: ChatInputState,
-    chatListState: LazyListState,
-    conversation: Conversation,
-    settings: Settings,
-    assistantsById: Map<Uuid, Assistant>,
-    onDismiss: () -> Unit,
-) {
-    val scope = rememberCoroutineScope()
-    val toaster = LocalToaster.current
-    val context = LocalContext.current
-    val defaultAssistantName = stringResource(R.string.assistant_page_default_assistant)
-    val mutableSelection = remember(state) { state.toMutableSelected() }
-
-    GroupChatMentionDisambiguationSheet(
-        template = state.template,
-        analysis = state.analysis,
-        settings = settings,
-        assistantsById = assistantsById,
-        defaultAssistantName = defaultAssistantName,
-        selectedSeatIdsByKey = mutableSelection.mapValues { (_, v) -> v.toSet() },
-        onUpdateSelection = { key, seatIds ->
-            mutableSelection[key] = seatIds.toMutableSet()
-        },
-        onConfirm = {
-            val resolvedSeatIds = resolveMentionSeatOverride(
-                analysis = state.analysis,
-                selectedSeatIdsByKey = mutableSelection.mapValues { (_, v) -> v.toSet() },
-                template = state.template,
-            )
-            if (resolvedSeatIds.isEmpty()) {
-                toaster.show(
-                    "请至少为每个 @Name 选择一个成员",
-                    type = ToastType.Warning
-                )
-                return@GroupChatMentionDisambiguationSheet
-            }
-            onDismiss()
-            vm.handleMessageSend(
-                content = inputState.getContents(),
-                groupChatSpeakerSeatIdsOverride = resolvedSeatIds,
-            )
-            scope.launch {
-                chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
-            }
-            inputState.clearInput()
-        },
-        onDismiss = onDismiss,
-    )
-}
-
-/**
- * @Name 消歧义状态
- */
-private data class MentionDisambiguationState(
-    val template: GroupChatTemplate,
-    val analysis: MentionAnalysis,
-    val selectedSeatIdsByKey: Map<String, Set<Uuid>>,
-) {
-    fun toMutableSelected(): MutableMap<String, MutableSet<Uuid>> =
-        selectedSeatIdsByKey.mapValues { (_, v) -> v.toMutableSet() }.toMutableMap()
-}
-
-/**
- * 检测群聊输入中的 @Name 提及，如果存在同名歧义则阻塞发送并设置消歧义状态。
- * 返回 true 表示已拦截（需要消歧义），false 表示可以继续发送。
- */
-private fun handleGroupChatMentionCheck(
-    inputState: ChatInputState,
-    template: GroupChatTemplate?,
-    assistantsById: Map<Uuid, Assistant>,
-    onDisambiguationNeeded: (MentionDisambiguationState) -> Unit,
-): Boolean {
-    if (template == null || inputState.isEditing()) return false
-
-    val userText = inputState.getContents()
-        .filterIsInstance<UIMessagePart.Text>()
-        .joinToString("\n") { it.text }
-        .trim()
-    if (!userText.contains('@')) return false
-
-    val analysis = analyzeGroupChatMentionText(
-        text = userText,
-        template = template,
-        assistantsById = assistantsById,
-        defaultName = "助手",
-    )
-    if (analysis.ambiguousKeysInOrder.isNotEmpty()) {
-        onDisambiguationNeeded(
-            MentionDisambiguationState(
-                template = template,
-                analysis = analysis,
-                selectedSeatIdsByKey = analysis.ambiguousKeysInOrder.associateWith { key ->
-                    analysis.keyToInfo[key]?.seatIds?.firstOrNull()?.let(::setOf).orEmpty()
-                },
-            )
-        )
-        return true
-    }
-    return false
-}
-
-/**
- * @Name 消歧义底部弹窗
- */
-@Composable
-private fun GroupChatMentionDisambiguationSheet(
-    template: GroupChatTemplate,
-    analysis: MentionAnalysis,
-    settings: Settings,
-    assistantsById: Map<Uuid, Assistant>,
-    defaultAssistantName: String,
-    selectedSeatIdsByKey: Map<String, Set<Uuid>>,
-    onUpdateSelection: (key: String, seatIds: Set<Uuid>) -> Unit,
-    onConfirm: () -> Unit,
-    onDismiss: () -> Unit,
-) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val seatDisplayNames = remember(template, assistantsById, defaultAssistantName) {
-        template.buildSeatDisplayNames(
-            assistantsById = assistantsById,
-            defaultName = defaultAssistantName,
-        )
-    }
-    val seatsById = remember(template) {
-        template.seats.associateBy { it.id }
-    }
-
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .fillMaxSize(0.7f)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Text(
-                text = "选择要 @ 的具体成员",
-                style = MaterialTheme.typography.titleLarge,
-            )
-            Text(
-                text = "「@${analysis.ambiguousKeysInOrder.firstOrNull() ?: ""}」匹配到多个同名成员，请选择具体要@的座位：",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                analysis.ambiguousKeysInOrder.forEach { key ->
-                    val info = analysis.keyToInfo[key] ?: return@forEach
-                    val selectedSeatIds = selectedSeatIdsByKey[key].orEmpty()
-
-                    Text(
-                        text = "@${info.displayName}",
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-
-                    info.seatIds.forEach { seatId ->
-                        val seat = seatsById[seatId]
-                        val name = seatDisplayNames[seatId]
-                            ?: assistantsById[seat?.assistantId]?.name?.ifBlank { info.displayName }
-                            ?: info.displayName
-                        val isChecked = seatId in selectedSeatIds
-
-                        Surface(
-                            onClick = {
-                                val updated = if (isChecked) selectedSeatIds - seatId else selectedSeatIds + seatId
-                                onUpdateSelection(key, updated)
-                            },
-                            shape = MaterialTheme.shapes.medium,
-                            color = MaterialTheme.colorScheme.surfaceContainerLow,
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            ) {
-                                Checkbox(
-                                    checked = isChecked,
-                                    onCheckedChange = null,
-                                )
-                                Column {
-                                    Text(
-                                        text = name,
-                                        style = MaterialTheme.typography.bodyLarge,
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            Button(
-                onClick = onConfirm,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text("发送")
-            }
-        }
-    }
-}
-
-/**
- * 根据 senderName 生成确定性颜色，同一名字始终得到相同颜色。
- * 使用 HSL 空间均匀分布色相，保证颜色之间有足够的视觉区分度。
- */
-private val SENDER_COLOR_PALETTE = listOf(
-    Color(0xFF4FC3F7), // 浅蓝
-    Color(0xFF81C784), // 浅绿
-    Color(0xFFFFB74D), // 橙色
-    Color(0xFFE57373), // 红色
-    Color(0xFFBA68C8), // 紫色
-    Color(0xFF4DB6AC), // 青绿
-    Color(0xFFFF8A65), // 珊瑚
-    Color(0xFFA1887F), // 棕色
-    Color(0xFF90A4AE), // 蓝灰
-    Color(0xFFF06292), // 粉红
-    Color(0xFFAED581), // 黄绿
-    Color(0xFF7986CB), // 靛蓝
-)
-
-private fun generateSenderColor(name: String): Color {
-    val hash = name.hashCode() and Int.MAX_VALUE
-    return SENDER_COLOR_PALETTE[hash % SENDER_COLOR_PALETTE.size]
-}

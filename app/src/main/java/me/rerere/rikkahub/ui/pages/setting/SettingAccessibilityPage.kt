@@ -18,6 +18,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -29,6 +30,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.compose.runtime.DisposableEffect
 import com.dokar.sonner.ToastType
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -59,10 +61,15 @@ fun SettingAccessibilityPage() {
     val scope = rememberCoroutineScope()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
-    // Re-read the live service singleton on every recomposition; when it appears or
-    // disappears, the running flag and lastActions flow recollect themselves.
-    val svc = remember(AccessibilityServiceHandle.isRunning()) {
-        RikkaAccessibilityService.instance
+    // Reactively observe the AccessibilityService instance via produceState + lifecycle.
+    // When the user returns from system settings (onResume), repeatOnLifecycle re-runs
+    // the block, re-checks the service singleton, and the UI updates instantly — no more
+    // "go back to settings page and re-enter" dance.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val svc by produceState<RikkaAccessibilityService?>(initialValue = RikkaAccessibilityService.instance) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            value = RikkaAccessibilityService.instance
+        }
     }
 
     // Pull StateFlows from the live service if present; otherwise show empty defaults.
@@ -80,7 +87,6 @@ fun SettingAccessibilityPage() {
     // Re-check overlay permission on resume so the row updates immediately after the user
     // returns from the system settings deep-link.
     var overlayGranted by remember { mutableStateOf(Settings.canDrawOverlays(context)) }
-    val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {

@@ -1798,6 +1798,16 @@ class ChatService(
 
     // 停止当前会话生成任务（不清理会话缓存）
     suspend fun stopGeneration(conversationId: Uuid) {
+        // 🐛 FIX: 群聊的 engineJob 独立于 session 管理，
+        // session.generationJob 在 sendMessage 委托给 groupChatRunner 后马上就完成了，
+        // 所以 stopGeneration 只 cancel session job 对群聊完全无效。
+        // 必须同时停掉 GroupChatRunner。
+        val conversation = runCatching { getConversationFlow(conversationId).value }.getOrNull()
+        if (conversation?.groupChatTemplateId != null && groupChatRunner.isRunning) {
+            Log.i(TAG, "stopGeneration: stopping group chat runner for conversation $conversationId")
+            groupChatRunner.stop()
+        }
+
         val convMutex = mutexFor(conversationId)
         // cancelAndJoin BEFORE the mutex so the cancelled coroutine can drain its own
         // writes (which may try to acquire the same mutex via their save path).

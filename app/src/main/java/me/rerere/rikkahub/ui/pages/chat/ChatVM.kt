@@ -40,7 +40,6 @@ import me.rerere.rikkahub.data.knowledge.KnowledgeBaseEntity
 import me.rerere.rikkahub.data.knowledge.KnowledgeService
 import me.rerere.rikkahub.data.repository.FavoriteRepository
 import me.rerere.rikkahub.service.ChatError
-import me.rerere.rikkahub.service.GroupChatRunState
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.ui.hooks.writeStringPreference
 import me.rerere.rikkahub.ui.hooks.ChatInputState
@@ -162,10 +161,6 @@ class ChatVM(
 
     // MCP管理器
     val mcpManager = chatService.mcpManager
-
-    // 群聊运行状态
-    val groupChatRunState: StateFlow<GroupChatRunState> = chatService.groupChatRunner.runState
-        .stateIn(viewModelScope, SharingStarted.Eagerly, GroupChatRunState.Idle)
 
     // 更新设置
     fun updateSettings(newSettings: Settings) {
