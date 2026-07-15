@@ -486,50 +486,57 @@ fun GroupChatTemplateDetailPage(id: String) {
                                         value = topicText,
                                         onValueChange = { topicText = it },
                                         modifier = Modifier.fillMaxWidth(),
-                                        label = { Text("输入讨论主题或问题") },
+                                        label = { Text("讨论主题（可选）") },
                                         placeholder = { Text("例如：人工智能对人类未来的影响") },
                                         minLines = 3,
+                                    )
+                                    Text(
+                                        text = "留空则直接进入群聊，可在聊天中发送消息开始讨论",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 }
                             },
                             confirmButton = {
-                                TextButton(
-                                    onClick = {
-                                        scope.launch {
-                                            val userMsg = if (topicText.isNotBlank()) {
-                                                listOf(me.rerere.ai.ui.UIMessagePart.Text(topicText))
-                                            } else {
-                                                emptyList()
-                                            }
-                                            val config = if (isDebate) {
-                                                GroupChatRuntimeConfig.debateDefaults()
-                                            } else {
-                                                GroupChatRuntimeConfig.roundRobinDefaults()
-                                            }
-                                            val convId = chatService.startGroupChatConversation(
-                                                templateId = currentTemplate.id,
-                                                userMessage = userMsg,
-                                                runtimeConfig = config,
-                                            )
-                                            navController.navigate(Screen.GroupChat(id = convId.toString()))
-                                        }
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    TextButton(onClick = {
                                         showTopicInput = false
                                         showModeDialog = false
                                         selectedMode = null
+                                    }) {
+                                        Text("取消")
                                     }
-                                ) {
-                                    Text("开始")
+                                    TextButton(
+                                        onClick = {
+                                            scope.launch {
+                                                val userMsg = if (topicText.isNotBlank()) {
+                                                    listOf(me.rerere.ai.ui.UIMessagePart.Text(topicText))
+                                                } else {
+                                                    emptyList()
+                                                }
+                                                val config = if (isDebate) {
+                                                    GroupChatRuntimeConfig.debateDefaults()
+                                                } else {
+                                                    GroupChatRuntimeConfig.roundRobinDefaults()
+                                                }
+                                                val convId = chatService.startGroupChatConversation(
+                                                    templateId = currentTemplate.id,
+                                                    userMessage = userMsg,
+                                                    runtimeConfig = config,
+                                                )
+                                                navController.navigate(Screen.GroupChat(id = convId.toString()))
+                                            }
+                                            showTopicInput = false
+                                            showModeDialog = false
+                                            selectedMode = null
+                                        }
+                                    ) {
+                                        Text(if (topicText.isNotBlank()) "开始讨论" else "直接进入")
+                                    }
                                 }
                             },
-                            dismissButton = {
-                                TextButton(onClick = {
-                                    showTopicInput = false
-                                    showModeDialog = false
-                                    selectedMode = null
-                                }) {
-                                    Text("取消")
-                                }
-                            }
                         )
                     } else {
                         AlertDialog(

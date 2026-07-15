@@ -4,11 +4,13 @@ import android.util.Log
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.cancellable
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -81,6 +83,7 @@ class GroupChatRunner(
     private val chatService: ChatService,
     private val providerManager: ProviderManager,
 ) {
+    private val lock = Any()
     private var engineJob: Job? = null
 
     private val _runState = MutableStateFlow<GroupChatRunState>(GroupChatRunState.Idle)
@@ -104,29 +107,37 @@ class GroupChatRunner(
         runtimeConfig: GroupChatRuntimeConfig = GroupChatRuntimeConfig.roundRobinDefaults(),
         speakerSeatIdsOverride: List<kotlin.uuid.Uuid>? = null,
     ) {
-        if (isRunning) {
-            Log.w(TAG, "start: already running, ignoring")
-            return
-        }
-
-        engineJob?.cancel()
-        engineJob = appScope.launch {
-            try {
-                runEngine(conversationId, template, userMessage, runtimeConfig, speakerSeatIdsOverride)
-            } catch (e: CancellationException) {
-                Log.i(TAG, "runEngine cancelled")
-                _runState.value = GroupChatRunState.Finished("cancelled", 0)
-            } catch (e: Exception) {
-                Log.e(TAG, "runEngine failed", e)
-                _runState.value = GroupChatRunState.Failed(e.message ?: "unknown error")
+        synchronized(lock) {
+            if (engineJob?.isActive == true) {
+                Log.w(TAG, "start: already running, ignoring")
+                return
+            }
+            engineJob = appScope.launch {
+                try {
+                    runEngine(conversationId, template, userMessage, runtimeConfig, speakerSeatIdsOverride)
+                } catch (e: CancellationException) {
+                    Log.i(TAG, "runEngine cancelled")
+                    _runState.value = GroupChatRunState.Finished("cancelled", 0)
+                } catch (e: Exception) {
+                    Log.e(TAG, "runEngine failed", e)
+                    _runState.value = GroupChatRunState.Failed(e.message ?: "unknown error")
+                }
             }
         }
     }
 
     /** 停止运行 */
     fun stop() {
-        engineJob?.cancel()
-        engineJob = null
+        val jobToCancel: Job?
+        synchronized(lock) {
+            jobToCancel = engineJob
+            engineJob = null
+        }
+        jobToCancel ?: return
+        // 用 cancelAndJoin 确保协程真正终止，避免 collect 卡在网络 I/O 上
+        appScope.launch {
+            jobToCancel.cancelAndJoin()
+        }
     }
 
     // ──── 引擎核心 ────
@@ -212,26 +223,23 @@ class GroupChatRunner(
         while (currentRound <= config.maxRounds && shouldContinue && isActive) {
             Log.d(TAG, "=== Round $currentRound ===")
 
-            // 决定本轮发言者
+            // 决定本轮发言者（路由结果为空时自动回退到所有启用座位）
             val speakerSeatIds = when {
-                // 如果用户 @了特定成员，只让被@的成员发言
-                mentionedSeatIds.isNotEmpty() -> mentionedSeatIds.filter { id ->
-                    enabledSeats.any { it.id == id }
+                mentionedSeatIds.isNotEmpty() -> {
+                    val filtered = mentionedSeatIds.filter { id ->
+                        enabledSeats.any { it.id == id }
+                    }
+                    if (filtered.isEmpty()) enabledSeats.map { it.id } else filtered
                 }
-                // 有路由模型时用路由模型决定
                 config.mode != GroupChatMode.DEBATE && template.hostModelId != null && currentRound <= 1 -> {
-                    routeGroupChatSpeakers(
+                    val routed = routeGroupChatSpeakers(
                         template = template,
                         userText = userText,
                         conversationHistory = conversationHistory,
                     ).filter { id -> enabledSeats.any { it.id == id } }
+                    if (routed.isEmpty()) enabledSeats.map { it.id } else routed
                 }
-                // 默认：所有启用座位轮流发言
                 else -> enabledSeats.map { it.id }
-            }
-
-            if (speakerSeatIds.isEmpty()) {
-                speakerSeatIds.let { enabledSeats.map { it.id } }
             }
 
             for ((seatIndex, seatId) in speakerSeatIds.withIndex()) {
@@ -363,6 +371,10 @@ class GroupChatRunner(
         context: String,
     ): String? {
         return withContext(Dispatchers.IO) {
+            // msgId 声明在 try 外部，catch 块才能访问（用于取消时清理空消息）
+            var msgId: kotlin.uuid.Uuid? = null
+            var accumulated = StringBuilder()
+
             try {
                 val settings = settingsStore.settingsFlow.value
                 val assistant = resolveAssistant(settings, seat) ?: run {
@@ -393,7 +405,7 @@ class GroupChatRunner(
                 val displayName = buildSeatDisplayName(template, seat, 0)
 
                 // 预创建一条空消息，后续流式更新内容
-                val msgId = kotlin.uuid.Uuid.random()
+                msgId = kotlin.uuid.Uuid.random()
                 chatService.updateConversationState(conversationId) { conv ->
                     conv.copy(
                         messageNodes = conv.messageNodes + UIMessage(
@@ -405,14 +417,12 @@ class GroupChatRunner(
                 }
 
                 // 流式调用 — 逐 token 更新对话
-                var accumulated = StringBuilder()
-
                 providerHandler.streamText(
                     providerSetting = provider,
                     messages = listOf(UIMessage.user(context)),
                     params = TextGenerationParams(model = model),
-                ).collect { chunk ->
-                    if (!isActive) throw CancellationException("Stream cancelled")
+                ).cancellable()
+                    .collect { chunk ->
 
                     val delta = chunk.choices.firstOrNull()?.delta?.toText() ?: ""
                     if (delta.isNotEmpty()) {
@@ -472,6 +482,18 @@ class GroupChatRunner(
                 Log.d(TAG, "callSeatLlm: ${displayName} responded (${cleanText.length} chars)")
                 cleanText
             } catch (e: CancellationException) {
+                // 取消信号必须重新抛出，不能被下面的 catch(Exception) 吞掉
+                // 否则点击停止后 LLM 还在继续输出，还会塞一条假回复
+                Log.i(TAG, "callSeatLlm cancelled for seat ${seat.id}")
+                // 清理已创建的空消息
+                val currentMsgId = msgId
+                if (currentMsgId != null) {
+                    chatService.updateConversationState(conversationId) { conv ->
+                        conv.copy(
+                            messageNodes = conv.messageNodes.filterNot { it.currentMessage.id == currentMsgId }
+                        )
+                    }
+                }
                 throw e
             } catch (e: Exception) {
                 Log.e(TAG, "callSeatLlm failed for seat ${seat.id}, using fallback", e)
@@ -551,8 +573,6 @@ ${history.joinToString("\n\n")}
                         ).toMessageNode().copy(senderName = "📊 总结")
                     )
                 }
-            } catch (e: CancellationException) {
-                throw e
             } catch (e: Exception) {
                 Log.e(TAG, "generateSummary failed", e)
             }

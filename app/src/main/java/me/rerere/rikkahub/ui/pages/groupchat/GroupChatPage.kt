@@ -18,8 +18,6 @@ import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.coroutines.launch
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowLeft01
-import me.rerere.hugeicons.stroke.Cancel01
-import me.rerere.hugeicons.stroke.ArrowUp02
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.GroupChatTemplate
@@ -29,6 +27,7 @@ import me.rerere.rikkahub.data.model.buildSeatDisplayNames
 import me.rerere.rikkahub.data.model.resolveMentionSeatOverride
 import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.service.GroupChatRunState
+import me.rerere.rikkahub.ui.components.ai.ChatInput
 import me.rerere.rikkahub.ui.pages.chat.ChatList
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.theme.CustomColors
@@ -76,6 +75,8 @@ fun GroupChatPage(id: Uuid) {
         }
     }
 
+    val inputHazeState = rememberHazeState()
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -97,9 +98,18 @@ fun GroupChatPage(id: Uuid) {
             )
         },
         bottomBar = {
-            GroupChatInputBar(
-                inputState = inputState,
-                isRunning = groupChatRunState is GroupChatRunState.Running,
+            ChatInput(
+                state = inputState,
+                loading = groupChatRunState is GroupChatRunState.Running,
+                settings = settings,
+                hazeState = inputHazeState,
+                enableSearch = false,
+                onToggleSearch = {},
+                onUpdateChatModel = {},
+                onUpdateAssistant = {},
+                onUpdateSearchService = {},
+                onMoreClick = {},
+                onCancelClick = { vm.stopGeneration() },
                 onSendClick = {
                     softwareKeyboardController?.hide()
 
@@ -110,7 +120,7 @@ fun GroupChatPage(id: Uuid) {
                     )
                     if (mentionState != null) {
                         mentionDisambiguationState = mentionState
-                        return@GroupChatInputBar
+                        return@ChatInput
                     }
 
                     vm.sendMessage(inputState.getContents())
@@ -119,7 +129,25 @@ fun GroupChatPage(id: Uuid) {
                         chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
                     }
                 },
-                onStopClick = { vm.stopGeneration() },
+                onLongSendClick = {
+                    softwareKeyboardController?.hide()
+
+                    val mentionState = checkMentionAndDisambiguate(
+                        userText = inputState.getContents(),
+                        template = groupChatTemplate,
+                        assistantsById = assistantsById,
+                    )
+                    if (mentionState != null) {
+                        mentionDisambiguationState = mentionState
+                        return@ChatInput
+                    }
+
+                    vm.sendMessage(inputState.getContents())
+                    inputState.clearInput()
+                    scope.launch {
+                        chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
+                    }
+                },
             )
         },
     ) { innerPadding ->
@@ -251,61 +279,6 @@ private data class MentionDisambiguationState(
     val analysis: MentionAnalysis,
     val selectedSeatIdsByKey: Map<String, Set<Uuid>>,
 )
-
-// ---- 群聊底部输入栏 ----
-
-@Composable
-private fun GroupChatInputBar(
-    inputState: me.rerere.rikkahub.ui.hooks.ChatInputState,
-    isRunning: Boolean,
-    onSendClick: () -> Unit,
-    onStopClick: () -> Unit,
-) {
-    Surface(
-        tonalElevation = 3.dp,
-        color = MaterialTheme.colorScheme.surface,
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 8.dp)
-                .navigationBarsPadding(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (isRunning) {
-                FilledTonalButton(
-                    onClick = onStopClick,
-                    colors = ButtonDefaults.filledTonalButtonColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer,
-                        contentColor = MaterialTheme.colorScheme.onErrorContainer,
-                    ),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Icon(HugeIcons.Cancel01, contentDescription = "停止", modifier = Modifier.size(20.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("停止辩论")
-                }
-            } else {
-                OutlinedTextField(
-                    value = inputState.textContent.text.toString(),
-                    onValueChange = { inputState.setMessageText(it) },
-                    modifier = Modifier.weight(1f),
-                    placeholder = { Text("输入消息...") },
-                    singleLine = true,
-                )
-
-                Spacer(Modifier.width(8.dp))
-
-                FilledIconButton(
-                    onClick = onSendClick,
-                    enabled = inputState.textContent.text.toString().isNotBlank(),
-                ) {
-                    Icon(HugeIcons.ArrowUp02, contentDescription = "发送")
-                }
-            }
-        }
-    }
-}
 
 // ---- @Name 消歧义对话框 ----
 
