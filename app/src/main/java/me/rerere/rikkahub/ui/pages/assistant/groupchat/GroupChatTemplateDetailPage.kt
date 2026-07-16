@@ -69,7 +69,6 @@ import kotlinx.coroutines.launch
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import me.rerere.rikkahub.data.model.GroupChatSeat
-import me.rerere.rikkahub.data.model.GroupChatMode
 import me.rerere.rikkahub.data.model.GroupChatRuntimeConfig
 import me.rerere.hugeicons.stroke.Zap
 import me.rerere.hugeicons.stroke.Star
@@ -463,115 +462,54 @@ fun GroupChatTemplateDetailPage(id: String) {
 
                 // ── Mode selection dialog ──
                 if (showModeDialog) {
-                    var showTopicInput by remember { mutableStateOf(false) }
-                    var topicText by remember { mutableStateOf("") }
-                    var selectedMode by remember { mutableStateOf<GroupChatMode?>(null) }
-
-                    if (showTopicInput) {
-                        val isDebate = selectedMode == GroupChatMode.DEBATE
-                        AlertDialog(
-                            onDismissRequest = {
-                                showTopicInput = false
-                                showModeDialog = false
-                                selectedMode = null
-                            },
-                            title = { Text("开始群聊") },
-                            text = {
-                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Text(
-                                        text = if (isDebate) "🎯 辩论模式" else "💬 自由讨论",
-                                        style = MaterialTheme.typography.titleSmall,
-                                    )
-                                    OutlinedTextField(
-                                        value = topicText,
-                                        onValueChange = { topicText = it },
-                                        modifier = Modifier.fillMaxWidth(),
-                                        label = { Text("讨论主题（可选）") },
-                                        placeholder = { Text("例如：人工智能对人类未来的影响") },
-                                        minLines = 3,
-                                    )
-                                    Text(
-                                        text = "留空则直接进入群聊，可在聊天中发送消息开始讨论",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                            },
-                            confirmButton = {
-                                Row(
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                ) {
-                                    TextButton(onClick = {
-                                        showTopicInput = false
-                                        showModeDialog = false
-                                        selectedMode = null
-                                    }) {
-                                        Text("取消")
-                                    }
-                                    TextButton(
-                                        onClick = {
-                                            scope.launch {
-                                                val userMsg = if (topicText.isNotBlank()) {
-                                                    listOf(me.rerere.ai.ui.UIMessagePart.Text(topicText))
-                                                } else {
-                                                    emptyList()
-                                                }
-                                                val config = if (isDebate) {
-                                                    GroupChatRuntimeConfig.debateDefaults()
-                                                } else {
-                                                    GroupChatRuntimeConfig.roundRobinDefaults()
-                                                }
-                                                val convId = chatService.startGroupChatConversation(
-                                                    templateId = currentTemplate.id,
-                                                    userMessage = userMsg,
-                                                    runtimeConfig = config,
-                                                )
-                                                navController.navigate(Screen.GroupChat(id = convId.toString()))
-                                            }
-                                            showTopicInput = false
-                                            showModeDialog = false
-                                            selectedMode = null
+                    AlertDialog(
+                        onDismissRequest = { showModeDialog = false },
+                        title = { Text("选择群聊模式") },
+                        text = {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                TextButton(
+                                    onClick = {
+                                        scope.launch {
+                                            val config = GroupChatRuntimeConfig.roundRobinDefaults()
+                                            val convId = chatService.startGroupChatConversation(
+                                                templateId = currentTemplate.id,
+                                                userMessage = emptyList(),
+                                                runtimeConfig = config,
+                                            )
+                                            navController.navigate(Screen.GroupChat(id = convId.toString()))
                                         }
-                                    ) {
-                                        Text(if (topicText.isNotBlank()) "开始讨论" else "直接进入")
-                                    }
+                                        showModeDialog = false
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Text("💬 自由讨论（轮流发言）")
                                 }
-                            },
-                        )
-                    } else {
-                        AlertDialog(
-                            onDismissRequest = { showModeDialog = false },
-                            title = { Text("选择群聊模式") },
-                            text = {
-                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    TextButton(
-                                        onClick = {
-                                            selectedMode = GroupChatMode.ROUND_ROBIN
-                                            showTopicInput = true
-                                        },
-                                        modifier = Modifier.fillMaxWidth(),
-                                    ) {
-                                        Text("💬 自由讨论（轮流发言）")
-                                    }
-                                    TextButton(
-                                        onClick = {
-                                            selectedMode = GroupChatMode.DEBATE
-                                            showTopicInput = true
-                                        },
-                                        modifier = Modifier.fillMaxWidth(),
-                                    ) {
-                                        Text("🎯 AI辩论（正反方交锋）")
-                                    }
-                                }
-                            },
-                            confirmButton = {},
-                            dismissButton = {
-                                TextButton(onClick = { showModeDialog = false }) {
-                                    Text("取消")
+                                TextButton(
+                                    onClick = {
+                                        scope.launch {
+                                            val config = GroupChatRuntimeConfig.debateDefaults()
+                                            val convId = chatService.startGroupChatConversation(
+                                                templateId = currentTemplate.id,
+                                                userMessage = emptyList(),
+                                                runtimeConfig = config,
+                                            )
+                                            navController.navigate(Screen.GroupChat(id = convId.toString()))
+                                        }
+                                        showModeDialog = false
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Text("🎯 AI辩论（正反方交锋）")
                                 }
                             }
-                        )
-                    }
+                        },
+                        confirmButton = {},
+                        dismissButton = {
+                            TextButton(onClick = { showModeDialog = false }) {
+                                Text("取消")
+                            }
+                        },
+                    )
                 }
             }
 
