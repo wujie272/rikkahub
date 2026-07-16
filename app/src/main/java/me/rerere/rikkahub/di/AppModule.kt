@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.di
 
+
 import kotlinx.serialization.json.Json
 import me.rerere.highlight.Highlighter
 import me.rerere.rikkahub.AppScope

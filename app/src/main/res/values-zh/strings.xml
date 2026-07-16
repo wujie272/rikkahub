@@ -755,6 +755,12 @@
   <string name="setting_display_page_hide_status_bar_title">沉浸式状态栏</string>
   <string name="setting_display_page_hide_status_bar_desc">隐藏系统状态栏，获得沉浸式阅读体验，在聊天页面中生效</string>
   <string name="setting_files_page_cancel_action">取消</string>
+  <string name="setting_files_page_clean_action">清理</string>
+  <string name="setting_files_page_clean_confirmation">将永久删除此分类中的全部文件，此操作无法撤销。</string>
+  <string name="setting_files_page_clean_content_description">清理文件</string>
+  <string name="setting_files_page_clean_failed_toast">部分文件清理失败</string>
+  <string name="setting_files_page_clean_title">清理文件？</string>
+  <string name="setting_files_page_cleaned_toast">文件已清理</string>
   <string name="setting_files_page_delete_action">删除</string>
   <string name="setting_files_page_delete_content_description">删除</string>
   <string name="setting_files_page_delete_failed_toast">删除失败</string>
@@ -2032,4 +2038,5 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="assistant_page_local_tools_app_data_bridge_desc">读取已安装应用的数据（如打卡记录、设置等），需应用侧支持并授权</string>
   <string name="save">保存</string>
   <string name="undo">撤销</string>
+
 </resources>
