@@ -1822,15 +1822,13 @@ class ChatService(
         )
         saveConversation(conversationId, conversation)
 
-        // 如果有用户消息，自动启动群聊
-        if (userMessage.isNotEmpty() && !userMessage.isEmptyInputMessage()) {
-            groupChatRunner.start(
-                conversationId = conversationId,
-                template = template,
-                userMessage = userMessage,
-                runtimeConfig = runtimeConfig,
-            )
-        }
+        // 自动启动群聊（即使没有用户消息，AI 角色也会自动开始讨论）
+        groupChatRunner.start(
+            conversationId = conversationId,
+            template = template,
+            userMessage = userMessage,
+            runtimeConfig = runtimeConfig,
+        )
 
         // 生成标题
         launchWithConversationReference(conversationId) {
