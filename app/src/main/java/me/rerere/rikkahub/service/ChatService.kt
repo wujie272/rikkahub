@@ -172,6 +172,50 @@ class ChatService(
     private val workspaceReminderTransformer = WorkspaceReminderTransformer(workspaceRepository)
 
 
+    // ── 群聊对话映射：conversationId → templateId
+    // Conversation.groupChatTemplateId 只存在于内存中，Room 不持久化它
+    // 所以用这个映射单独持久化，避免 Room migration
+    private val groupChatTemplateIds = ConcurrentHashMap<kotlin.uuid.Uuid, kotlin.uuid.Uuid>()
+    private val groupChatPrefs = context.getSharedPreferences("group_chat_map", Context.MODE_PRIVATE)
+
+    private fun loadGroupChatMappings() {
+        groupChatTemplateIds.clear()
+        val raw = groupChatPrefs.getString("mappings", null) ?: return
+        try {
+            val pairs = kotlinx.serialization.json.Json.decodeFromString<List<List<String>>>(raw)
+            pairs.forEach { (convId, tmplId) ->
+                runCatching {
+                    groupChatTemplateIds[kotlin.uuid.Uuid.parse(convId)] = kotlin.uuid.Uuid.parse(tmplId)
+                }
+            }
+        } catch (_: Exception) {}
+    }
+
+    private fun saveGroupChatMappings() {
+        val pairs = groupChatTemplateIds.entries.map { (k, v) -> listOf(k.toString(), v.toString()) }
+        val raw = kotlinx.serialization.json.Json.encodeToString(pairs)
+        groupChatPrefs.edit().putString("mappings", raw).apply()
+    }
+
+    fun getGroupChatTemplateId(conversationId: kotlin.uuid.Uuid): kotlin.uuid.Uuid? {
+        return groupChatTemplateIds[conversationId]
+    }
+
+    private fun setGroupChatTemplateId(conversationId: kotlin.uuid.Uuid, templateId: kotlin.uuid.Uuid) {
+        groupChatTemplateIds[conversationId] = templateId
+        saveGroupChatMappings()
+    }
+
+    private fun removeGroupChatTemplateId(conversationId: kotlin.uuid.Uuid) {
+        groupChatTemplateIds.remove(conversationId)
+        saveGroupChatMappings()
+    }
+
+
+    init {
+        loadGroupChatMappings()
+    }
+
     // 群聊执行引擎
     val groupChatRunner: GroupChatRunner = GroupChatRunner(
         appScope = appScope,
@@ -423,9 +467,11 @@ class ChatService(
                 // ── Group chat check ──
                 // If this conversation is linked to a group chat template, delegate to the
                 // GroupChatRunner instead of the normal single-assistant LLM path.
-                val groupChatHandled = if (answer && !routedHandled && currentConversation.groupChatTemplateId != null) {
+                // Use groupChatTemplateIds map since Conversation.groupChatTemplateId is not persisted in Room.
+                val gcTemplateId = groupChatTemplateIds[conversationId]
+                val groupChatHandled = if (answer && !routedHandled && gcTemplateId != null) {
                     val settings = settingsStore.settingsFlow.first()
-                    val template = settings.groupChatTemplates.find { it.id == currentConversation.groupChatTemplateId }
+                    val template = settings.groupChatTemplates.find { it.id == gcTemplateId }
                     if (template != null && template.seats.isNotEmpty()) {
                         groupChatRunner.start(
                             conversationId = conversationId,
@@ -1763,6 +1809,9 @@ class ChatService(
         val firstAssistantId = template.seats.firstOrNull()?.assistantId
             ?: settings.getCurrentAssistant().id
 
+        // 将 templateId 存入独立映射（Room 不持久化 groupChatTemplateId，避免 migration）
+        setGroupChatTemplateId(conversationId, templateId)
+
         // 创建对话
         val conversation = Conversation(
             id = conversationId,
@@ -1802,8 +1851,7 @@ class ChatService(
         // session.generationJob 在 sendMessage 委托给 groupChatRunner 后马上就完成了，
         // 所以 stopGeneration 只 cancel session job 对群聊完全无效。
         // 必须同时停掉 GroupChatRunner。
-        val conversation = runCatching { getConversationFlow(conversationId).value }.getOrNull()
-        if (conversation?.groupChatTemplateId != null && groupChatRunner.isRunning) {
+        if (groupChatTemplateIds.containsKey(conversationId) && groupChatRunner.isRunning) {
             Log.i(TAG, "stopGeneration: stopping group chat runner for conversation $conversationId")
             groupChatRunner.stop()
         }
