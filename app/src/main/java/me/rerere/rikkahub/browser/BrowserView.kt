@@ -200,7 +200,7 @@ private fun WebViewHost(
                 override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                     // 记录已保存 Cookie 的域名
                     CookieStore.recordUrl(url)
-                    CookieStore.init(view?.context ?: return@object)
+                    CookieStore.init(view?.context ?: return)
                     // Inject anti-bot JS shim BEFORE any site code runs.
                     // onPageStarted fires before the page's own JS executes, so the
                     // navigator.webdriver / navigator.plugins spoof takes effect first.

@@ -41,7 +41,7 @@ internal fun configureWebViewForRikka(webView: WebView) {
     @Suppress("DEPRECATION")
     runCatching {
         androidx.webkit.WebSettingsCompat.setRequestedWithHeaderOriginAllowList(
-            webView.settings, emptyList()
+            webView.settings, emptySet()
         )
     }.onFailure { /* WebView too old — UA spoof + JS shim still help */ }
 
