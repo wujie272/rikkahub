@@ -87,7 +87,8 @@ class HeadlessBrowserSession(private val context: Context) {
         }
 
         val wv = object : WebView(context) {
-            override fun onCreateInputConnection(outAttrs: android.view.inputmethod.EditorInfo): android.view.inputmethod.InputConnection {
+            override fun onCreateInputConnection(outAttrs: android.view.inputmethod.EditorInfo?): android.view.inputmethod.InputConnection? {
+                if (outAttrs == null) return null
                 val ic = super.onCreateInputConnection(outAttrs)
                 outAttrs.imeOptions = outAttrs.imeOptions or android.view.inputmethod.EditorInfo.IME_FLAG_NO_EXTRACT_UI
                 outAttrs.privateImeOptions = "disableFullscreen"
