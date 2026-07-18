@@ -111,3 +111,36 @@ internal val WEBVIEW_BLOCKED_DOMAINS = setOf(
     "x.com",
     "twitter.com",
 )
+
+/**
+ * Cursor position shim — injected on [WebViewClient.onPageFinished] to guard
+ * against the `type="tel"` cursor-jump-to-start bug that affects sites like
+ * Boss直聘 login page.
+ *
+ * Root cause: Android WebView's internal cursor-position management interacts
+ * badly with some IMEs when `EditorInfo.IME_FLAG_NAVIGATE_NEXT` / `_PREVIOUS`
+ * are set on a phone/tel-type input field. The Kotlin-side fix in
+ * [BrowserView.onCreateInputConnection] clears those flags. This JS script
+ * is belt-and-suspenders: it re-positions the caret to the end after every
+ * `input` event on any `type="tel"` / `inputmode="numeric"` / `type="number"`
+ * field, covering IMEs that manage their own cursor internally.
+ */
+internal const val CURSOR_POSITION_SHIM_JS = """
+(function(){
+    try {
+        document.querySelectorAll('input[type="tel"], input[type="number"], input[inputmode="numeric"]').forEach(function(el) {
+            // Remove any existing listener from a previous injection to avoid stacking
+            el.removeEventListener('input', cursorFixer);
+            el.addEventListener('input', cursorFixer);
+        });
+    } catch(e) {}
+    function cursorFixer() {
+        // Preserve selection direction: if user is selecting backward (selectionStart > selectionEnd),
+        // don't override. Only fix the common case where IME reset both to 0.
+        var len = this.value.length;
+        if (this.selectionStart === 0 && this.selectionEnd === 0 && len > 0) {
+            this.setSelectionRange(len, len);
+        }
+    }
+})();
+"""

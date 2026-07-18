@@ -148,9 +148,20 @@ private fun WebViewHost(
             override fun onCreateInputConnection(outAttrs: android.view.inputmethod.EditorInfo?): android.view.inputmethod.InputConnection? {
                 if (outAttrs == null) return null
                 val ic = super.onCreateInputConnection(outAttrs)
-                outAttrs.imeOptions = outAttrs.imeOptions or android.view.inputmethod.EditorInfo.IME_FLAG_NO_EXTRACT_UI
+                if (ic == null) return null
+                // 清除 IME 导航标志 — 这些标志会让 IME 在 type="tel" 输入框上
+                // 提交字符后重置光标到位置 0（Boss直聘登录页反转 bug 的根因）
+                outAttrs.imeOptions = outAttrs.imeOptions
+                    .and(android.view.inputmethod.EditorInfo.IME_FLAG_NO_EXTRACT_UI.inv())
+                    .and(android.view.inputmethod.EditorInfo.IME_FLAG_NAVIGATE_NEXT.inv())
+                    .and(android.view.inputmethod.EditorInfo.IME_FLAG_NAVIGATE_PREVIOUS.inv())
+                // 禁止全屏 IME 界面（某些输入法在全屏模式下行为异常）
+                outAttrs.imeOptions = outAttrs.imeOptions or android.view.inputmethod.EditorInfo.IME_FLAG_NO_FULLSCREEN
                 outAttrs.privateImeOptions = "disableFullscreen"
-                outAttrs.inputType = outAttrs.inputType and android.text.InputType.TYPE_TEXT_FLAG_AUTO_CORRECT.inv()
+                // 关闭自动修正 + 建议（减少 IME 额外操作导致光标跳转）
+                outAttrs.inputType = outAttrs.inputType
+                    .and(android.text.InputType.TYPE_TEXT_FLAG_AUTO_CORRECT.inv())
+                    .or(android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS)
                 return ic
             }
         }.apply {
@@ -213,6 +224,13 @@ private fun WebViewHost(
                     if (url != null) onUrlChange(url)
                     onCanGoBackChange(view?.canGoBack() == true)
                     onCanGoForwardChange(view?.canGoForward() == true)
+                    // ════════════════════════════════════════════════════════
+                    // Cursor position shim — belt-and-suspenders for type="tel"
+                    // cursor-jump-to-start bug (Boss直聘登录页). The IME flag fix
+                    // in onCreateInputConnection handles most IMEs; this JS covers
+                    // any that still fire cursor resets internally.
+                    // ════════════════════════════════════════════════════════
+                    view?.evaluateJavascript(CURSOR_POSITION_SHIM_JS, null)
                     // Adb-friendly white-page diagnostic. Tag = "RikkaWebView". Filter:
                     //   adb logcat -s RikkaWebView
                     // Dumps body innerText length + first 100 chars + meta viewport so

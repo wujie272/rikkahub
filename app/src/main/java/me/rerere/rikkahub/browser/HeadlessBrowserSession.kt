@@ -90,9 +90,17 @@ class HeadlessBrowserSession(private val context: Context) {
             override fun onCreateInputConnection(outAttrs: android.view.inputmethod.EditorInfo?): android.view.inputmethod.InputConnection? {
                 if (outAttrs == null) return null
                 val ic = super.onCreateInputConnection(outAttrs)
-                outAttrs.imeOptions = outAttrs.imeOptions or android.view.inputmethod.EditorInfo.IME_FLAG_NO_EXTRACT_UI
+                if (ic == null) return null
+                // 清除 IME 导航标志 — 与 Foreground BrowserView 相同的修复
+                outAttrs.imeOptions = outAttrs.imeOptions
+                    .and(android.view.inputmethod.EditorInfo.IME_FLAG_NO_EXTRACT_UI.inv())
+                    .and(android.view.inputmethod.EditorInfo.IME_FLAG_NAVIGATE_NEXT.inv())
+                    .and(android.view.inputmethod.EditorInfo.IME_FLAG_NAVIGATE_PREVIOUS.inv())
+                outAttrs.imeOptions = outAttrs.imeOptions or android.view.inputmethod.EditorInfo.IME_FLAG_NO_FULLSCREEN
                 outAttrs.privateImeOptions = "disableFullscreen"
-                outAttrs.inputType = outAttrs.inputType and android.text.InputType.TYPE_TEXT_FLAG_AUTO_CORRECT.inv()
+                outAttrs.inputType = outAttrs.inputType
+                    .and(android.text.InputType.TYPE_TEXT_FLAG_AUTO_CORRECT.inv())
+                    .or(android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS)
                 return ic
             }
         }.apply {
@@ -135,6 +143,13 @@ class HeadlessBrowserSession(private val context: Context) {
                     view.evaluateJavascript(ANTI_BOT_SHIM_JS, null)
                     // Visibility shim — headless WebView isn't on screen.
                     view.evaluateJavascript(VISIBILITY_SHIM_JS, null)
+                }
+
+                override fun onPageFinished(view: WebView, url: String?) {
+                    super.onPageFinished(view, url)
+                    // Cursor position shim — belt-and-suspenders for type="tel"
+                    // cursor-jump-to-start bug (Boss直聘登录页).
+                    view.evaluateJavascript(CURSOR_POSITION_SHIM_JS, null)
                 }
             }
             // Per-WebView third-party cookie enable — must be called after the WebView
