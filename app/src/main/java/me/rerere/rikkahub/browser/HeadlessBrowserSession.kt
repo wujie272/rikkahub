@@ -86,7 +86,15 @@ class HeadlessBrowserSession(private val context: Context) {
             layoutParams = LinearLayout.LayoutParams(VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
         }
 
-        val wv = WebView(context).apply {
+        val wv = object : WebView(context) {
+            override fun onCreateInputConnection(outAttrs: android.view.inputmethod.EditorInfo): android.view.inputmethod.InputConnection {
+                val ic = super.onCreateInputConnection(outAttrs)
+                outAttrs.imeOptions = outAttrs.imeOptions or android.view.inputmethod.EditorInfo.IME_FLAG_NO_EXTRACT_UI
+                outAttrs.privateImeOptions = "disableFullscreen"
+                outAttrs.inputType = outAttrs.inputType and android.text.InputType.TYPE_TEXT_FLAG_AUTO_CORRECT.inv()
+                return ic
+            }
+        }.apply {
             // Shared with foreground — every render-related setting (mixedContentMode,
             // hardware layer, autoplay, UA strip, file:// access) lives in
             // configureWebViewForRikka. Before this helper existed, headless mode lacked

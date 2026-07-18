@@ -134,17 +134,24 @@ private fun WebViewHost(
     onCanGoForwardChange: (Boolean) -> Unit,
 ) {
     val ctx = LocalContext.current
-    // Construct the WebView ONCE — `remember` survives recomp + (with key=Unit) survives
-    // configuration changes (the Activity declares `configChanges` so the system never
-    // recreates us). Recreating per-recomp would reset history, scroll, and JS state.
+    // 构造 WebView 一次 — `remember` 存活在 recomposition (Unit key 可以在 config 变化后存活，因为 Activity 声明了 `configChanges` 所以系统不会重建)。
+    // 每次 recomposition 重建 WebView 会丢失历史、滚动状态和 JS 状态。
     val webView = remember {
-        // Enable Chrome DevTools attachment ONLY in debug builds. In release, leaving
-        // this on lets anyone with adb (lent phone, ADB-over-WiFi attacker) attach
-        // chrome://inspect and read the WebView's cookies / localStorage / authenticated
-        // session bodies. Gate behind BuildConfig.DEBUG — turning Chrome inspection on
-        // in release is a privacy posture choice the user never consented to.
+        // 启用 Chrome DevTools 远程调试 (仅 debug 构建)
+        // 在 release 构建中开启此功能会允许任何拥有 adb 访问权限的人
+        // (借出的手机、ADB-over-WiFi 攻击者) 连接到 chrome://inspect
+        // 并读取 WebView 的 cookies/localStorage/已认证的会话内容。
+        // 仅在 debug 构建启用 — 在 release 构建中开启是一个用户从未同意过的隐私决定。
         if (BuildConfig.DEBUG) WebView.setWebContentsDebuggingEnabled(true)
-        WebView(ctx).apply {
+        object : WebView(ctx) {
+            override fun onCreateInputConnection(outAttrs: android.view.inputmethod.EditorInfo): android.view.inputmethod.InputConnection {
+                val ic = super.onCreateInputConnection(outAttrs)
+                outAttrs.imeOptions = outAttrs.imeOptions or android.view.inputmethod.EditorInfo.IME_FLAG_NO_EXTRACT_UI
+                outAttrs.privateImeOptions = "disableFullscreen"
+                outAttrs.inputType = outAttrs.inputType and android.text.InputType.TYPE_TEXT_FLAG_AUTO_CORRECT.inv()
+                return ic
+            }
+        }.apply {
             // Shared with HeadlessBrowserSession — every render-related setting
             // (mixedContentMode, hardware layer, autoplay, UA strip, file:// access)
             // lives in configureWebViewForRikka so foreground + headless behave
