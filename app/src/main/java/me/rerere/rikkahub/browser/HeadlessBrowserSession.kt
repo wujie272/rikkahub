@@ -126,6 +126,9 @@ class HeadlessBrowserSession(private val context: Context) {
                 }
 
                 override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) {
+                    // 记录已保存 Cookie 的域名
+                    CookieStore.recordUrl(url)
+                    CookieStore.init(view.context)
                     super.onPageStarted(view, url, favicon)
                     // Inject anti-bot JS shim before site code runs.
                     view.evaluateJavascript(ANTI_BOT_SHIM_JS, null)

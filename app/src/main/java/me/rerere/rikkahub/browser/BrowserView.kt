@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import me.rerere.rikkahub.BuildConfig
+import me.rerere.rikkahub.browser.CookieStore
 import java.io.File
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
@@ -197,6 +198,9 @@ private fun WebViewHost(
                 }
 
                 override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                    // 记录已保存 Cookie 的域名
+                    CookieStore.recordUrl(url)
+                    CookieStore.init(view?.context ?: return@object)
                     // Inject anti-bot JS shim BEFORE any site code runs.
                     // onPageStarted fires before the page's own JS executes, so the
                     // navigator.webdriver / navigator.plugins spoof takes effect first.
