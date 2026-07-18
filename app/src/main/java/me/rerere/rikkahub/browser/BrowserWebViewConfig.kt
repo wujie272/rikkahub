@@ -26,33 +26,39 @@ import android.webkit.WebView
  *
  * Pulling the configuration into one shared function means future fixes for either
  * mode automatically benefit the other.
+ *
+ * **Anti-detection layer.** This function also configures UA spoofing,
+ * X-Requested-With suppression, and third-party cookie support — all needed
+ * for sites like X/Twitter that actively block embedded WebViews.
  */
 internal fun configureWebViewForRikka(webView: WebView) {
+    // ═══════════════════════════════════════════════════════════════════
+    // Anti-detection layer
+    // ═══════════════════════════════════════════════════════════════════
+
+    // 1) Suppress X-Requested-With header (WebView 113+ API).
+    //    X/Twitter checks this header to detect embedded WebViews.
+    @Suppress("DEPRECATION")
+    runCatching {
+        androidx.webkit.WebSettingsCompat.setRequestedWithHeaderOriginAllowList(
+            webView.settings, emptyList()
+        )
+    }.onFailure { /* WebView too old — UA spoof + JS shim still help */ }
+
+    // 2) Third-party cookies — X.com OAuth redirects across subdomains.
+    runCatching {
+        android.webkit.CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true)
+    }
+
     webView.settings.apply {
         javaScriptEnabled = true
         domStorageEnabled = true
-        // Removed in API 35 but still compile-time present and load-bearing for some
-        // sites that store IndexedDB shadow data via the old WebSQL fallback.
         @Suppress("DEPRECATION")
         databaseEnabled = true
-        // Phase 20D needs this — skill webview cards produce file:// URLs into the
-        // app's private data dir. Cross-origin protection still applies via the
-        // file:// unique-origin rule (http(s) pages can't fetch file:// content).
         allowFileAccess = true
-        // Required for skill webview assets: when a skill's viewer page (e.g.
-        // virtual-piano's ui.html) is opened from a file:// URL it needs to load
-        // sibling asset files (audio, images, sub-pages) also via file://. Without
-        // this flag the WebView blocks those requests silently (no error, just empty
-        // <audio> elements). This only enables file:// → file:// sub-resource loads;
-        // http(s) pages still cannot reach app-private file:// paths.
         @Suppress("DEPRECATION")
         allowFileAccessFromFileURLs = true
         allowContentAccess = false
-        // useWideViewPort = false — 让 WebView 直接以设备宽度渲染。
-        // 对于有 viewport meta 标签的现代响应式网站（X, Instagram 等），
-        // useWideViewPort=true 会让 WebView 以 800px+ 宽渲染，
-        // 导致页面内容只显示在左上角一小块区域。
-        // 关闭后，X 的登录页就能正常居中显示了。
         useWideViewPort = false
         loadWithOverviewMode = false
         setSupportMultipleWindows(false)
@@ -61,39 +67,47 @@ internal fun configureWebViewForRikka(webView: WebView) {
         builtInZoomControls = true
         displayZoomControls = false
         mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
-        // Full Chrome mobile UA instead of just stripping "wv" — X/Twitter and other
-        // sites detect WebView via navigator.webdriver, User-Agent inconsistencies,
-        // and other fingerprinting signals. A real Chrome UA reduces WebView blocking.
+
+        // 3) Full Chrome mobile UA — no "wv" token, resembles real Chrome.
         val chromeMobileUA = "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.6478.122 Mobile Safari/537.36"
         userAgentString = chromeMobileUA
 
-        // Capture the mobile UA for desktop mode toggle restoration
+        // Stash for desktop-mode toggle in BrowserActivity
         BrowserController.mobileUA = userAgentString
     }
-    // Hardware layer hint. For the foreground Activity's WebView this fixes a Compose
-    // AndroidView interop quirk that produces all-white pages. For headless capture via
-    // `webView.draw(canvas)` onto a software bitmap the framework falls back to the
-    // software path automatically — calling this is harmless either way and keeps the
-    // two code paths identical.
     webView.setLayerType(View.LAYER_TYPE_HARDWARE, null)
-
-    // WebViewClient delegation for anti-bot shim injection
 }
 
-/** JS injected on every page start to hide WebView/bot fingerprinting signals. */
+/**
+ * JS injected on every page start to hide WebView/bot fingerprinting signals.
+ * This shim is injected via [WebViewClient.onPageStarted] in both [BrowserView]
+ * and [HeadlessBrowserSession].
+ */
 internal const val ANTI_BOT_SHIM_JS = """
 (function(){
     try {
-        // Hide navigator.webdriver — sites like X/Twitter check this flag
         Object.defineProperty(navigator, 'webdriver', {get: function(){return undefined;}, configurable: true});
-        // Spoof chrome object presence (real Chrome has it, WebView lacks it)
         if (window.chrome === undefined) {
             Object.defineProperty(window, 'chrome', {value: {runtime: {}}, configurable: true});
         }
-        // Override plugins to look like Chrome mobile has them
         Object.defineProperty(navigator, 'plugins', {get: function(){return [1,2,3,4,5];}, configurable: true});
-        // Override languages to match Chrome defaults
         Object.defineProperty(navigator, 'languages', {get: function(){return ['en-US','en','zh-CN','zh'];}, configurable: true});
-    } catch(e) { /* best-effort */ }
+    } catch(e) {}
 })();
 """
+
+/**
+ * Domain list for sites known to block Android WebView. When the foreground
+ * browser loads one of these, [BrowserView] intercepts and opens them via
+ * Chrome Custom Tabs instead — these sites use multi-layer fingerprinting
+ * (UA + XRW + JS API checks) that cannot be fully spoofed from an embedded
+ * WebView.
+ *
+ * Maintained list as of 2026-07:
+ *   - x.com / twitter.com: actively blocks WebView
+ *   - Add new domains here as they're discovered.
+ */
+internal val WEBVIEW_BLOCKED_DOMAINS = setOf(
+    "x.com",
+    "twitter.com",
+)

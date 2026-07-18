@@ -168,18 +168,39 @@ private fun WebViewHost(
                     view: WebView?,
                     request: WebResourceRequest?,
                 ): Boolean {
+                    if (request == null || request.url == null) return false
+                    val urlStr = request.url.toString()
+                    val host = request.url.host ?: ""
+
                     // Block page/JS-initiated navigation into file:// unless the current
-                    // document is already file:// (skill webview cards moving between
-                    // their own sub-pages). App-initiated loadUrl() bypasses this
-                    // callback, so opening a skill card stays unaffected. Without this,
-                    // a browsed page (or eval'd JS) could steer the WebView into
-                    // app-private files and exfiltrate them via browser_get_text.
-                    val toFile = request?.url?.scheme.equals("file", ignoreCase = true)
-                    return toFile && view?.url?.startsWith("file:", ignoreCase = true) != true
+                    // document is already file:// (skill webview cards).
+                    if (request.url.scheme.equals("file", ignoreCase = true) &&
+                        view?.url?.startsWith("file:", ignoreCase = true) != true
+                    ) return true
+
+                    // Foreground-only: fall back to Chrome Custom Tabs for sites known
+                    // to block embedded WebViews (X/Twitter). Headless mode uses the
+                    // anti-detection layer + UA spoofing — Custom Tabs aren't available
+                    // offscreen, but headless browsing is AI-driven and handles partial
+                    // failures gracefully.
+                    if (host in WEBVIEW_BLOCKED_DOMAINS) {
+                        val ctx = view?.context ?: return false
+                        val intent = android.content.Intent(
+                            android.content.Intent.ACTION_VIEW,
+                            android.net.Uri.parse(urlStr)
+                        ).apply { addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK) }
+                        runCatching { ctx.startActivity(intent) }
+                        return true // intercepted — opened in Chrome
+                    }
+
+                    return false
                 }
 
                 override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
-                    super.onPageStarted(view, url, favicon)
+                    // Inject anti-bot JS shim BEFORE any site code runs.
+                    // onPageStarted fires before the page's own JS executes, so the
+                    // navigator.webdriver / navigator.plugins spoof takes effect first.
+                    view?.evaluateJavascript(ANTI_BOT_SHIM_JS, null)
                     if (url != null) onUrlChange(url)
                 }
                 override fun onPageFinished(view: WebView?, url: String?) {

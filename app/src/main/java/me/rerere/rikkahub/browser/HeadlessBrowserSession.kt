@@ -127,6 +127,9 @@ class HeadlessBrowserSession(private val context: Context) {
 
                 override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) {
                     super.onPageStarted(view, url, favicon)
+                    // Inject anti-bot JS shim before site code runs.
+                    view.evaluateJavascript(ANTI_BOT_SHIM_JS, null)
+                    // Visibility shim — headless WebView isn't on screen.
                     view.evaluateJavascript(VISIBILITY_SHIM_JS, null)
                 }
             }
