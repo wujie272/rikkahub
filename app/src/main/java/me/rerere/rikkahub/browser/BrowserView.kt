@@ -145,7 +145,7 @@ private fun WebViewHost(
         // 仅在 debug 构建启用 — 在 release 构建中开启是一个用户从未同意过的隐私决定。
         if (BuildConfig.DEBUG) WebView.setWebContentsDebuggingEnabled(true)
         object : WebView(ctx) {
-            override fun onCreateInputConnection(outAttrs: android.view.inputmethod.EditorInfo?): android.view.inputmethod.InputConnection {
+            override fun onCreateInputConnection(outAttrs: android.view.inputmethod.EditorInfo?): android.view.inputmethod.InputConnection? {
                 if (outAttrs == null) return null
                 val ic = super.onCreateInputConnection(outAttrs)
                 outAttrs.imeOptions = outAttrs.imeOptions or android.view.inputmethod.EditorInfo.IME_FLAG_NO_EXTRACT_UI
