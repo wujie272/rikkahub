@@ -7,7 +7,7 @@
   <string name="about_page_version">Version</string>
   <string name="about_page_website">Website</string>
   <string name="add">Add</string>
-  <string name="app_name">RikkaHub Agent</string>
+  <string name="app_name">RikkaHub</string>
   <string name="asr_button_content_description">Speech Recognition</string>
   <string name="asr_button_stop">Stop</string>
   <string name="assistant_detail_basic_desc">Configure name, avatar, model, and parameters</string>
@@ -1946,9 +1946,6 @@
     <string name="setting_ssh_field_password">Password</string>
     <string name="setting_ssh_field_private_key">Private Key</string>
     <string name="setting_ssh_import_key">Import from file</string>
-    <string name="setting_ssh_import_key_from_termux">Import from Termux</string>
-    <string name="setting_ssh_import_key_loaded">Private key loaded: %s</string>
-    <string name="setting_ssh_import_key_failed">Failed to read private key file</string>
     <string name="setting_ssh_field_passphrase">Passphrase (optional)</string>
     <string name="setting_ssh_auth_password">Password</string>
     <string name="setting_ssh_auth_private_key">Private Key</string>

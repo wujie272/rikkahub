@@ -7,7 +7,7 @@
   <string name="about_page_version">版本</string>
   <string name="about_page_website">官网</string>
   <string name="add">添加</string>
-  <string name="app_name">RikkaHub Agent</string>
+  <string name="app_name">RikkaHub</string>
   <string name="asr_button_content_description">语音识别</string>
   <string name="asr_button_stop">停止</string>
   <string name="assistant_detail_basic_desc">配置名称、头像、模型和参数</string>
@@ -1849,9 +1849,6 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
     <string name="setting_ssh_field_password">密码</string>
     <string name="setting_ssh_field_private_key">私钥</string>
     <string name="setting_ssh_import_key">从文件导入</string>
-    <string name="setting_ssh_import_key_from_termux">从 Termux 导入</string>
-    <string name="setting_ssh_import_key_loaded">已加载私钥：%s</string>
-    <string name="setting_ssh_import_key_failed">读取私钥文件失败</string>
     <string name="setting_ssh_field_passphrase">密钥口令（可选）</string>
     <string name="setting_ssh_auth_password">密码</string>
     <string name="setting_ssh_auth_private_key">私钥</string>

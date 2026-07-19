@@ -180,7 +180,7 @@ fun SshHostFormSheet(
                 )
                 Spacer(Modifier.height(8.dp))
 
-                // Import buttons row
+                // Import button
                 val context = LocalContext.current
                 val scope = rememberCoroutineScope()
 
@@ -199,52 +199,19 @@ fun SshHostFormSheet(
                     }
                 }
 
-                // Import from Termux ~/.ssh/ launcher
-                val termuxFilePickerLauncher = rememberLauncherForActivityResult(
-                    contract = ActivityResultContracts.OpenDocument()
-                ) { uri: Uri? ->
-                    uri?.let {
-                        scope.launch {
-                            val keyContent = withContext(Dispatchers.IO) {
-                                readTextFromUri(context, it)
-                            }
-                            if (keyContent != null) {
-                                privateKey = keyContent
-                            }
-                        }
-                    }
-                }
-
-                Row(modifier = Modifier.fillMaxWidth()) {
-                    OutlinedButton(
-                        onClick = {
-                            filePickerLauncher.launch(arrayOf("*/*"))
-                        },
-                        modifier = Modifier.weight(1f),
-                    ) {
-                        Icon(
-                            HugeIcons.FileImport,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text(stringResource(R.string.setting_ssh_import_key))
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    OutlinedButton(
-                        onClick = {
-                            termuxFilePickerLauncher.launch(arrayOf("*/*"))
-                        },
-                        modifier = Modifier.weight(1f),
-                    ) {
-                        Icon(
-                            HugeIcons.FileImport,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text(stringResource(R.string.setting_ssh_import_key_from_termux))
-                    }
+                OutlinedButton(
+                    onClick = {
+                        filePickerLauncher.launch(arrayOf("*/*"))
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(
+                        HugeIcons.FileImport,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(stringResource(R.string.setting_ssh_import_key))
                 }
 
                 Spacer(Modifier.height(8.dp))
