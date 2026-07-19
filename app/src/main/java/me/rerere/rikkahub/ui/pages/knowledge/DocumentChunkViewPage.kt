@@ -66,12 +66,14 @@ fun DocumentChunkViewPage(
 ) {
     val chunks by vm.chunks.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
-    val fileName = filePath.substringAfterLast('/').ifBlank { filePath }
+    val decodedPath = remember(filePath) { android.net.Uri.decode(filePath) }
+    val fileName = remember(decodedPath) {
+        val raw = decodedPath.substringAfterLast('/').ifBlank { decodedPath }
+        android.net.Uri.decode(raw).substringAfterLast('/').ifBlank { android.net.Uri.decode(raw) }
+    }
 
 
-    LaunchedEffect(kbId, filePath) {
-        // filePath 从 navigation 传过来时可能被 Uri.encode 编码过，解码后再查询
-        val decodedPath = android.net.Uri.decode(filePath)
+    LaunchedEffect(kbId, decodedPath) {
         vm.loadChunks(kbId, decodedPath)
     }
 

@@ -1,5 +1,8 @@
 package me.rerere.rikkahub.ui.pages.setting.components
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -8,12 +11,16 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -25,13 +32,23 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.FileImport
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.db.entity.SshHostEntity
+import java.io.BufferedReader
+import java.io.InputStreamReader
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -152,6 +169,7 @@ fun SshHostFormSheet(
                     modifier = Modifier.fillMaxWidth(),
                 )
             } else {
+                // Private key: editable text field + file import buttons
                 OutlinedTextField(
                     value = privateKey,
                     onValueChange = { privateKey = it },
@@ -160,6 +178,75 @@ fun SshHostFormSheet(
                     maxLines = 8,
                     modifier = Modifier.fillMaxWidth(),
                 )
+                Spacer(Modifier.height(8.dp))
+
+                // Import buttons row
+                val context = LocalContext.current
+                val scope = rememberCoroutineScope()
+
+                val filePickerLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.OpenDocument()
+                ) { uri: Uri? ->
+                    uri?.let {
+                        scope.launch {
+                            val keyContent = withContext(Dispatchers.IO) {
+                                readTextFromUri(context, it)
+                            }
+                            if (keyContent != null) {
+                                privateKey = keyContent
+                            }
+                        }
+                    }
+                }
+
+                // Import from Termux ~/.ssh/ launcher
+                val termuxFilePickerLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.OpenDocument()
+                ) { uri: Uri? ->
+                    uri?.let {
+                        scope.launch {
+                            val keyContent = withContext(Dispatchers.IO) {
+                                readTextFromUri(context, it)
+                            }
+                            if (keyContent != null) {
+                                privateKey = keyContent
+                            }
+                        }
+                    }
+                }
+
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    OutlinedButton(
+                        onClick = {
+                            filePickerLauncher.launch(arrayOf("*/*"))
+                        },
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Icon(
+                            HugeIcons.FileImport,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(stringResource(R.string.setting_ssh_import_key))
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    OutlinedButton(
+                        onClick = {
+                            termuxFilePickerLauncher.launch(arrayOf("*/*"))
+                        },
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Icon(
+                            HugeIcons.FileImport,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(stringResource(R.string.setting_ssh_import_key_from_termux))
+                    }
+                }
+
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
                     value = passphrase,
@@ -207,3 +294,21 @@ fun SshHostFormSheet(
 }
 
 private enum class AuthMode { PASSWORD, PRIVATE_KEY }
+
+/**
+ * Read the full text content from a content URI via ContentResolver.
+ * Returns null if the file can't be read or is empty.
+ */
+private suspend fun readTextFromUri(context: android.content.Context, uri: Uri): String? = withContext(Dispatchers.IO) {
+    try {
+        context.contentResolver.openInputStream(uri)?.use { inputStream ->
+            BufferedReader(InputStreamReader(inputStream, Charsets.UTF_8)).use { reader ->
+                val text = reader.readText()
+                text.ifBlank { null }
+            }
+        }
+    } catch (e: Exception) {
+        e.printStackTrace()
+        null
+    }
+}

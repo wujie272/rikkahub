@@ -89,6 +89,8 @@ fun KnowledgeBaseDetailPage(
     val searchResults by vm.searchResults.collectAsStateWithLifecycle()
     val searchQuery by vm.searchQuery.collectAsStateWithLifecycle()
     val isSearching by vm.isSearching.collectAsStateWithLifecycle()
+    val availableModels by vm.availableModels.collectAsStateWithLifecycle()
+    val modelNameMap = remember(availableModels) { availableModels.associate { it.id to it.displayName } }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     var tabIndex by remember { mutableIntStateOf(0) }
     val navController = LocalNavController.current
@@ -184,7 +186,7 @@ fun KnowledgeBaseDetailPage(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    InfoChip(stringResource(R.string.kb_embedding_model), k.modelId.take(12) + "...")
+                    InfoChip(stringResource(R.string.kb_embedding_model), modelNameMap[k.modelId] ?: k.modelId.take(12) + "...")
                     InfoChip(stringResource(R.string.kb_dimensions, k.dimensions).split(":").firstOrNull()?.trim() ?: "维度", k.dimensions.toString())
                 }
             }

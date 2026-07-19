@@ -1945,6 +1945,10 @@
     <string name="setting_ssh_field_user">User</string>
     <string name="setting_ssh_field_password">Password</string>
     <string name="setting_ssh_field_private_key">Private Key</string>
+    <string name="setting_ssh_import_key">Import from file</string>
+    <string name="setting_ssh_import_key_from_termux">Import from Termux</string>
+    <string name="setting_ssh_import_key_loaded">Private key loaded: %s</string>
+    <string name="setting_ssh_import_key_failed">Failed to read private key file</string>
     <string name="setting_ssh_field_passphrase">Passphrase (optional)</string>
     <string name="setting_ssh_auth_password">Password</string>
     <string name="setting_ssh_auth_private_key">Private Key</string>

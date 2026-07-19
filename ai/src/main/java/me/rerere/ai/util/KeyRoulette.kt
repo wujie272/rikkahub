@@ -114,6 +114,25 @@ private data class KeyEntry(
 private class LruKeyRoulette(
     private val context: Context,
 ) : KeyRoulette {
+    // 内存覆盖层：reportFailure/reportSuccess 只更新这里，不碰文件
+    // 文件只持久化 lastUsed（LRU 排序用）和 key 列表
+    private val memoryOverlay = mutableMapOf<String, MutableMap<String, KeyEntry>>()
+
+    /** 合并文件层 + 内存层的 entry，内存层优先覆盖 */
+    private fun mergedEntry(providerId: String, key: String, fileEntry: KeyEntry?): KeyEntry {
+        val memEntry = memoryOverlay[providerId]?.get(key)
+        if (memEntry == null) return fileEntry ?: KeyEntry(lastUsed = 0)
+        val base = fileEntry ?: KeyEntry(lastUsed = 0)
+        return base.copy(
+            cooldownUntil = memEntry.cooldownUntil,
+            cooldownDurationMs = memEntry.cooldownDurationMs,
+            consecutiveFailures = memEntry.consecutiveFailures,
+            totalRequests = memEntry.totalRequests,
+            successfulRequests = memEntry.successfulRequests,
+            failedRequests = memEntry.failedRequests,
+            disabled = memEntry.disabled,
+        )
+    }
 
     override fun next(keys: String, providerId: String): String {
         val keyList = splitKey(keys)
@@ -128,19 +147,19 @@ private class LruKeyRoulette(
             // 过滤：只保留在 key 列表中的条目
             providerCache.keys.retainAll(keyList)
 
-            // 按 keyList 顺序（优先级）找第一个不在冷却中且未禁用的 key
+            // 按 keyList 顺序找第一个不在冷却中且未禁用的 key（使用 mergedEntry 检查内存层）
             val selected = keyList.firstOrNull { key ->
-                val entry = providerCache[key]
-                !(entry?.disabled == true) && (entry?.cooldownUntil ?: 0) <= now
+                val entry = mergedEntry(providerId, key, providerCache[key])
+                !entry.disabled && entry.cooldownUntil <= now
             }
 
             if (selected == null) {
-                // 所有 key 都在冷却中，选最早结束冷却的
-                val earliestKey = providerCache.minByOrNull { it.value.cooldownUntil }?.key
-                    ?: keyList.first()
+                // 所有 key 都在冷却中，选最早结束冷却的（检查内存层）
+                val earliestKey = keyList.minByOrNull { key ->
+                    mergedEntry(providerId, key, providerCache[key]).cooldownUntil
+                } ?: keyList.first()
                 providerCache[earliestKey] = (providerCache[earliestKey] ?: KeyEntry(lastUsed = now)).copy(
                     lastUsed = now,
-                    cooldownUntil = providerCache[earliestKey]?.cooldownUntil ?: 0,
                 )
                 allCache[providerId] = providerCache
                 saveCache(allCache)
@@ -149,7 +168,6 @@ private class LruKeyRoulette(
 
             providerCache[selected] = (providerCache[selected] ?: KeyEntry(lastUsed = now)).copy(
                 lastUsed = now,
-                cooldownUntil = 0,
             )
             allCache[providerId] = providerCache
 
@@ -164,74 +182,63 @@ private class LruKeyRoulette(
     }
 
     override fun reportFailure(key: String, providerId: String, cooldownMs: Long) {
-        synchronized(LruFileLock) {
-            val now = System.currentTimeMillis()
-            val allCache = loadCache().toMutableMap()
-            val providerCache = (allCache[providerId] ?: emptyMap()).toMutableMap()
+        val now = System.currentTimeMillis()
+        val providerMem = memoryOverlay.getOrPut(providerId) { mutableMapOf() }
+        val existing = providerMem[key] ?: KeyEntry(lastUsed = now)
+        val newFailures = existing.consecutiveFailures + 1
 
-            val existing = providerCache[key] ?: KeyEntry(lastUsed = now, cooldownUntil = 0)
-            val newFailures = existing.consecutiveFailures + 1
+        // 冷却策略：前 2 次失败只计数不冷却，第 3 次开始逐步加重
+        val actualCooldown = when {
+            newFailures <= 2 -> 0L
+            newFailures == 3 -> cooldownMs
+            newFailures == 4 -> cooldownMs * 2
+            else -> cooldownMs * 5
+        }
 
-            // 冷却策略：前 2 次失败只计数不冷却，第 3 次开始逐步加重
-            val actualCooldown = when {
-                newFailures <= 2 -> 0L           // 小故障，容忍
-                newFailures == 3 -> cooldownMs    // 第 3 次：冷 60s
-                newFailures == 4 -> cooldownMs * 2 // 第 4 次：冷 120s
-                else -> cooldownMs * 5            // ≥5 次：冷 300s
-            }
-            val cooldownUntil = if (actualCooldown > 0) now + actualCooldown else 0L
+        providerMem[key] = existing.copy(
+            cooldownUntil = if (actualCooldown > 0) now + actualCooldown else 0L,
+            cooldownDurationMs = actualCooldown,
+            consecutiveFailures = newFailures,
+            totalRequests = existing.totalRequests + 1,
+            failedRequests = existing.failedRequests + 1,
+        )
 
-            providerCache[key] = existing.copy(
-                cooldownUntil = cooldownUntil,
-                cooldownDurationMs = actualCooldown,
-                consecutiveFailures = newFailures,
-                totalRequests = existing.totalRequests + 1,
-                failedRequests = existing.failedRequests + 1,
-            )
-            allCache[providerId] = providerCache
-            saveCache(allCache)
-
-            if (actualCooldown > 0) {
-                Log.w(TAG, "reportFailure: key=$key provider=$providerId failures=$newFailures cooled ${actualCooldown/1000}s")
-            } else {
-                Log.w(TAG, "reportFailure: key=$key provider=$providerId failures=$newFailures (tolerated)")
-            }
+        if (actualCooldown > 0) {
+            Log.w(TAG, "reportFailure: key=$key provider=$providerId failures=$newFailures cooled ${actualCooldown/1000}s (memory)")
+        } else {
+            Log.w(TAG, "reportFailure: key=$key provider=$providerId failures=$newFailures (tolerated, memory)")
         }
     }
 
     override fun reportSuccess(key: String, providerId: String) {
-        synchronized(LruFileLock) {
-            val now = System.currentTimeMillis()
-            val allCache = loadCache().toMutableMap()
-            val providerCache = (allCache[providerId] ?: emptyMap()).toMutableMap()
-
-            val existing = providerCache[key] ?: KeyEntry(lastUsed = now, cooldownUntil = 0)
-            providerCache[key] = existing.copy(
-                cooldownUntil = 0,
-                consecutiveFailures = 0, // 成功一次就重置连续失败计数
-                totalRequests = existing.totalRequests + 1,
-                successfulRequests = existing.successfulRequests + 1,
-            )
-            allCache[providerId] = providerCache
-            saveCache(allCache)
-        }
+        val now = System.currentTimeMillis()
+        val providerMem = memoryOverlay.getOrPut(providerId) { mutableMapOf() }
+        val existing = providerMem[key] ?: KeyEntry(lastUsed = now)
+        providerMem[key] = existing.copy(
+            cooldownUntil = 0,
+            consecutiveFailures = 0,
+            totalRequests = existing.totalRequests + 1,
+            successfulRequests = existing.successfulRequests + 1,
+        )
     }
 
     override fun getKeyStates(providerId: String): List<KeyState> {
         synchronized(LruFileLock) {
             val allCache = loadCache()
-            val providerCache = allCache[providerId] ?: return emptyList()
-            return providerCache.map { (key, entry) ->
+            val providerCache = allCache[providerId] ?: emptyMap()
+            val allKeys = (providerCache.keys + (memoryOverlay[providerId]?.keys ?: emptySet())).distinct()
+            return allKeys.map { key ->
+                val merged = mergedEntry(providerId, key, providerCache[key])
                 KeyState(
                     key = key,
-                    lastUsed = entry.lastUsed,
-                    cooldownUntil = entry.cooldownUntil,
-                    cooldownDurationMs = entry.cooldownDurationMs,
-                    consecutiveFailures = entry.consecutiveFailures,
-                    totalRequests = entry.totalRequests,
-                    successfulRequests = entry.successfulRequests,
-                    failedRequests = entry.failedRequests,
-                    disabled = entry.disabled,
+                    lastUsed = merged.lastUsed,
+                    cooldownUntil = merged.cooldownUntil,
+                    cooldownDurationMs = merged.cooldownDurationMs,
+                    consecutiveFailures = merged.consecutiveFailures,
+                    totalRequests = merged.totalRequests,
+                    successfulRequests = merged.successfulRequests,
+                    failedRequests = merged.failedRequests,
+                    disabled = merged.disabled,
                 )
             }.sortedByDescending { it.lastUsed }
         }
@@ -249,20 +256,9 @@ private class LruKeyRoulette(
     }
 
     override fun thawKey(key: String, providerId: String) {
-        synchronized(LruFileLock) {
-            val now = System.currentTimeMillis()
-            val allCache = loadCache().toMutableMap()
-            val providerCache = (allCache[providerId] ?: emptyMap()).toMutableMap()
-            val existing = providerCache[key] ?: KeyEntry(lastUsed = now)
-            providerCache[key] = existing.copy(
-                cooldownUntil = 0,
-                cooldownDurationMs = 0,
-                consecutiveFailures = 0,
-            )
-            allCache[providerId] = providerCache
-            saveCache(allCache)
-            Log.w(TAG, "thawKey: key=$key provider=$providerId cooldown cleared")
-        }
+        val providerMem = memoryOverlay[providerId]
+        providerMem?.remove(key)
+        Log.w(TAG, "thawKey: key=$key provider=$providerId cooldown cleared (memory)")
     }
 
     private fun loadCache(): LruCache {

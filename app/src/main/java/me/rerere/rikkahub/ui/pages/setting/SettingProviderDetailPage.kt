@@ -121,6 +121,7 @@ import me.rerere.ai.util.KeyRoulette
 import me.rerere.ai.util.KeyState
 import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.ui.UIMessage
+import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.ai.ModelAbilityTag
 import me.rerere.rikkahub.ui.components.ai.ModelModalityTag
@@ -463,6 +464,63 @@ private fun KeyManagementSheet(
     var importText by remember { mutableStateOf<String?>(null) }
     val sheetContext = LocalContext.current
     val keyRoulette = remember(sheetContext) { KeyRoulette.lru(sheetContext) }
+    val providerManager = koinInject<ProviderManager>()
+    val sheetScope = rememberCoroutineScope()
+
+    // 单 key 测试状态
+    var testingKeyId by remember { mutableStateOf<String?>(null) }
+    var testResults by remember { mutableStateOf<Map<String, UiState<String>>>(emptyMap()) }
+
+    // 单 key 测试逻辑
+    fun runSingleKeyTest(apiKey: ProviderApiKey) {
+        if (testingKeyId != null) return
+        testingKeyId = apiKey.id
+        testResults = testResults + (apiKey.id to UiState.Loading as UiState<String>)
+        sheetScope.launch {
+            val testModel = provider.models.firstOrNull { it.type == ModelType.CHAT }
+            if (testModel == null) {
+                testResults = testResults + (apiKey.id to UiState.Error(Exception("No chat model for testing")) as UiState<String>)
+                testingKeyId = null
+                return@launch
+            }
+            runCatching {
+                val tempProvider = when (provider) {
+                    is ProviderSetting.OpenAI -> (provider as ProviderSetting.OpenAI).copy(
+                        apiKey = apiKey.key,
+                        multiKeyEnabled = false,
+                        apiKeys = emptyList(),
+                    )
+                    is ProviderSetting.Google -> (provider as ProviderSetting.Google).copy(
+                        apiKey = apiKey.key,
+                        multiKeyEnabled = false,
+                        apiKeys = emptyList(),
+                    )
+                    is ProviderSetting.Claude -> (provider as ProviderSetting.Claude).copy(
+                        apiKey = apiKey.key,
+                        multiKeyEnabled = false,
+                        apiKeys = emptyList(),
+                    )
+                    else -> return@runCatching
+                }
+                val providerImpl = providerManager.getProviderByType(tempProvider)
+                val chunk = providerImpl.generateText(
+                    providerSetting = tempProvider,
+                    messages = listOf(UIMessage.system("You are a helpful assistant"), UIMessage.user("Reply with OK only.")),
+                    params = TextGenerationParams(
+                        model = testModel,
+                        maxTokens = 8,
+                    )
+                )
+                val text = chunk.choices.firstOrNull()?.message?.parts
+                    ?.filterIsInstance<UIMessagePart.Text>()
+                    ?.joinToString("") { it.text } ?: ""
+                testResults = testResults + (apiKey.id to UiState.Success(text.ifBlank { "✓" }) as UiState<String>)
+            }.onFailure { e ->
+                testResults = testResults + (apiKey.id to UiState.Error(e) as UiState<String>)
+            }
+            testingKeyId = null
+        }
+    }
 
     // 轮询冷却状态
     var keyStates by remember { mutableStateOf<List<KeyState>>(emptyList()) }
@@ -534,73 +592,51 @@ private fun KeyManagementSheet(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                items(internalApiKeys, key = { it.id }) { apiKey ->
-                    val state = keyStateMap[apiKey.key]
-                    KeySheetCard(
-                        apiKey = apiKey,
-                        state = state,
-                        onToggleEnabled = {
-                            internalApiKeys = internalApiKeys.map { k ->
-                                if (k.id == apiKey.id) k.copy(enabled = !k.enabled) else k
-                            }.toMutableList()
-                            keyRoulette.setKeyEnabled(apiKey.key, provider.id.toString(), !apiKey.enabled)
-                        },
-                        onEditAlias = {
-                            editingAliasKey = apiKey
-                            aliasText = apiKey.alias
-                        },
-                        onDelete = {
-                            internalApiKeys = internalApiKeys.filter { it.id != apiKey.id }.toMutableList()
-                        },
-                        onThaw = {
-                            keyRoulette.thawKey(apiKey.key, provider.id.toString())
-                        },
-                    )
-                }
-
-                // 添加 Key 按钮
-                item {
-                    OutlinedCard(
-                        modifier = Modifier.fillMaxWidth(),
-                        onClick = { showAddDialog = true }
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(12.dp),
-                            horizontalArrangement = Arrangement.Center,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Icon(HugeIcons.Add01, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text(stringResource(R.string.setting_provider_page_add_key), style = MaterialTheme.typography.bodyMedium)
-                        }
-                    }
-                }
-
-                // 从剪贴板导入（LastChat 风格：弹出对话框预览/编辑）
+                // 添加 Key 和从剪贴板导入（横向排列，固定在顶部）
                 item {
                     var showImportDialog by remember { mutableStateOf(false) }
-                    OutlinedCard(
+                    Row(
                         modifier = Modifier.fillMaxWidth(),
-                        onClick = {
-                            val clipText = sheetContext.readClipboardText()
-                            if (clipText.isNotBlank()) {
-                                importText = clipText
-                                showImportDialog = true
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        OutlinedCard(
+                            modifier = Modifier.weight(1f),
+                            onClick = { showAddDialog = true }
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Icon(HugeIcons.Add01, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text(stringResource(R.string.setting_provider_page_add_key), style = MaterialTheme.typography.bodyMedium)
                             }
                         }
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(12.dp),
-                            horizontalArrangement = Arrangement.Center,
-                            verticalAlignment = Alignment.CenterVertically,
+
+                        OutlinedCard(
+                            modifier = Modifier.weight(1f),
+                            onClick = {
+                                val clipText = sheetContext.readClipboardText()
+                                if (clipText.isNotBlank()) {
+                                    importText = clipText
+                                    showImportDialog = true
+                                }
+                            }
                         ) {
-                            Icon(HugeIcons.Copy01, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text(stringResource(R.string.setting_provider_page_paste_from_clipboard), style = MaterialTheme.typography.bodyMedium)
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Icon(HugeIcons.Copy01, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text(stringResource(R.string.setting_provider_page_paste_from_clipboard), style = MaterialTheme.typography.bodyMedium)
+                            }
                         }
                     }
 
@@ -623,6 +659,34 @@ private fun KeyManagementSheet(
                             }
                         )
                     }
+                }
+
+                items(internalApiKeys, key = { it.id }) { apiKey ->
+                    val state = keyStateMap[apiKey.key]
+                    KeySheetCard(
+                        apiKey = apiKey,
+                        state = state,
+                        isTesting = testingKeyId == apiKey.id,
+                        testState = testResults[apiKey.id],
+                        onToggleEnabled = {
+                            internalApiKeys = internalApiKeys.map { k ->
+                                if (k.id == apiKey.id) k.copy(enabled = !k.enabled) else k
+                            }.toMutableList()
+                            keyRoulette.setKeyEnabled(apiKey.key, provider.id.toString(), !apiKey.enabled)
+                        },
+                        onEditAlias = {
+                            editingAliasKey = apiKey
+                            aliasText = apiKey.alias
+                        },
+                        onDelete = {
+                            internalApiKeys = internalApiKeys.filter { it.id != apiKey.id }.toMutableList()
+                            testResults = testResults - apiKey.id
+                        },
+                        onThaw = {
+                            keyRoulette.thawKey(apiKey.key, provider.id.toString())
+                        },
+                        onTest = { runSingleKeyTest(apiKey) },
+                    )
                 }
             }
 
@@ -794,10 +858,13 @@ private fun ImportKeysDialog(
 private fun KeySheetCard(
     apiKey: ProviderApiKey,
     state: KeyState?,
+    isTesting: Boolean = false,
+    testState: UiState<String>? = null,
     onToggleEnabled: () -> Unit,
     onEditAlias: () -> Unit,
     onDelete: () -> Unit,
     onThaw: () -> Unit,
+    onTest: (() -> Unit)? = null,
 ) {
     val disabled = state?.disabled == true || !apiKey.enabled
     val isCooling = state?.isCoolingDown == true
@@ -876,6 +943,16 @@ private fun KeySheetCard(
                     IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
                         Icon(HugeIcons.Delete01, contentDescription = stringResource(R.string.delete), modifier = Modifier.size(16.dp))
                     }
+                    // 单 key 测试按钮
+                    if (onTest != null && !disabled) {
+                        if (isTesting) {
+                            LinearWavyProgressIndicator(modifier = Modifier.size(24.dp))
+                        } else {
+                            IconButton(onClick = onTest, modifier = Modifier.size(32.dp), enabled = !isTesting) {
+                                Icon(HugeIcons.Connect, contentDescription = stringResource(R.string.setting_provider_page_test_connection), modifier = Modifier.size(16.dp))
+                            }
+                        }
+                    }
                 }
 
                 Row(
@@ -909,6 +986,37 @@ private fun KeySheetCard(
                     color = MaterialTheme.colorScheme.error,
                     trackColor = MaterialTheme.colorScheme.errorContainer,
                 )
+            }
+
+            // 测试结果展示
+            if (testState != null && !isTesting) {
+                when (val ts = testState) {
+                    is UiState.Success -> {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Icon(HugeIcons.CheckmarkCircle01, contentDescription = null, modifier = Modifier.size(14.dp), tint = MaterialTheme.extendColors.green6)
+                            Text(
+                                text = ts.data.take(80),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.extendColors.green6,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                    is UiState.Error -> {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Icon(HugeIcons.Cancel01, contentDescription = null, modifier = Modifier.size(14.dp), tint = MaterialTheme.extendColors.red6)
+                            Text(
+                                text = (ts.error.message ?: "Error").take(80),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.extendColors.red6,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                    else -> {}
+                }
             }
 
             // 统计（仅非冷却时显示）

@@ -242,10 +242,44 @@ private fun ActionSelectionContent(
             )
         }
         Spacer(modifier = Modifier.size(12.dp))
-        ActionButton(QuickAction.TRANSLATE, R.string.text_selection_translate, HugeIcons.Translate) { onActionSelected(QuickAction.TRANSLATE) }
-        ActionButton(QuickAction.EXPLAIN, R.string.text_selection_explain, HugeIcons.Idea01) { onActionSelected(QuickAction.EXPLAIN) }
-        ActionButton(QuickAction.SUMMARIZE, R.string.text_selection_summarize, HugeIcons.MagicWand01) { onActionSelected(QuickAction.SUMMARIZE) }
-        ActionButton(QuickAction.CUSTOM, R.string.text_selection_ask, HugeIcons.Sparkles) { onActionSelected(QuickAction.CUSTOM) }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            ActionButton(
+                modifier = Modifier.weight(1f),
+                action = QuickAction.TRANSLATE,
+                labelRes = R.string.text_selection_translate,
+                icon = HugeIcons.Translate,
+                onClick = { onActionSelected(QuickAction.TRANSLATE) },
+            )
+            ActionButton(
+                modifier = Modifier.weight(1f),
+                action = QuickAction.EXPLAIN,
+                labelRes = R.string.text_selection_explain,
+                icon = HugeIcons.Idea01,
+                onClick = { onActionSelected(QuickAction.EXPLAIN) },
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            ActionButton(
+                modifier = Modifier.weight(1f),
+                action = QuickAction.SUMMARIZE,
+                labelRes = R.string.text_selection_summarize,
+                icon = HugeIcons.MagicWand01,
+                onClick = { onActionSelected(QuickAction.SUMMARIZE) },
+            )
+            ActionButton(
+                modifier = Modifier.weight(1f),
+                action = QuickAction.CUSTOM,
+                labelRes = R.string.text_selection_ask,
+                icon = HugeIcons.Sparkles,
+                onClick = { onActionSelected(QuickAction.CUSTOM) },
+            )
+        }
         Spacer(modifier = Modifier.size(4.dp))
         Surface(
             onClick = onSendToConversationClick,
@@ -275,10 +309,10 @@ private fun ActionSelectionContent(
 }
 
 @Composable
-private fun ActionButton(action: QuickAction, labelRes: Int, icon: ImageVector, onClick: () -> Unit) {
+private fun ActionButton(modifier: Modifier = Modifier, action: QuickAction, labelRes: Int, icon: ImageVector, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
-        modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+        modifier = modifier.fillMaxWidth().padding(vertical = 3.dp),
         shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
     ) {

@@ -247,7 +247,6 @@ fun KnowledgeEditPage(
                                 val label = strategyLabels[value] ?: value
                                 TextButton(
                                     onClick = { vm.updateEditForm { f -> f.copy(chunkStrategy = value) } },
-                                    enabled = form.chunkStrategy == value
                                 ) {
                                     Text(label)
                                 }
