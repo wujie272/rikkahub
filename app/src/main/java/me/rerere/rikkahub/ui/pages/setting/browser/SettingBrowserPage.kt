@@ -1,8 +1,6 @@
 package me.rerere.rikkahub.ui.pages.setting.browser
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -11,8 +9,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -22,7 +18,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,12 +41,19 @@ import me.rerere.rikkahub.ui.theme.CustomColors
 import org.koin.androidx.compose.koinViewModel
 
 /**
- * Settings → Browser. Four sections:
+ * Settings → Browser. Three sections:
  *
- *  1. Browser — "Open browser" + "Clear browsing data".
- *  2. Saved cookies — 展示已保存 Cookie 的域名列表（仅当列表非空时显示）。
- *  3. Tools enabled — 17 个浏览器工具的开关。
- *  4. Defaults & limits — 搜索引擎、超时设置。
+ *  1. Browser — "Open browser" (launches BrowserActivity at about:blank for one-time
+ *     manual use like signing into a site before the AI takes over) + "Clear browsing
+ *     data" (wipes WebView profile dir + cookies; does NOT clear per-tool toggles —
+ *     those are user config, not browsing data).
+ *  2. Tools enabled — 17 individually-togglable browser tools. Read tools default ON,
+ *     write tools default OFF, loop-control ON. Per the spec, the per-tool granularity
+ *     is intentional — the AI controlling a real browser is the highest-trust surface
+ *     in the app, so the user must be able to grant only what they trust.
+ *  3. Defaults & limits — search engine (forward-compat dropdown, no-op in v1),
+ *     per-tool timeout, single-task timeout. The two timeouts are editable (GitHub issue
+ *     #4): values are clamped into a generous-but-bounded range in BrowserPreferences.
  */
 @Composable
 fun SettingBrowserPage(
@@ -62,14 +64,10 @@ fun SettingBrowserPage(
     val toolStates by vm.toolStates.collectAsStateWithLifecycle()
     val perToolTimeoutMs by vm.perToolTimeoutMs.collectAsStateWithLifecycle()
     val singleTaskTimeoutMs by vm.singleTaskTimeoutMs.collectAsStateWithLifecycle()
-    val domains by vm.cookieDomains.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     var showClearConfirm by remember { mutableStateOf(false) }
     val cleared = stringResource(R.string.setting_browser_clear_data_done)
-
-    // 页面显示时刷新 Cookie 列表
-    LaunchedEffect(Unit) { vm.refreshCookieDomains() }
 
     if (showClearConfirm) {
         AlertDialog(
@@ -80,7 +78,6 @@ fun SettingBrowserPage(
                 TextButton(onClick = {
                     showClearConfirm = false
                     vm.clearBrowsingData(ctx) {
-                        vm.refreshCookieDomains()
                         toaster.show(cleared, type = ToastType.Success)
                     }
                 }) {
@@ -115,14 +112,6 @@ fun SettingBrowserPage(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            // ── Section: Cookie 管理 ──
-            if (domains.isNotEmpty()) {
-                CookieDomainsCard(
-                    domains = domains,
-                    vm = vm,
-                )
-            }
-
             // Section: Browser
             CardGroup(
                 title = { Text(stringResource(R.string.setting_browser_section_browser)) },
@@ -141,7 +130,8 @@ fun SettingBrowserPage(
                 )
             }
 
-            // Section: Tools enabled
+            // Section: Tools enabled — three sub-CardGroups grouped by category, each with
+            // a small heading above. Mirrors AssistantLocalToolPage's category-divider pattern.
             Text(
                 text = stringResource(R.string.setting_browser_tools_enabled_title),
                 style = MaterialTheme.typography.titleSmall,
@@ -152,6 +142,7 @@ fun SettingBrowserPage(
                 heading = stringResource(R.string.setting_browser_category_read),
                 tools = BrowserToolDefaults.READ_TOOLS.toList()
                     .filter { it in BrowserToolDefaults.ALL_TOOLS }
+                    // Stable display order — preserves the spec's table sequence.
                     .sortedBy { BrowserToolDefaults.ALL_TOOLS.indexOf(it) },
                 toolStates = toolStates,
                 onToggle = vm::setToolEnabled,
@@ -178,35 +169,9 @@ fun SettingBrowserPage(
                 item(
                     headlineContent = { Text(stringResource(R.string.setting_browser_search_engine)) },
                     supportingContent = { Text(stringResource(R.string.setting_browser_search_engine_desc)) },
-                    trailingContent = {
-                        val currentIndex by vm.searchEngineIndex.collectAsStateWithLifecycle()
-                        val engines = remember { BrowserToolDefaults.SEARCH_ENGINES }
-                        var expanded by remember { mutableStateOf(false) }
-
-                        Box {
-                            Text(
-                                text = engines.getOrNull(currentIndex)?.name ?: engines.first().name,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.clickable { expanded = true },
-                            )
-                            DropdownMenu(
-                                expanded = expanded,
-                                onDismissRequest = { expanded = false },
-                            ) {
-                                engines.forEachIndexed { index, engine ->
-                                    DropdownMenuItem(
-                                        text = { Text(engine.name) },
-                                        onClick = {
-                                            vm.setSearchEngineIndex(index)
-                                            expanded = false
-                                        },
-                                    )
-                                }
-                            }
-                        }
-                    },
                 )
+                // Per-tool timeout — editable, expressed in seconds. Clamped to 10 s..10 min
+                // in BrowserPreferences before persist (GitHub issue #4).
                 item(
                     headlineContent = { Text(stringResource(R.string.setting_browser_per_tool_timeout)) },
                     supportingContent = { Text(stringResource(R.string.setting_browser_per_tool_timeout_desc)) },
@@ -218,6 +183,8 @@ fun SettingBrowserPage(
                         )
                     },
                 )
+                // Single-task timeout — editable, expressed in minutes. Clamped to
+                // 1 min..60 min in BrowserPreferences before persist.
                 item(
                     headlineContent = { Text(stringResource(R.string.setting_browser_single_task_timeout)) },
                     supportingContent = { Text(stringResource(R.string.setting_browser_single_task_timeout_desc)) },
@@ -235,88 +202,20 @@ fun SettingBrowserPage(
 }
 
 /**
- * Cookie 管理卡片：展示所有已保存 Cookie 的域名，支持查看详情和删除。
+ * Compact numeric input for a timeout row's trailing slot. [currentValue] is the persisted
+ * value in display units (seconds or minutes); editing is buffered in local state and
+ * committed on focus loss. The persisted value is clamped in [BrowserPreferences], so an
+ * out-of-range entry snaps back to the nearest bound — the StateFlow round-trip refreshes
+ * [currentValue] and the buffer follows it.
  */
-@Composable
-private fun CookieDomainsCard(
-    domains: List<String>,
-    vm: SettingBrowserViewModel,
-) {
-    var selectedDomain by remember { mutableStateOf<String?>(null) }
-    var cookieContent by remember { mutableStateOf<String?>(null) }
-
-    if (selectedDomain != null) {
-        val domain = selectedDomain!!
-        AlertDialog(
-            onDismissRequest = {
-                selectedDomain = null
-                cookieContent = null
-            },
-            title = { Text(domain) },
-            text = {
-                val cookies = cookieContent ?: vm.getCookieString(domain)
-                if (cookies.isNullOrEmpty()) {
-                    Text("无 Cookie 数据")
-                } else {
-                    val lines = cookies.split(";").map { it.trim() }
-                    Column {
-                        Text(
-                            text = lines.joinToString("\n"),
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    vm.removeCookieDomain(domain)
-                    selectedDomain = null
-                    cookieContent = null
-                }) {
-                    Text("删除记录")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = {
-                    selectedDomain = null
-                    cookieContent = null
-                }) {
-                    Text(stringResource(android.R.string.cancel))
-                }
-            },
-        )
-    }
-
-    CardGroup(
-        title = { Text("已保存 Cookie 的网站") },
-    ) {
-        domains.forEach { domain ->
-            item(
-                onClick = {
-                    selectedDomain = domain
-                    cookieContent = vm.getCookieString(domain)
-                },
-                headlineContent = { Text(domain) },
-                supportingContent = {
-                    val cookies = vm.getCookieString(domain)
-                    if (cookies != null) {
-                        val count = cookies.count { it == '=' }
-                        Text("$count 个 Cookie")
-                    } else {
-                        Text("无 Cookie 数据")
-                    }
-                },
-            )
-        }
-    }
-}
-
 @Composable
 private fun TimeoutInput(
     currentValue: Long,
     unitLabel: String,
     onCommit: (Long) -> Unit,
 ) {
+    // Local edit buffer. Re-seeds whenever the persisted value changes (including the
+    // clamp-corrected value flowing back after a commit), so the field never goes stale.
     var text by remember(currentValue) { mutableStateOf(currentValue.toString()) }
 
     OutlinedTextField(
@@ -333,6 +232,7 @@ private fun TimeoutInput(
                     if (parsed != null && parsed != currentValue) {
                         onCommit(parsed)
                     } else {
+                        // Empty / unchanged — restore the canonical display value.
                         text = currentValue.toString()
                     }
                 }
