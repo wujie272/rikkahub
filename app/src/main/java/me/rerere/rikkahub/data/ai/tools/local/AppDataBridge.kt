@@ -141,28 +141,35 @@ class AppDataBridge(private val context: Context) {
         }
 
         val appLabel = pm.getApplicationLabel(appInfo).toString()
-        val intent = Intent().setPackage(packageName)
-        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            PackageManager.GET_META_DATA or PackageManager.MATCH_ALL
-        } else {
-            PackageManager.GET_META_DATA
-        }
-        val receivers: List<ResolveInfo> = pm.queryBroadcastReceivers(intent, flags)
 
-        for (resolve in receivers) {
-            val ri = resolve.activityInfo ?: continue
+        // 使用 getPackageInfo(GET_RECEIVERS) 获取所有 Receiver，
+        // queryBroadcastReceivers 传空 Intent 不会匹配有 intent-filter 的 Receiver
+        val pkgInfo = try {
+            pm.getPackageInfo(packageName, PackageManager.GET_RECEIVERS or PackageManager.GET_META_DATA)
+        } catch (_: PackageManager.NameNotFoundException) {
+            return null
+        }
+
+        val receivers = pkgInfo.receivers ?: return null
+
+        for (ri in receivers) {
             if (!ri.exported) continue
             val meta = ri.metaData ?: continue
             if (meta.getString("app_data_bridge") != "v1") continue
 
-            // 提取 intent-filter 中的 action
-            val actions = resolve.filter?.let { filter ->
-                    (0 until filter.countActions()).map { filter.getAction(it) }
-                }.orEmpty()
-                .filter { it.startsWith("QUERY_") }
+            // 通过 queryBroadcastReceivers 获取 intent-filter 中的 action
+            // 用 setClassName 精确匹配目标 Receiver，拿到完整的 IntentFilter
+            val resolveInfo = runCatching {
+                val probeIntent = Intent().setClassName(packageName, ri.name)
+                pm.queryBroadcastReceivers(probeIntent, 0)
+            }.getOrNull()
+
+            val actions = resolveInfo?.firstOrNull()?.filter?.let { filter ->
+                (0 until filter.countActions()).map { filter.getAction(it) }
+            }.orEmpty().filter { it.startsWith("QUERY_") }
+
             if (actions.isEmpty()) continue
 
-            // 自动生成 action 定义
             val pluginActions = actions.map { action ->
                 val toolName = action.lowercase()
                 val desc = when (action) {
