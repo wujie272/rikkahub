@@ -106,20 +106,6 @@ class BrowserActivity : ComponentActivity() {
                     onForwardTap = { webView?.takeIf { it.canGoForward() }?.goForward() },
                     onRefreshTap = { webView?.reload() },
                     onStopAi = { BrowserController.stopCurrentTask() },
-                    onToggleDesktopMode = {
-                        BrowserController.desktopMode = !BrowserController.desktopMode
-                        webView?.settings?.userAgentString = if (BrowserController.desktopMode)
-                            BrowserController.DESKTOP_UA
-                        else
-                            BrowserController.mobileUA
-                        webView?.reload()
-                    },
-                    onOpenInBrowser = {
-                        val url = webView?.url ?: return@BrowserView
-                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
-                        intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                        runCatching { startActivity(intent) }
-                    },
                     onNavigate = { raw ->
                         webView?.loadUrl(normalizeBrowserQuery(raw))
                     },

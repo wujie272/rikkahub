@@ -69,8 +69,6 @@ fun BrowserAddressBar(
     onForward: () -> Unit,
     onRefresh: () -> Unit,
     onStopAi: () -> Unit,
-    onToggleDesktopMode: () -> Unit,
-    onOpenInBrowser: () -> Unit,
     onNavigate: (String) -> Unit,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
@@ -184,27 +182,6 @@ fun BrowserAddressBar(
                             onStopAi()
                         },
                     )
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.browser_address_bar_open_in_browser)) },
-                        onClick = {
-                            menuExpanded = false
-                            onOpenInBrowser()
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = {
-                            Text(
-                                if (BrowserController.desktopMode)
-                                    stringResource(R.string.browser_address_bar_exit_desktop)
-                                else
-                                    stringResource(R.string.browser_address_bar_desktop)
-                            )
-                        },
-                        onClick = {
-                            menuExpanded = false
-                            onToggleDesktopMode()
-                        },
-                    )
                 }
             }
         },
@@ -220,10 +197,10 @@ fun BrowserAddressBar(
  *
  *  - already absolute (`http://`, `https://`, `file://`, `about:`, `data:`) → unchanged
  *  - looks like a host (`example.com`, `foo.bar/baz`, `192.168.1.1:8080`) → prepend `https://`
- *  - everything else (no dot, no colon, has a space) → search query via the configured
- *    search engine ([BrowserController.searchEngineIndex], set in Settings → Browser).
+ *  - everything else (no dot, no colon, has a space) → search query via DuckDuckGo
  *
- * Search engine takes effect immediately — no restart needed.
+ * Search engine is hardcoded to DuckDuckGo in v1 — the spec's pref dropdown is a no-op
+ * stub for v1.5. Wire through `BrowserPreferences` once Pass 2 lands the read path.
  */
 fun normalizeBrowserQuery(raw: String): String {
     val q = raw.trim()
@@ -237,8 +214,5 @@ fun normalizeBrowserQuery(raw: String): String {
     ) return q
     // Heuristic: if it contains a dot OR a colon (port/scheme), treat as URL.
     val looksLikeHost = (q.contains('.') || q.contains(':')) && !q.contains(' ')
-    if (looksLikeHost) return "https://$q"
-    // Search query — use the configured search engine
-    val template = BrowserController.currentSearchEngineUrlTemplate()
-    return BrowserToolDefaults.buildSearchUrl(q, template)
+    return if (looksLikeHost) "https://$q" else "https://duckduckgo.com/?q=${java.net.URLEncoder.encode(q, "UTF-8")}"
 }
