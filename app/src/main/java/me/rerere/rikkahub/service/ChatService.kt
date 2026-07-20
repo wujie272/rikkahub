@@ -239,6 +239,9 @@ class ChatService(
      */
     private val sessionMutexes = ConcurrentHashMap<Uuid, Mutex>()
 
+    /** 自动重试计数器，key=conversationId, value=已重试次数 */
+    private val retryCounts = ConcurrentHashMap<Uuid, Int>()
+
     private fun mutexFor(conversationId: Uuid): Mutex =
         sessionMutexes.getOrPut(conversationId) { Mutex() }
 
@@ -811,7 +814,8 @@ class ChatService(
 
     private suspend fun handleMessageComplete(
         conversationId: Uuid,
-        messageRange: ClosedRange<Int>? = null
+        messageRange: ClosedRange<Int>? = null,
+        modelOverride: Model? = null,
     ) {
         val settings = settingsStore.settingsFlow.first()
         // Resolve the assistant from this conversation's own assistantId — the global
@@ -821,7 +825,7 @@ class ChatService(
         val initialConversation = getConversationFlow(conversationId).value
         val assistant = settings.getAssistantById(initialConversation.assistantId)
             ?: settings.getCurrentAssistant()
-        val model = settings.findModelById(assistant.chatModelId ?: settings.chatModelId)
+        val model = modelOverride ?: settings.findModelById(assistant.chatModelId ?: settings.chatModelId)
             ?: throw IllegalStateException(
                 "No chat model selected. Pick one in Settings → Default models, or send /model in Telegram."
             )
@@ -1096,7 +1100,7 @@ class ChatService(
                     }
                 }
             }
-        }.onFailure {
+        }.onFailure { error ->
             // 兜底取消 Live Update 通知（生成开始前失败时 onCompletion 不会执行）
             appEventBus.tryEmit(AppEvent.ChatGenerationEnded(conversationId, senderName, null))
 
@@ -1112,11 +1116,44 @@ class ChatService(
                 Log.w(TAG, "handleMessageComplete: failure-path save failed", saveErr)
             }
 
-            it.printStackTrace()
-            addError(it, conversationId, title = context.getString(R.string.error_title_generation))
-            Logging.log(TAG, "handleMessageComplete: $it")
-            Logging.log(TAG, it.stackTraceToString())
+            // ═══ 自动重试逻辑 ═══
+            if (assistant.autoRetryOnError && assistant.maxRetryCount > 0) {
+                val retryCount = retryCounts.getOrDefault(conversationId, 0)
+                if (retryCount < assistant.maxRetryCount) {
+                    retryCounts[conversationId] = retryCount + 1
+                    Log.i(TAG, "autoRetry: attempt ${retryCount + 1}/${assistant.maxRetryCount} for $conversationId")
+
+                    // 解析重试模型（如果指定了）
+                    val retryModel = if (assistant.retryModelId != null) {
+                        settings.findModelById(assistant.retryModelId)
+                    } else null
+
+                    // 清理失败的 assistant 回复
+                    val conv = getConversationFlow(conversationId).value
+                    val lastNode = conv.messageNodes.lastOrNull()
+                    if (lastNode?.role == MessageRole.ASSISTANT) {
+                        saveConversation(
+                            conversationId,
+                            conv.copy(messageNodes = conv.messageNodes.dropLast(1))
+                        )
+                    }
+
+                    // 重试
+                    handleMessageComplete(conversationId, modelOverride = retryModel)
+                    return@onFailure
+                }
+            }
+
+            // 重试耗尽或未开启 → 正常报错
+            retryCounts.remove(conversationId)
+            error.printStackTrace()
+            addError(error, conversationId, title = context.getString(R.string.error_title_generation))
+            Logging.log(TAG, "handleMessageComplete: $error")
+            Logging.log(TAG, error.stackTraceToString())
         }.onSuccess {
+            // 生成成功，清除重试计数器
+            retryCounts.remove(conversationId)
+
             val finalConversation = getConversationFlow(conversationId).value
             saveConversation(conversationId, finalConversation)
 
