@@ -603,12 +603,14 @@ private fun KeyManagementSheet(
                         onClick = { internalStrategy = strategy },
                         label = {
                             Text(
-                                when (strategy) {
-                                    ProviderKeyStrategy.ROUND_ROBIN -> "RoundRobin"
-                                    ProviderKeyStrategy.PRIORITY -> "Priority"
-                                    ProviderKeyStrategy.LEAST_USED -> "LeastUsed"
-                                    ProviderKeyStrategy.RANDOM -> "Random"
-                                }
+                                stringResource(
+                                    when (strategy) {
+                                        ProviderKeyStrategy.ROUND_ROBIN -> R.string.setting_provider_page_strategy_round_robin
+                                        ProviderKeyStrategy.PRIORITY -> R.string.setting_provider_page_strategy_priority
+                                        ProviderKeyStrategy.LEAST_USED -> R.string.setting_provider_page_strategy_least_used
+                                        ProviderKeyStrategy.RANDOM -> R.string.setting_provider_page_strategy_random
+                                    }
+                                )
                             )
                         }
                     )
@@ -831,7 +833,7 @@ private fun KeyManagementSheet(
                     OutlinedTextField(
                         value = editPriority,
                         onValueChange = { editPriority = it.filter { c -> c.isDigit() }.take(2) },
-                        label = { Text("Priority (1-10)") },
+                        label = { Text(stringResource(R.string.setting_provider_page_priority_label)) },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
