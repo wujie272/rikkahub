@@ -486,7 +486,6 @@
   <string name="permission_local_network">Local Network</string>
   <string name="permission_local_network_desc">Allow the web server to be accessed from devices on the same local network</string>
   <string name="permission_microphone">Microphone</string>
-  <string name="permission_microphone_desc">Microphone permission is required for speech recognition</string>
   <string name="permission_notification">Notification</string>
   <string name="permission_notification_desc">Send notifications</string>
   <string name="permission_calendar_read">Read Calendar</string>
@@ -1383,7 +1382,6 @@
     <string name="permission_auto_granted_desc">Auto-granted at install (no user action needed).</string>
     <string name="permission_custom_perm_desc">Custom permission. Owner app may not be installed yet.</string>
     <string name="permission_runtime_default_desc">Runtime permission required by one or more enabled tools.</string>
-    <string name="permission_camera_desc">Used by take_photo to capture a still image.</string>
     <string name="permission_microphone_desc">Used by record_audio and speech_to_text.</string>
     <string name="permission_phone_state_desc">Used by get_telephony_info (SIM operator, signal).</string>
     <string name="permission_precise_location_desc">Used by get_location and get_wifi_info.</string>
