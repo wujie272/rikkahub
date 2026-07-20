@@ -70,8 +70,8 @@ internal fun configureWebViewForRikka(webView: WebView) {
         @Suppress("DEPRECATION")
         allowFileAccessFromFileURLs = true
         allowContentAccess = false
-        useWideViewPort = false
-        loadWithOverviewMode = false
+        useWideViewPort = true
+        loadWithOverviewMode = true
         setSupportMultipleWindows(false)
         javaScriptCanOpenWindowsAutomatically = false
         mediaPlaybackRequiresUserGesture = false
@@ -87,6 +87,10 @@ internal fun configureWebViewForRikka(webView: WebView) {
         BrowserController.mobileUA = userAgentString
     }
     webView.setLayerType(View.LAYER_TYPE_HARDWARE, null)
+    // 5) Set background color to prevent white flash before page renders.
+    //    Without this, the WebView shows a white/black background while the
+    //    page loads, which users perceive as a blank screen.
+    webView.setBackgroundColor(android.graphics.Color.WHITE)
 }
 
 /**
