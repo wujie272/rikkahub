@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.data.knowledge
 
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.runBlocking
 import kotlin.uuid.Uuid
 
 /**
@@ -97,6 +98,7 @@ class KnowledgeService(
 
     /**
      * 添加文档：分块 → 嵌入 → 入库
+     * 对 markdown 文件自动解析 frontmatter（标题、标签）并注入搜索上下文
      */
     suspend fun addDocument(
         kbId: String,
@@ -107,31 +109,48 @@ class KnowledgeService(
     ): Result<Int> {
         val kb = knowledgeBaseDao.getById(kbId) ?: return Result.failure(Exception("知识库不存在"))
 
-        // 1. 分块
+        // 处理 markdown frontmatter
+        val (processedContent, displayName, tags) = processMarkdownContent(content, fileName)
+
+        // 1. 分块（语义分块需传入 embedder）
         val chunks = TextChunker.chunk(
-            text = content,
+            text = processedContent,
             chunkSize = kb.chunkSize,
             chunkOverlap = kb.chunkOverlap,
             strategy = kb.chunkStrategy,
+            semanticEmbedder = if (kb.chunkStrategy == "semantic") {
+                { text -> runBlocking { embeddingService.embed(text, kb.modelId) } }
+            } else null,
         )
         if (chunks.isEmpty()) return Result.success(0)
 
+        // 如果有关联标签，注入到第一个 chunk 增强搜索命中
+        val enrichedChunks = if (tags.isNotEmpty()) {
+            val tagLine = "[标签: ${tags.joinToString(", ")}]"
+            chunks.toMutableList().apply {
+                if (isNotEmpty()) {
+                    set(0, "$tagLine\n${this[0]}")
+                }
+            }
+        } else chunks
+
         // 2. 批量生成向量
         val vectors = try {
-            embeddingService.embedBatch(chunks, kb.modelId)
+            embeddingService.embedBatch(enrichedChunks, kb.modelId)
         } catch (e: Exception) {
             return Result.failure(Exception("嵌入向量计算失败: ${e.message}"))
         }
 
         // 3. 入库
-        val entities = chunks.mapIndexed { index, chunkText ->
+        val entities = enrichedChunks.mapIndexed { index, chunkText ->
             KnowledgeDocumentEntity(
                 id = Uuid.random().toString(),
                 knowledgeBaseId = kbId,
                 filePath = filePath,
-                fileName = fileName,
+                fileName = displayName,
                 chunkIndex = index,
                 chunkText = chunkText,
+                tags = tags.joinToString(","),
                 vector = if (index < vectors.size) VectorUtils.vectorToJson(vectors[index]) else null,
                 enabled = true,
             )
@@ -158,31 +177,46 @@ class KnowledgeService(
         for ((content, filePath, fileName) in files) {
             onProgress(completed, files.size, fileName)
 
-            // 分块
+            // 处理 markdown frontmatter
+            val (processedContent, displayName, tags) = processMarkdownContent(content, fileName)
+
+            // 分块（语义分块需传入 embedder）
             val chunks = TextChunker.chunk(
-                text = content,
+                text = processedContent,
                 chunkSize = kb.chunkSize,
                 chunkOverlap = kb.chunkOverlap,
                 strategy = kb.chunkStrategy,
+                semanticEmbedder = if (kb.chunkStrategy == "semantic") {
+                    { text -> runBlocking { embeddingService.embed(text, kb.modelId) } }
+                } else null,
             )
             if (chunks.isEmpty()) continue
 
+            // 如果有关联标签，注入到第一个 chunk 增强搜索命中
+            val enrichedChunks = if (tags.isNotEmpty()) {
+                val tagLine = "[标签: ${tags.joinToString(", ")}]"
+                chunks.toMutableList().apply {
+                    if (isNotEmpty()) set(0, "$tagLine\n${this[0]}")
+                }
+            } else chunks
+
             // 批量向量化
             val vectors = try {
-                embeddingService.embedBatch(chunks, kb.modelId)
+                embeddingService.embedBatch(enrichedChunks, kb.modelId)
             } catch (_: Exception) {
                 continue
             }
 
             // 入库
-            val entities = chunks.mapIndexed { index, chunkText ->
+            val entities = enrichedChunks.mapIndexed { index, chunkText ->
                 KnowledgeDocumentEntity(
                     id = Uuid.random().toString(),
                     knowledgeBaseId = kbId,
                     filePath = filePath,
-                    fileName = fileName,
+                    fileName = displayName,
                     chunkIndex = index,
                     chunkText = chunkText,
+                    tags = tags.joinToString(","),
                     vector = if (index < vectors.size) VectorUtils.vectorToJson(vectors[index]) else null,
                     enabled = true,
                 )
@@ -233,6 +267,7 @@ class KnowledgeService(
         query: String,
         limit: Int = 6,
         minScore: Float? = null,
+        tagFilter: String? = null,
     ): List<SearchResult> {
         if (query.isBlank()) return emptyList()
 
@@ -249,6 +284,7 @@ class KnowledgeService(
             enableHybrid = true,
             expandContext = true,
             enableQueryExpansion = true,
+            tagFilter = tagFilter,
         )
 
         // 映射回原来的 SearchResult 类型
@@ -262,13 +298,47 @@ class KnowledgeService(
                 content = r.content,
                 score = r.score,
                 semanticScore = r.semanticScore,
+                bm25Score = r.bm25Score,
                 expandedContext = r.expandedContext,
+                tags = r.tags,
             )
         }
     }
 
     suspend fun isModelConfigured(modelId: String): Boolean =
         embeddingService.isConfigured(modelId)
+
+    /** 获取知识库中已存在的文件路径集合（用于去重） */
+    suspend fun getExistingFilePaths(kbId: String): Set<String> {
+        return documentDao.getDistinctFiles(kbId).map { it.file_path }.toSet()
+    }
+
+    /**
+     * 处理 markdown 内容：解析 frontmatter、提取标题标签、返回净化后的正文
+     * @return (处理后的正文, 显示名称, 标签列表)
+     */
+    private fun processMarkdownContent(content: String, originalFileName: String): Triple<String, String, List<String>> {
+        // 只对可能是 markdown 的内容做 frontmatter 解析
+        if (!content.contains("---") && !content.contains("# ")) {
+            return Triple(content, originalFileName, emptyList())
+        }
+
+        val (frontmatter, body) = MarkdownUtils.parseFrontmatter(content)
+
+        // 清理 Obsidian 双链和 Markdown 链接，减少语义噪声
+        val cleanedBody = MarkdownUtils.cleanObsidianLinks(body)
+
+        // 确定显示名称：frontmatter 标题 > 正文第一个 # 标题 > 原文件名
+        val title = frontmatter.title.ifBlank {
+            MarkdownUtils.extractFirstTitle(cleanedBody) ?: originalFileName
+        }
+
+        // 合并标签：frontmatter 标签 + 正文内联 #tag
+        val inlineTags = MarkdownUtils.extractInlineTags(cleanedBody)
+        val allTags = (frontmatter.tags + inlineTags).distinct()
+
+        return Triple(cleanedBody, title, allTags)
+    }
 }
 
 data class KnowledgeStats(
@@ -285,5 +355,7 @@ data class SearchResult(
     val content: String,
     val score: Float,
     val semanticScore: Float = 0f,
+    val bm25Score: Float = 0f,
     val expandedContext: String = "",
+    val tags: String = "",
 )

@@ -2096,6 +2096,7 @@
   <string name="kb_strategy_paragraph">按段落</string>
   <string name="kb_strategy_markdown">Markdown</string>
   <string name="kb_strategy_code">按代码</string>
+  <string name="kb_strategy_semantic">语义分块</string>
   <string name="kb_threshold">相似度阈值</string>
   <string name="kb_document_count">返回文档数</string>
   <string name="kb_document_count_desc">每次搜索最多返回 %d 条结果</string>
@@ -2143,6 +2144,7 @@
   <string name="kb_relevance">匹配度: %d%% · 块 #%d</string>
   <string name="kb_expand">展开</string>
   <string name="kb_collapse">收起</string>
+    <string name="kb_stage_scanning">扫描目录...</string>
     <string name="kb_stage_reading">读取文件...</string>
     <string name="kb_stage_parsing">解析内容...</string>
     <string name="kb_stage_chunking">分块处理...</string>

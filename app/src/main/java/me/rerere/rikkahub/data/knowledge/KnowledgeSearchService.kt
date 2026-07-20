@@ -32,6 +32,8 @@ class KnowledgeSearchService(
         val bm25Score: Float = 0f,
         /** 合并后的上下文文本（包含前后相邻 chunk） */
         val expandedContext: String = "",
+        /** 标签 */
+        val tags: String = "",
     )
 
     companion object {
@@ -41,6 +43,8 @@ class KnowledgeSearchService(
         private const val CONTEXT_WINDOW = 1
         /** 展开上下文单 chunk 截断长度 */
         private const val CONTEXT_CHUNK_MAX = 600
+        /** Reranking：关键词匹配加分上限 */
+        private const val RERANK_MAX_BONUS = 0.2f
     }
 
     /** BM25 索引缓存（懒加载） */
@@ -56,7 +60,8 @@ class KnowledgeSearchService(
      * @param minScore 最低相似度阈值 (0~1)
      * @param enableHybrid 是否启用混合搜索（BM25 + 语义）
      * @param expandContext 是否展开上下文（合并相邻 chunk）
-     * @param enableQueryExpansion 是否启用查询扩展
+     * @param enableRerank 是否启用 reranking（关键词命中加分）
+     * @param tagFilter 可选标签过滤
      */
     suspend fun search(
         kbId: String,
@@ -67,11 +72,17 @@ class KnowledgeSearchService(
         enableHybrid: Boolean = true,
         expandContext: Boolean = true,
         enableQueryExpansion: Boolean = true,
+        enableRerank: Boolean = true,
+        tagFilter: String? = null,
     ): List<SearchResult> {
         if (query.isBlank()) return emptyList()
 
-        // 1. 获取候选数据
-        val candidates = documentDao.getSearchable(kbId)
+        // 1. 获取候选数据（支持标签过滤）
+        val candidates = if (tagFilter != null && tagFilter.isNotBlank()) {
+            documentDao.getSearchableByTag(kbId, tagFilter)
+        } else {
+            documentDao.getSearchable(kbId)
+        }
         if (candidates.isEmpty()) return emptyList()
 
         // 2. 查询扩展（生成多个搜索变体）
@@ -139,13 +150,29 @@ class KnowledgeSearchService(
                 semanticScore = semanticScore,
                 bm25Score = bm25Score,
                 expandedContext = expanded,
+                tags = doc.tags,
             )
         }
             .sortedByDescending { it.score }
             .take(limit * 2) // 多取一些用于去重
 
         // 7. 去重：同一文件只保留最高分 chunk
-        return deduplicateByFile(merged).take(limit)
+        val deduped = deduplicateByFile(merged).take(limit * 2)
+
+        // 8. Reranking：用原 query 对展开上下文做关键词匹配加分
+        if (enableRerank && deduped.size > 1) {
+            val queryTerms = query.lowercase().split(Regex("\\s+")).filter { it.length > 1 }.toSet()
+            if (queryTerms.isNotEmpty()) {
+                return deduped.map { result ->
+                    val context = (result.expandedContext + " " + result.content).lowercase()
+                    val matchCount = queryTerms.count { term -> context.contains(term) }
+                    val bonus = (matchCount.toFloat() / queryTerms.size) * RERANK_MAX_BONUS
+                    result.copy(score = result.score + bonus)
+                }.sortedByDescending { it.score }.take(limit)
+            }
+        }
+
+        return deduped.take(limit)
     }
 
     /**

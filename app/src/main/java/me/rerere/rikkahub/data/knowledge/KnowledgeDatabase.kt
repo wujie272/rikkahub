@@ -10,7 +10,7 @@ import androidx.room.RoomDatabase
         KnowledgeBaseEntity::class,
         KnowledgeDocumentEntity::class,
     ],
-    version = 1,
+    version = 2,
     exportSchema = false,
 )
 abstract class KnowledgeDatabase : RoomDatabase() {

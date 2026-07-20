@@ -42,6 +42,8 @@ data class KnowledgeDocumentEntity(
     /** 块文本内容 */
     @ColumnInfo(name = "chunk_text")
     val chunkText: String,
+    /** 标签（逗号分隔） */
+    val tags: String = "",
     /** 向量 — JSON Float 数组字符串，如 "[0.123,0.456,...]" */
     val vector: String? = null,
     /** 是否启用（参与搜索） */
