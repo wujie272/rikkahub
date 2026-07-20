@@ -50,6 +50,17 @@ internal fun configureWebViewForRikka(webView: WebView) {
         android.webkit.CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true)
     }
 
+    // 3) Private State Token — Cloudflare PAT bypasses JS challenge.
+    //    Enables cryptographic attestation that the device is legitimate,
+    //    allowing Cloudflare-protected sites (e.g. civitai.com) to skip
+    //    the JS challenge entirely. Added in API 33 (Android 13).
+    //    Your device runs Android 16, so this is fully supported.
+    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+        runCatching {
+            webView.settings.setPrivateStateTokenEnabled(true)
+        }
+    }
+
     webView.settings.apply {
         javaScriptEnabled = true
         domStorageEnabled = true
@@ -68,7 +79,7 @@ internal fun configureWebViewForRikka(webView: WebView) {
         displayZoomControls = false
         mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
 
-        // 3) Full Chrome mobile UA — no "wv" token, resembles real Chrome.
+        // 4) Full Chrome mobile UA — no "wv" token, resembles real Chrome.
         val chromeMobileUA = "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.6478.122 Mobile Safari/537.36"
         userAgentString = chromeMobileUA
 
