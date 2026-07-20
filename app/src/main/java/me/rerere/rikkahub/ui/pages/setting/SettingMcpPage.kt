@@ -222,6 +222,7 @@ fun SettingMcpPage(vm: SettingVM = koinViewModel()) {
                 )
             ) {
                 items(mcpConfigs, key = { it.id }) { mcpConfig ->
+                    val haptic = LocalHapticFeedback.current
                     ReorderableItem(
                         state = reorderableState,
                         key = mcpConfig.id,
