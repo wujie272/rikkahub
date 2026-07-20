@@ -21,11 +21,12 @@ import me.rerere.rikkahub.service.KnowledgeSource
 import me.rerere.rikkahub.ui.components.ui.ChainOfThought
 
 @Composable
-fun KnowledgeSourcesCard(sources: List<KnowledgeSource>) {
+fun KnowledgeSourcesCard(
+    sources: List<KnowledgeSource>,
+    modifier: Modifier = Modifier,
+) {
     ChainOfThought(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp),
+        modifier = modifier.fillMaxWidth(),
         steps = sources,
         collapsedVisibleCount = 2,
     ) { source ->

@@ -8,7 +8,6 @@ import me.rerere.hugeicons.stroke.ArrowDownDouble
 import me.rerere.hugeicons.stroke.ArrowUpDouble
 import me.rerere.hugeicons.stroke.CursorPointer01
 import me.rerere.hugeicons.stroke.Search01
-import me.rerere.hugeicons.stroke.BookOpen01
 import me.rerere.hugeicons.stroke.ArrowUp01
 import me.rerere.hugeicons.stroke.ArrowDown01
 import me.rerere.hugeicons.stroke.Cancel01
@@ -283,6 +282,9 @@ private fun ChatListNormal(
             .associateBy { it.id }
     }
     val lastMessageIndex = conversation.messageNodes.lastIndex
+    val lastAssistantMessageIndex = conversation.messageNodes.indexOfLast { node ->
+        node.role == me.rerere.ai.core.MessageRole.ASSISTANT
+    }
 
     Box(
         modifier = Modifier
@@ -379,15 +381,9 @@ private fun ChatListNormal(
                             onToolApproval = onToolApproval,
                             onToolAnswer = onToolAnswer,
                             lastMessage = index == lastMessageIndex,
+                            knowledgeSources = if (index == lastAssistantMessageIndex) knowledgeSources else emptyList(),
                         )
                     }
-                }
-            }
-
-            // 知识库引用来源
-            if (knowledgeSources.isNotEmpty()) {
-                item(key = "KnowledgeSources") {
-                    KnowledgeSourcesCard(sources = knowledgeSources)
                 }
             }
 

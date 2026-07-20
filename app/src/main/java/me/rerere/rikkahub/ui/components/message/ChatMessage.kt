@@ -83,6 +83,8 @@ import me.rerere.rikkahub.data.model.replaceRegexes
 import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
 import me.rerere.rikkahub.ui.components.richtext.ZoomableAsyncImage
 import me.rerere.rikkahub.ui.components.richtext.buildMarkdownPreviewHtml
+import me.rerere.rikkahub.ui.pages.chat.KnowledgeSourcesCard
+import me.rerere.rikkahub.service.KnowledgeSource
 import me.rerere.rikkahub.ui.components.webview.WebViewContentCache
 import me.rerere.rikkahub.ui.components.ui.ChainOfThought
 import me.rerere.rikkahub.ui.components.ui.Favicon
@@ -119,6 +121,7 @@ fun ChatMessage(
     onClearTranslation: (UIMessage) -> Unit = {},
     onToolApproval: ((toolCallId: String, approved: Boolean, reason: String, scope: me.rerere.rikkahub.service.ChatService.ApprovalScope, toolName: String) -> Unit)? = null,
     onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
+    knowledgeSources: List<KnowledgeSource> = emptyList(),
 ) {
     val message = node.messages[node.selectIndex]
     val settings = LocalSettings.current.displaySetting
@@ -218,6 +221,14 @@ fun ChatMessage(
 
         ProvideTextStyle(textStyle) {
             ChatMessageNerdLine(message = message)
+        }
+
+        // 知识库来源（内嵌在助手消息气泡底部）
+        if (knowledgeSources.isNotEmpty() && message.role == MessageRole.ASSISTANT) {
+            KnowledgeSourcesCard(
+                sources = knowledgeSources,
+                modifier = Modifier.padding(top = 4.dp),
+            )
         }
 
     }
