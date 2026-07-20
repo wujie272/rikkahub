@@ -23,6 +23,9 @@ interface KnowledgeDocumentDao {
     @Query("SELECT * FROM knowledge_document WHERE knowledge_base_id = :kbId AND vector IS NOT NULL AND enabled = 1")
     suspend fun getSearchable(kbId: String): List<KnowledgeDocumentEntity>
 
+    @Query("SELECT * FROM knowledge_document WHERE knowledge_base_id = :kbId AND vector IS NOT NULL AND enabled = 1 AND tags LIKE '%' || :tag || '%'")
+    suspend fun getSearchableByTag(kbId: String, tag: String): List<KnowledgeDocumentEntity>
+
     @Query("SELECT DISTINCT file_path, file_name FROM knowledge_document WHERE knowledge_base_id = :kbId")
     suspend fun getDistinctFiles(kbId: String): List<FilePathAndName>
 

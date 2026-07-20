@@ -1,7 +1,6 @@
 package me.rerere.rikkahub.ui.components.ai
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -141,17 +140,6 @@ private fun AutoRetryPicker(
                 )
             }
 
-            // 大图标
-            val iconColor by animateColorAsState(
-                if (enabled) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.onSurface,
-            )
-            Icon(
-                imageVector = HugeIcons.Refresh01,
-                contentDescription = null,
-                modifier = Modifier.size(32.dp),
-                tint = iconColor,
-            )
 
             // 开关
             Surface(

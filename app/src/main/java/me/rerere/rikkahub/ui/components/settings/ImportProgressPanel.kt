@@ -35,6 +35,7 @@ import me.rerere.hugeicons.stroke.Refresh01
 import me.rerere.rikkahub.R
 
 enum class ProcessingStage(val labelRes: Int) {
+    SCANNING(R.string.kb_stage_scanning),
     READING(R.string.kb_stage_reading),
     PARSING(R.string.kb_stage_parsing),
     CHUNKING(R.string.kb_stage_chunking),
@@ -63,6 +64,7 @@ private const val MAX_RETRY_COUNT = 3
 @Composable
 fun ImportProgressPanel(
     progress: ImportProgressState,
+    onCancel: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     if (!progress.active) return
@@ -90,11 +92,25 @@ fun ImportProgressPanel(
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Medium,
                 )
-                Text(
-                    text = "${(totalPercent * 100).toInt()}%",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "${(totalPercent * 100).toInt()}%",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    IconButton(
+                        onClick = onCancel,
+                        modifier = Modifier.size(24.dp),
+                    ) {
+                        Icon(
+                            HugeIcons.Cancel01,
+                            contentDescription = stringResource(R.string.kb_cancel),
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
             }
             Spacer(Modifier.height(8.dp))
             LinearProgressIndicator(

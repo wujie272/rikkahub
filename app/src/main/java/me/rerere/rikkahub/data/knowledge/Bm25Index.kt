@@ -140,7 +140,7 @@ class Bm25Index(
             }
         }
 
-        return tokens.distinct() // 同一文档内去重
+        return tokens
     }
 
     /** 索引是否已构建 */

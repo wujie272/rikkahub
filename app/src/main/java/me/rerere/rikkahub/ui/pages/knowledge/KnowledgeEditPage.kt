@@ -47,6 +47,8 @@ import androidx.compose.ui.res.stringResource
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.theme.CustomColors
 import org.koin.androidx.compose.koinViewModel
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -208,6 +210,11 @@ fun KnowledgeEditPage(
                         label = { Text(stringResource(R.string.kb_chunk_size)) },
                         description = { Text(stringResource(R.string.kb_chunk_size_desc, form.chunkSize)) }
                     ) {
+                        Text(
+                            text = "${form.chunkSize} 字符",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
                         Slider(
                             value = form.chunkSize.toFloat(),
                             onValueChange = { v -> vm.updateEditForm { f -> f.copy(chunkSize = v.toInt()) } },
@@ -222,6 +229,11 @@ fun KnowledgeEditPage(
                         label = { Text(stringResource(R.string.kb_chunk_overlap)) },
                         description = { Text(stringResource(R.string.kb_chunk_overlap_desc, form.chunkOverlap)) }
                     ) {
+                        Text(
+                            text = "${form.chunkOverlap} 字符",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
                         Slider(
                             value = form.chunkOverlap.toFloat(),
                             onValueChange = { v -> vm.updateEditForm { f -> f.copy(chunkOverlap = v.toInt()) } },
@@ -234,23 +246,36 @@ fun KnowledgeEditPage(
                     // 分块策略
                     FormItem(
                         label = { Text(stringResource(R.string.kb_chunk_strategy)) },
-                        description = { Text(stringResource(R.string.kb_chunk_strategy_desc)) }
-                    ) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            val strategyLabels = mapOf(
-                                "fixed" to stringResource(R.string.kb_strategy_fixed),
-                                "paragraph" to stringResource(R.string.kb_strategy_paragraph),
-                                "markdown" to stringResource(R.string.kb_strategy_markdown),
-                                "code" to stringResource(R.string.kb_strategy_code),
-                            )
-                            listOf("fixed", "paragraph", "markdown", "code").forEach { value ->
-                                val label = strategyLabels[value] ?: value
-                                TextButton(
-                                    onClick = { vm.updateEditForm { f -> f.copy(chunkStrategy = value) } },
-                                ) {
-                                    Text(label)
-                                }
+                        description = {
+                            val desc = when (form.chunkStrategy) {
+                                "fixed" -> "按固定字符数切分"
+                                "paragraph" -> "按段落（空行）切分"
+                                "markdown" -> "按 Markdown 标题层级切分，保留父标题上下文"
+                                "code" -> "按函数/类定义切分，代码友好"
+                                "semantic" -> "按句子语义相似度切分，话题变化处自动断开"
+                                else -> "如何将文档切分成块"
                             }
+                            Text(desc)
+                        }
+                    ) {
+                        @OptIn(ExperimentalMaterial3Api::class)
+                        @Composable
+                        fun StrategyChip(value: String, label: String) {
+                            FilterChip(
+                                selected = form.chunkStrategy == value,
+                                onClick = { vm.updateEditForm { f -> f.copy(chunkStrategy = value) } },
+                                label = { Text(label) },
+                            )
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            StrategyChip("fixed", stringResource(R.string.kb_strategy_fixed))
+                            StrategyChip("paragraph", stringResource(R.string.kb_strategy_paragraph))
+                            StrategyChip("markdown", stringResource(R.string.kb_strategy_markdown))
+                            StrategyChip("code", stringResource(R.string.kb_strategy_code))
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            StrategyChip("semantic", stringResource(R.string.kb_strategy_semantic))
                         }
                     }
 
@@ -259,6 +284,11 @@ fun KnowledgeEditPage(
                         label = { Text(stringResource(R.string.kb_threshold)) },
                         description = { Text("${String.format("%.2f", form.threshold)} 以上的结果才会返回") }
                     ) {
+                        Text(
+                            text = String.format("%.2f", form.threshold),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
                         Slider(
                             value = form.threshold,
                             onValueChange = { v -> vm.updateEditForm { f -> f.copy(threshold = v) } },
@@ -272,6 +302,11 @@ fun KnowledgeEditPage(
                         label = { Text(stringResource(R.string.kb_document_count)) },
                         description = { Text(stringResource(R.string.kb_document_count_desc, form.documentCount)) }
                     ) {
+                        Text(
+                            text = "${form.documentCount} 条",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
                         Slider(
                             value = form.documentCount.toFloat(),
                             onValueChange = { v -> vm.updateEditForm { f -> f.copy(documentCount = v.toInt()) } },

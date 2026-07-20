@@ -1938,27 +1938,33 @@ class ChatService(
         val conversation = getConversationFlow(conversationId).value
         val kbId = conversation.knowledgeBaseId?.toString() ?: return null
 
-        // 取最近几条用户消息作为搜索 query
+        // 取最近 N 条消息（用户+助手）作为搜索 query，保留对话上下文
         val query = messages
-            .filter { it.role == MessageRole.USER }
-            .takeLast(3)
-            .joinToString("\n") { it.toText() }
+            .takeLast(8)
+            .joinToString("\n") { msg ->
+                val prefix = if (msg.role == MessageRole.USER) "用户" else "助手"
+                "$prefix: ${msg.toText()}"
+            }
             .trim()
         if (query.isBlank()) return null
 
         val results = knowledgeService.search(kbId, query, limit = 5, minScore = 0.3f)
 
-        // 缓存知识库来源供 UI 展示
-        if (results.isNotEmpty()) {
-            knowledgeSources.value = knowledgeSources.value + (conversationId to results.map { r ->
-                KnowledgeSource(
-                    fileName = r.fileName,
-                    content = (if (r.expandedContext.isNotBlank()) r.expandedContext else r.content).take(300),
-                    score = r.score,
-                    chunkIndex = r.chunkIndex,
-                )
-            })
+        // 缓存知识库来源供 UI 展示（先清旧数据，防泄漏）
+        val updatedSources = knowledgeSources.value.toMutableMap().apply {
+            remove(conversationId)
+            if (results.isNotEmpty()) {
+                put(conversationId, results.map { r ->
+                    KnowledgeSource(
+                        fileName = r.fileName,
+                        content = (if (r.expandedContext.isNotBlank()) r.expandedContext else r.content).take(300),
+                        score = r.score,
+                        chunkIndex = r.chunkIndex,
+                    )
+                })
+            }
         }
+        knowledgeSources.value = updatedSources
 
         if (results.isEmpty()) return null
 

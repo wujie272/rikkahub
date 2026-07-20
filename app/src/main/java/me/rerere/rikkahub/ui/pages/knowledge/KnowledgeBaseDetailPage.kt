@@ -67,7 +67,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
-import androidx.documentfile.provider.DocumentFile
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.document.DocxParser
 import me.rerere.document.PdfParser
@@ -111,51 +110,36 @@ fun KnowledgeBaseDetailPage(
         "application/epub+zip",
     )
 
-    /** 批量导入一组 URI 文件 — 使用 VM 的细化进度系统 */
-    suspend fun importUris(context: android.content.Context, kbId: String, uris: List<Uri>) {
-        val fileContents = mutableListOf<Triple<String, String, String>>()
-        for (uri in uris) {
-            try {
-                val mimeType = context.contentResolver.getType(uri) ?: "text/plain"
-                val fileName = getFileNameFromUri(context, uri) ?: "unknown"
-                val content = readDocumentContent(context, uri, mimeType)
-                if (content.isNotBlank()) {
-                    fileContents.add(Triple(content, uri.toString(), fileName))
-                }
-            } catch (_: Exception) { }
-        }
-
-        if (fileContents.isEmpty()) {
-            vm.addDocumentsConcurrent(kbId, emptyList())
-        } else {
-            vm.addDocumentsConcurrent(kbId, fileContents)
-        }
-    }
-
-    // 多文件选择器
+    // 多文件选择器 — 直接调 VM 的 importFiles
     val multiFileLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenMultipleDocuments()
     ) { uris: List<Uri> ->
         if (uris.isNotEmpty()) {
-            scope.launch { importUris(context, kbId, uris) }
+            scope.launch {
+                val fileContents = mutableListOf<Triple<String, String, String>>()
+                for (uri in uris) {
+                    try {
+                        val mimeType = context.contentResolver.getType(uri) ?: "text/plain"
+                        val fileName = getFileNameFromUri(context, uri) ?: "unknown"
+                        val content = readDocumentContent(context, uri, mimeType)
+                        if (content.isNotBlank()) {
+                            fileContents.add(Triple(content, uri.toString(), fileName))
+                        }
+                    } catch (_: Exception) { }
+                }
+                if (fileContents.isNotEmpty()) {
+                    vm.importFiles(kbId, fileContents)
+                }
+            }
         }
     }
 
-    // 目录选择器（递归扫描子目录）
+    // 目录选择器（递归扫描子目录）— 流式导入，不攒内存
     val dirPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
     ) { treeUri: Uri? ->
         if (treeUri != null) {
-            scope.launch {
-                try {
-                    val uris = scanDirectory(context, treeUri)
-                    if (uris.isEmpty()) {
-                        vm.addDocumentsConcurrent(kbId, emptyList())
-                    } else {
-                        importUris(context, kbId, uris)
-                    }
-                } catch (e: Exception) { }
-            }
+            vm.importDirectory(kbId, context, treeUri)
         }
     }
 
@@ -221,6 +205,7 @@ fun KnowledgeBaseDetailPage(
                     results = searchResults,
                     isSearching = isSearching,
                     onSearch = { query -> vm.search(kbId, query) },
+                    onSearchWithTag = { query, tag -> vm.search(kbId, query, tagFilter = tag) },
                     onClear = { vm.clearSearch() },
                     onViewChunk = { result ->
                         vm.loadChunks(kbId, result.filePath)
@@ -277,9 +262,10 @@ private fun DocumentTab(
             }
         }
 
-        // 细化进度面板
+        // 细化进度面板（含取消按钮）
         ImportProgressPanel(
             progress = importProgress,
+            onCancel = { vm.cancelImport() },
             modifier = Modifier.padding(vertical = 8.dp),
         )
 
@@ -347,10 +333,13 @@ private fun SearchTab(
     results: List<SearchResult>,
     isSearching: Boolean,
     onSearch: (String) -> Unit,
+    onSearchWithTag: (String, String?) -> Unit = { query, _ -> onSearch(query) },
     onClear: () -> Unit,
     onViewChunk: (SearchResult) -> Unit,
 ) {
     var searchText by remember(query) { mutableStateOf(query) }
+    var showDebug by remember { mutableStateOf(false) }
+    var tagFilter by remember { mutableStateOf("") }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         OutlinedTextField(
@@ -360,13 +349,44 @@ private fun SearchTab(
             placeholder = { Text(stringResource(R.string.kb_search_placeholder)) },
             trailingIcon = {
                 if (searchText.isNotBlank()) {
-                    IconButton(onClick = { onSearch(searchText) }) {
+                    IconButton(onClick = { onSearchWithTag(searchText, tagFilter.ifBlank { null }) }) {
                         Icon(HugeIcons.GlobalSearch, stringResource(R.string.kb_search_tab))
                     }
                 }
             },
             singleLine = true,
         )
+
+        // 标签过滤 + 调试模式
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            OutlinedTextField(
+                value = tagFilter,
+                onValueChange = { tagFilter = it },
+                modifier = Modifier.weight(1f),
+                placeholder = { Text("标签过滤（可选）") },
+                singleLine = true,
+                trailingIcon = {
+                    if (tagFilter.isNotBlank()) {
+                        IconButton(onClick = {
+                            tagFilter = ""
+                            onSearchWithTag(searchText, null)
+                        }) {
+                            Icon(HugeIcons.AlertCircle, null, modifier = Modifier.size(16.dp))
+                        }
+                    }
+                },
+            )
+            me.rerere.rikkahub.ui.components.ui.ToggleSurface(
+                checked = showDebug,
+                onClick = { showDebug = !showDebug },
+            ) {
+                Text("调试", style = MaterialTheme.typography.labelSmall)
+            }
+        }
 
         Spacer(Modifier.height(8.dp))
 
@@ -391,7 +411,7 @@ private fun SearchTab(
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(results, key = { it.documentId }) { result ->
-                    SearchResultCard(result = result, onClick = { onViewChunk(result) })
+                    SearchResultCard(result = result, onClick = { onViewChunk(result) }, showDebug = showDebug)
                 }
             }
         }
@@ -402,6 +422,7 @@ private fun SearchTab(
 private fun SearchResultCard(
     result: SearchResult,
     onClick: () -> Unit,
+    showDebug: Boolean = false,
 ) {
     Card(
         onClick = onClick,
@@ -424,12 +445,30 @@ private fun SearchResultCard(
                         color = MaterialTheme.colorScheme.primary,
                         trackColor = MaterialTheme.colorScheme.surfaceVariant,
                     )
-                    Text(stringResource(R.string.kb_search_tab), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                    Text("${(result.score * 100).toInt()}%", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                 }
                 Text(result.fileName, style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
+
+            // 调试模式：显示详细分数和标签
+            if (showDebug) {
+                Spacer(Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    ScoreBadge("语义", result.semanticScore, MaterialTheme.colorScheme.primary)
+                    ScoreBadge("BM25", result.bm25Score, MaterialTheme.colorScheme.tertiary)
+                    if (result.tags.isNotBlank()) {
+                        me.rerere.rikkahub.ui.components.ui.Tag(
+                            type = me.rerere.rikkahub.ui.components.ui.TagType.INFO
+                        ) { Text(result.tags.take(20), style = MaterialTheme.typography.labelSmall) }
+                    }
+                }
+            }
+
             Spacer(Modifier.height(4.dp))
             Text(
                 text = result.content.take(300) + if (result.content.length > 300) "..." else "",
@@ -450,6 +489,15 @@ private fun SearchResultCard(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun ScoreBadge(label: String, score: Float, color: androidx.compose.ui.graphics.Color) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("${(score * 100).toInt()}%", style = MaterialTheme.typography.labelSmall,
+            color = color, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
     }
 }
 
@@ -540,33 +588,4 @@ fun readDocumentContent(
     }
 }
 
-/** 判断文件扩展名是否属于支持的文档类型 */
-private fun isSupportedExtension(fileName: String?): Boolean {
-    if (fileName == null) return false
-    val ext = fileName.substringAfterLast('.', "").lowercase()
-    return ext in listOf("txt", "md", "markdown", "pdf", "docx", "pptx", "epub", "csv", "json", "xml", "yaml", "yml")
-}
-
-/**
- * 递归扫描 DocumentFile 目录，收集所有支持的文档
- */
-private suspend fun scanDirectory(context: android.content.Context, treeUri: android.net.Uri): List<android.net.Uri> {
-    return withContext(Dispatchers.IO) {
-        val result = mutableListOf<android.net.Uri>()
-        val root = DocumentFile.fromTreeUri(context, treeUri) ?: return@withContext result
-        scanDirRecursive(root, result)
-        result
-    }
-}
-
-private fun scanDirRecursive(dir: DocumentFile, result: MutableList<android.net.Uri>) {
-    for (child in dir.listFiles()) {
-        when {
-            child.isDirectory -> scanDirRecursive(child, result)
-            child.isFile && isSupportedExtension(child.name) -> {
-                result.add(child.uri)
-            }
-        }
-    }
-}
 
