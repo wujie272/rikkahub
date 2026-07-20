@@ -80,7 +80,7 @@ interface SearchService<T : SearchServiceOptions> {
 
         fun init(client: OkHttpClient, context: Context? = null) {
             httpClient = client
-            keyRoulette = if (context != null) KeyRoulette.lru(context) else KeyRoulette.default()
+            keyRoulette = if (context != null) KeyRoulette.tracked(context) else KeyRoulette.default()
         }
 
         internal val json by lazy {

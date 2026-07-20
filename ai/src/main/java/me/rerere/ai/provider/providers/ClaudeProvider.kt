@@ -67,10 +67,6 @@ import kotlin.time.Clock
 private const val TAG = "ClaudeProvider"
 private const val ANTHROPIC_VERSION = "2023-06-01"
 
-// HTTP 状态码触发冷却：429 (限流) + 5xx (服务端错误)
-// 2xx/4xx(除429外) 不触发冷却以免误伤配置错误
-private val COOLDOWN_STATUS_CODES = setOf(429, 500, 502, 503, 504)
-
 // Minimax's /anthropic/v1/models returns `{"data": null}` (and the OpenAI-shape
 // /v1/models returns `{"object":"","data":null}`) even with a valid API key,
 // despite their public OpenAPI spec documenting the OpenAI-compat list shape.
@@ -92,11 +88,11 @@ private val MINIMAX_FALLBACK_MODELS = listOf(
 ).map { Model(modelId = it, displayName = it) }
 
 class ClaudeProvider(private val client: OkHttpClient, context: Context? = null) : Provider<ProviderSetting.Claude> {
-    private val keyRoulette = if (context != null) KeyRoulette.lru(context) else KeyRoulette.default()
+    private val keyRoulette = if (context != null) KeyRoulette.tracked(context) else KeyRoulette.default()
 
     override suspend fun listModels(providerSetting: ProviderSetting.Claude): List<Model> =
         withContext(Dispatchers.IO) {
-            val apiKey = keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
+            val apiKey = providerSetting.pickApiKey(keyRoulette, providerSetting.id.toString())
             val request = Request.Builder()
                 .url("${providerSetting.baseUrl}/models")
                 .addHeader("x-api-key", apiKey)
@@ -108,7 +104,8 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
             val response = c.newCall(request).execute()
             val bodyStr = response.body.string()
             if (!response.isSuccessful) {
-                error("Failed to get models: ${response.code} $bodyStr")
+                keyRoulette.reportFailure(apiKey, providerSetting.id.toString(), providerSetting.fallbackConfig.cooldownSeconds * 1000L)
+                error("Failed to get models: " + response.code + " " + bodyStr)
             }
 
             val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
@@ -161,7 +158,7 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
         messages: List<UIMessage>,
         params: TextGenerationParams
     ): MessageChunk = withContext(Dispatchers.IO) {
-        val apiKey = keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
+        val apiKey = providerSetting.pickApiKey(keyRoulette, providerSetting.id.toString())
         val requestBody = buildMessageRequest(providerSetting, messages, params)
         val request = Request.Builder()
             .url("${providerSetting.baseUrl}/messages")
@@ -179,18 +176,12 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
         if (!response.isSuccessful) {
             val code = response.code
             val body = response.body.string()
-            if (code in COOLDOWN_STATUS_CODES) {
-                keyRoulette.reportFailure(
-                    key = apiKey,
-                    providerId = providerSetting.id.toString(),
-                    cooldownMs = providerSetting.fallbackConfig.cooldownSeconds * 1000L
-                )
-            }
+            keyRoulette.reportFailure(apiKey, providerSetting.id.toString(), providerSetting.fallbackConfig.cooldownSeconds * 1000L)
             throw Exception("Failed to get response: $code $body")
         }
-        keyRoulette.reportSuccess(apiKey, providerSetting.id.toString())
 
         val bodyStr = response.body.string()
+        keyRoulette.reportSuccess(apiKey, providerSetting.id.toString())
         val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
 
         // 从 JsonObject 中提取必要的信息
@@ -220,7 +211,7 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
         messages: List<UIMessage>,
         params: TextGenerationParams
     ): Flow<MessageChunk> = callbackFlow {
-        val apiKey = keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
+        val apiKey = providerSetting.pickApiKey(keyRoulette, providerSetting.id.toString())
         val requestBody = buildMessageRequest(providerSetting, messages, params, stream = true)
         val request = Request.Builder()
             .url("${providerSetting.baseUrl}/messages")
@@ -239,6 +230,10 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
         }
 
         val listener = object : EventSourceListener() {
+            private val currentKey = apiKey
+            private val currentProviderId = providerSetting.id.toString()
+            private val currentCooldownMs = providerSetting.fallbackConfig.cooldownSeconds * 1000L
+
             override fun onEvent(
                 eventSource: EventSource,
                 id: String?,
@@ -283,6 +278,7 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
                 when (type) {
                     "message_stop" -> {
                         Log.d(TAG, "Stream ended")
+                        keyRoulette.reportSuccess(currentKey, currentProviderId)
                         close()
                     }
 
@@ -297,16 +293,10 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
             override fun onFailure(eventSource: EventSource, t: Throwable?, response: Response?) {
                 var exception = t
 
-                Log.e(TAG, "onFailure: ${t?.javaClass?.name} ${t?.message} / $response", t)
+                Log.e(TAG, "onFailure: " + t?.javaClass?.name + " " + t?.message + " / $response", t)
 
-                val statusCode = response?.code
-                if (statusCode != null && statusCode in COOLDOWN_STATUS_CODES) {
-                    keyRoulette.reportFailure(
-                        key = apiKey,
-                        providerId = providerSetting.id.toString(),
-                        cooldownMs = providerSetting.fallbackConfig.cooldownSeconds * 1000L
-                    )
-                }
+                // 报告 key 失败，触发冷却
+                keyRoulette.reportFailure(currentKey, currentProviderId, currentCooldownMs)
 
                 val bodyRaw = response?.body?.stringSafe()
                 try {
@@ -323,7 +313,6 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
             }
 
             override fun onClosed(eventSource: EventSource) {
-                keyRoulette.reportSuccess(apiKey, providerSetting.id.toString())
                 close()
             }
 

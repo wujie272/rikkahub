@@ -2,6 +2,7 @@ package me.rerere.rikkahub.ui.pages.log
 
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Delete01
+import me.rerere.hugeicons.stroke.Share01
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.layout.Arrangement
@@ -33,20 +34,28 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import me.rerere.common.android.LogEntry
 import me.rerere.common.android.Logging
+import me.rerere.common.android.appTempFolder
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.JsonTree
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
 import me.rerere.rikkahub.utils.JsonInstantPretty
+import java.io.FileOutputStream
 import java.text.SimpleDateFormat
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 import java.util.Date
 import java.util.Locale
 
@@ -55,6 +64,8 @@ fun LogPage() {
     var logs by remember { mutableStateOf(Logging.getRecentLogs()) }
     var requestLoggingEnabled by remember { mutableStateOf(Logging.isRequestLoggingEnabled()) }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     Scaffold(
         topBar = {
@@ -62,6 +73,15 @@ fun LogPage() {
                 title = { Text("Logs") },
                 navigationIcon = { BackButton() },
                 actions = {
+                    IconButton(
+                        onClick = {
+                            scope.launch {
+                                exportLogs(context)
+                            }
+                        }
+                    ) {
+                        Icon(HugeIcons.Share01, stringResource(R.string.log_page_export))
+                    }
                     IconButton(
                         onClick = {
                             Logging.clear()
@@ -425,6 +445,41 @@ private fun TextLogCard(log: LogEntry.TextLog) {
                     fontFamily = JetbrainsMono
                 )
             }
+        }
+    }
+}
+
+private suspend fun exportLogs(context: android.content.Context) {
+    withContext(Dispatchers.IO) {
+        val logs = Logging.getRecentLogs()
+        if (logs.isEmpty()) return@withContext
+
+        val json = JsonInstantPretty.encodeToString(
+            kotlinx.serialization.builtins.ListSerializer(LogEntry.serializer()),
+            logs
+        )
+
+        val filename = "logs-export-${LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss"))}.json"
+        val dir = context.appTempFolder
+        val file = dir.resolve(filename)
+        file.createNewFile()
+        FileOutputStream(file).use { it.write(json.toByteArray()) }
+
+        val uri = FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            file
+        )
+
+        withContext(Dispatchers.Main) {
+            val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                type = "application/json"
+                putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            context.startActivity(
+                android.content.Intent.createChooser(intent, context.getString(R.string.log_page_export))
+            )
         }
     }
 }

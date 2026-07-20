@@ -55,10 +55,10 @@ interface KeyRoulette {
         fun default(): KeyRoulette = DefaultKeyRoulette()
 
         /**
-         * LRU 轮询 + 冷却，持久化存储到 cacheDir/lru_key_roulette.json
+         * 状态追踪 + 冷却，持久化存储到 cacheDir/key_state_cache.json
          * 通过 providerId 区分同类型的多个 provider 实例，在 next() 调用时传入
          */
-        fun lru(context: Context): KeyRoulette = LruKeyRoulette(context)
+        fun tracked(context: Context): KeyRoulette = KeyStateTrackerImpl(context)
     }
 }
 
@@ -89,14 +89,14 @@ private class DefaultKeyRoulette : KeyRoulette {
     override fun thawKey(key: String, providerId: String) {}
 }
 
-private const val LRU_CACHE_FILE = "lru_key_roulette.json"
+private const val STATE_CACHE_FILE = "key_state_cache.json"
 private const val EXPIRE_DURATION_MS = 24 * 60 * 60 * 1000L // 1 天
 
 // 全局文件锁，防止多个 provider 实例并发读写同一文件
-private object LruFileLock
+private object StateFileLock
 
 // 文件结构: Map<providerId, Map<apiKey, KeyEntry>>
-private typealias LruCache = Map<String, Map<String, KeyEntry>>
+private typealias StateCache = Map<String, Map<String, KeyEntry>>
 
 @kotlinx.serialization.Serializable
 private data class KeyEntry(
@@ -111,11 +111,11 @@ private data class KeyEntry(
     val disabled: Boolean = false,
 )
 
-private class LruKeyRoulette(
+private class KeyStateTrackerImpl(
     private val context: Context,
 ) : KeyRoulette {
     // 内存覆盖层：reportFailure/reportSuccess 只更新这里，不碰文件
-    // 文件只持久化 lastUsed（LRU 排序用）和 key 列表
+    // 文件只持久化 lastUsed 和 key 列表
     private val memoryOverlay = mutableMapOf<String, MutableMap<String, KeyEntry>>()
 
     /** 合并文件层 + 内存层的 entry，内存层优先覆盖 */
@@ -130,7 +130,7 @@ private class LruKeyRoulette(
             totalRequests = memEntry.totalRequests,
             successfulRequests = memEntry.successfulRequests,
             failedRequests = memEntry.failedRequests,
-            disabled = memEntry.disabled,
+            disabled = memEntry.disabled || (fileEntry?.disabled == true),
         )
     }
 
@@ -139,7 +139,7 @@ private class LruKeyRoulette(
         if (keyList.isEmpty()) return keys
         if (keyList.size == 1) return keyList[0]
 
-        synchronized(LruFileLock) {
+        synchronized(StateFileLock) {
             val now = System.currentTimeMillis()
             val allCache = loadCache().toMutableMap()
             val providerCache = (allCache[providerId] ?: emptyMap()).toMutableMap()
@@ -223,7 +223,7 @@ private class LruKeyRoulette(
     }
 
     override fun getKeyStates(providerId: String): List<KeyState> {
-        synchronized(LruFileLock) {
+        synchronized(StateFileLock) {
             val allCache = loadCache()
             val providerCache = allCache[providerId] ?: emptyMap()
             val allKeys = (providerCache.keys + (memoryOverlay[providerId]?.keys ?: emptySet())).distinct()
@@ -245,7 +245,7 @@ private class LruKeyRoulette(
     }
 
     override fun setKeyEnabled(key: String, providerId: String, enabled: Boolean) {
-        synchronized(LruFileLock) {
+        synchronized(StateFileLock) {
             val allCache = loadCache().toMutableMap()
             val providerCache = (allCache[providerId] ?: emptyMap()).toMutableMap()
             val existing = providerCache[key] ?: KeyEntry(lastUsed = System.currentTimeMillis())
@@ -261,22 +261,22 @@ private class LruKeyRoulette(
         Log.w(TAG, "thawKey: key=$key provider=$providerId cooldown cleared (memory)")
     }
 
-    private fun loadCache(): LruCache {
+    private fun loadCache(): StateCache {
         return try {
-            val file = File(context.cacheDir, LRU_CACHE_FILE)
+            val file = File(context.cacheDir, STATE_CACHE_FILE)
             if (!file.exists()) return emptyMap()
             Json.decodeFromString(file.readText())
         } catch (e: Exception) {
-            Log.w(TAG, "loadCache: failed to read LRU key cache, starting empty", e)
+            Log.w(TAG, "loadCache: failed to read key state cache, starting empty", e)
             emptyMap()
         }
     }
 
-    private fun saveCache(cache: LruCache) {
+    private fun saveCache(cache: StateCache) {
         try {
-            File(context.cacheDir, LRU_CACHE_FILE).writeText(Json.encodeToString(cache))
+            File(context.cacheDir, STATE_CACHE_FILE).writeText(Json.encodeToString(cache))
         } catch (e: Exception) {
-            Log.w(TAG, "saveCache: failed to persist LRU key cache", e)
+            Log.w(TAG, "saveCache: failed to persist key state cache", e)
         }
     }
 }

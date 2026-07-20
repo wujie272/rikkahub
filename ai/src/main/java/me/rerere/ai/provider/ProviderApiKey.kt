@@ -4,6 +4,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import me.rerere.ai.util.KeyRoulette
 import kotlin.uuid.Uuid
+import kotlin.random.Random
 
 /**
  * Structured API Key entry with alias, enable/disable support.
@@ -15,19 +16,22 @@ data class ProviderApiKey(
     val key: String,
     val alias: String = "",
     val enabled: Boolean = true,
+    val priority: Int = 5,
 )
 
 /**
- * Key picking strategy.
- * - LRU: RikkaHub native (least recently used, cooling support)
- * - RANDOM: LastChat style (random selection)
- * - ROUND_ROBIN: LastChat style (circular round-robin)
+ * Key picking strategy (mirrors Kelivo/ApiKeyManager).
+ * - ROUND_ROBIN: circular round-robin
+ * - PRIORITY: sort by priority (1-10, smaller = higher priority)
+ * - LEAST_USED: sort by total requests (ascending)
+ * - RANDOM: random selection
  */
 @Serializable
 enum class ProviderKeyStrategy {
-    @SerialName("lru") LRU,
-    @SerialName("random") RANDOM,
     @SerialName("round_robin") ROUND_ROBIN,
+    @SerialName("priority") PRIORITY,
+    @SerialName("least_used") LEAST_USED,
+    @SerialName("random") RANDOM,
 }
 
 /**
@@ -81,7 +85,7 @@ internal fun ProviderSetting.keyStrategyValue(): ProviderKeyStrategy = when (thi
     is ProviderSetting.OpenAI -> keyStrategy
     is ProviderSetting.Google -> keyStrategy
     is ProviderSetting.Claude -> keyStrategy
-    else -> ProviderKeyStrategy.LRU
+    else -> ProviderKeyStrategy.ROUND_ROBIN
 }
 
 // ── Unified update entry (like LastChat's copyWithApiKeyConfig) ──────────
@@ -150,8 +154,12 @@ fun ProviderSetting.activeApiKeyValuesForRequest(): List<String> {
         .map { it.key }
 }
 
+/** Round-robin index tracking per provider (mirrors Kelivo). */
+private val roundRobinIndices = mutableMapOf<String, Int>()
+
 /**
  * Pick a key from the structured list using the configured strategy.
+ * Mirrors Kelivo's [ApiKeyManager.selectForProvider].
  */
 fun ProviderSetting.pickApiKey(
     keyRoulette: KeyRoulette,
@@ -159,12 +167,30 @@ fun ProviderSetting.pickApiKey(
 ): String {
     val activeKeys = activeApiKeyValuesForRequest()
     if (activeKeys.isEmpty()) return apiKeyValue()
+    if (activeKeys.size == 1) return activeKeys[0]
+
     return when (keyStrategyValue()) {
-        ProviderKeyStrategy.LRU ->
-            keyRoulette.next(activeKeys.joinToString("\n"), providerId)
-        ProviderKeyStrategy.RANDOM -> activeKeys.random()
-        ProviderKeyStrategy.ROUND_ROBIN ->
-            keyRoulette.next(activeKeys.joinToString("\n"), providerId)
+        ProviderKeyStrategy.ROUND_ROBIN -> {
+            val idx = roundRobinIndices.getOrDefault(providerId, 0) % activeKeys.size
+            roundRobinIndices[providerId] = (idx + 1) % activeKeys.size
+            activeKeys[idx]
+        }
+        ProviderKeyStrategy.PRIORITY -> {
+            val sorted = apiKeysList()
+                .filter { it.enabled }
+                .sortedBy { it.priority }
+            sorted.first().key
+        }
+        ProviderKeyStrategy.LEAST_USED -> {
+            val states = keyRoulette.getKeyStates(providerId)
+            val stateMap = states.associateBy { it.key }
+            activeKeys.minByOrNull { key ->
+                stateMap[key]?.totalRequests ?: 0
+            } ?: activeKeys.first()
+        }
+        ProviderKeyStrategy.RANDOM -> {
+            activeKeys[Random.nextInt(activeKeys.size)]
+        }
     }
 }
 

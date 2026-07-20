@@ -44,6 +44,7 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.Slider
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -117,7 +118,6 @@ import me.rerere.ai.provider.ModelType
 import me.rerere.ai.provider.ProviderManager
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
-import me.rerere.ai.util.KeyRoulette
 import me.rerere.ai.util.KeyState
 import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.ui.UIMessage
@@ -458,12 +458,12 @@ private fun KeyManagementSheet(
 
     var internalApiKeys by remember(provider) { mutableStateOf(provider.apiKeys.toMutableList()) }
     var internalStrategy by remember(provider) { mutableStateOf(provider.keyStrategy) }
+    var internalCooldownSeconds by remember(provider) { mutableStateOf(provider.fallbackConfig.cooldownSeconds) }
     var showAddDialog by remember { mutableStateOf(false) }
     var editingAliasKey by remember { mutableStateOf<ProviderApiKey?>(null) }
     var aliasText by remember { mutableStateOf("") }
     var importText by remember { mutableStateOf<String?>(null) }
     val sheetContext = LocalContext.current
-    val keyRoulette = remember(sheetContext) { KeyRoulette.lru(sheetContext) }
     val providerManager = koinInject<ProviderManager>()
     val sheetScope = rememberCoroutineScope()
 
@@ -522,15 +522,8 @@ private fun KeyManagementSheet(
         }
     }
 
-    // 轮询冷却状态
-    var keyStates by remember { mutableStateOf<List<KeyState>>(emptyList()) }
-    LaunchedEffect(provider.id) {
-        while (true) {
-            keyStates = keyRoulette.getKeyStates(provider.id.toString())
-            delay(1000L)
-        }
-    }
-    val keyStateMap = remember(keyStates) { keyStates.associateBy { it.key } }
+    // 冷却状态已移除（LRU 机制已删除）
+    val keyStateMap = remember { emptyMap<String, KeyState>() }
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
@@ -554,6 +547,50 @@ private fun KeyManagementSheet(
             )
 
             // 策略选择器
+            // 冷却时间配置（Kelivo 风格：对所有策略生效）
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stringResource(R.string.setting_provider_page_cooldown),
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    Text(
+                        text = if (internalCooldownSeconds <= 0) {
+                            stringResource(R.string.setting_provider_page_cooldown_disabled)
+                        } else {
+                            "${internalCooldownSeconds}s"
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Slider(
+                    value = internalCooldownSeconds.toFloat(),
+                    onValueChange = { internalCooldownSeconds = it.toInt() },
+                    valueRange = 0f..300f,
+                    steps = 29,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = stringResource(R.string.setting_provider_page_cooldown_off),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        text = "5min",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
             Text(
                 text = stringResource(R.string.setting_provider_page_key_strategy),
                 style = MaterialTheme.typography.titleSmall,
@@ -567,9 +604,10 @@ private fun KeyManagementSheet(
                         label = {
                             Text(
                                 when (strategy) {
-                                    ProviderKeyStrategy.LRU -> "LRU"
-                                    ProviderKeyStrategy.RANDOM -> "Random"
                                     ProviderKeyStrategy.ROUND_ROBIN -> "RoundRobin"
+                                    ProviderKeyStrategy.PRIORITY -> "Priority"
+                                    ProviderKeyStrategy.LEAST_USED -> "LeastUsed"
+                                    ProviderKeyStrategy.RANDOM -> "Random"
                                 }
                             )
                         }
@@ -672,7 +710,7 @@ private fun KeyManagementSheet(
                             internalApiKeys = internalApiKeys.map { k ->
                                 if (k.id == apiKey.id) k.copy(enabled = !k.enabled) else k
                             }.toMutableList()
-                            keyRoulette.setKeyEnabled(apiKey.key, provider.id.toString(), !apiKey.enabled)
+                            // setKeyEnabled 已移除（LRU 机制已删除）
                         },
                         onEditAlias = {
                             editingAliasKey = apiKey
@@ -682,9 +720,7 @@ private fun KeyManagementSheet(
                             internalApiKeys = internalApiKeys.filter { it.id != apiKey.id }.toMutableList()
                             testResults = testResults - apiKey.id
                         },
-                        onThaw = {
-                            keyRoulette.thawKey(apiKey.key, provider.id.toString())
-                        },
+                        onThaw = { /* thawKey 已移除（LRU 机制已删除） */ },
                         onTest = { runSingleKeyTest(apiKey) },
                     )
                 }
@@ -708,6 +744,9 @@ private fun KeyManagementSheet(
                             apiKeys = internalApiKeys,
                             keyStrategy = internalStrategy,
                             multiKeyEnabled = provider.multiKeyEnabled,
+                            fallbackConfig = provider.fallbackConfig.copy(
+                                cooldownSeconds = internalCooldownSeconds,
+                            ),
                         )
                         onSave(updated.syncEnabledApiKeysToLegacyField())
                     }
@@ -758,6 +797,7 @@ private fun KeyManagementSheet(
     editingAliasKey?.let { editingKey ->
         var editAlias by remember(editingKey.id) { mutableStateOf(editingKey.alias) }
         var editValue by remember(editingKey.id) { mutableStateOf(editingKey.key) }
+        var editPriority by remember(editingKey.id) { mutableStateOf(editingKey.priority.toString()) }
         var editVisible by remember(editingKey.id) { mutableStateOf(false) }
 
         AlertDialog(
@@ -788,6 +828,14 @@ private fun KeyManagementSheet(
                             }
                         },
                     )
+                    OutlinedTextField(
+                        value = editPriority,
+                        onValueChange = { editPriority = it.filter { c -> c.isDigit() }.take(2) },
+                        label = { Text("Priority (1-10)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    )
                 }
             },
             confirmButton = {
@@ -795,7 +843,11 @@ private fun KeyManagementSheet(
                     enabled = editValue.isNotBlank(),
                     onClick = {
                         internalApiKeys = internalApiKeys.map { k ->
-                            if (k.id == editingKey.id) k.copy(alias = editAlias.trim(), key = editValue.trim()) else k
+                            if (k.id == editingKey.id) k.copy(
+                                alias = editAlias.trim(),
+                                key = editValue.trim(),
+                                priority = editPriority.toIntOrNull()?.coerceIn(1, 10) ?: k.priority,
+                            ) else k
                         }.toMutableList()
                         editingAliasKey = null
                     }

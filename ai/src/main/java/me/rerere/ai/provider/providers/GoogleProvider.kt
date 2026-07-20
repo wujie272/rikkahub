@@ -80,12 +80,8 @@ import kotlin.uuid.Uuid
 
 private const val TAG = "GoogleProvider"
 
-// HTTP 状态码触发冷却：429 (限流) + 5xx (服务端错误)
-// 2xx/4xx(除429外) 不触发冷却以免误伤配置错误
-private val COOLDOWN_STATUS_CODES = setOf(429, 500, 502, 503, 504)
-
 class GoogleProvider(private val client: OkHttpClient, context: Context? = null) : Provider<ProviderSetting.Google> {
-    private val keyRoulette = if (context != null) KeyRoulette.lru(context) else KeyRoulette.default()
+    private val keyRoulette = if (context != null) KeyRoulette.tracked(context) else KeyRoulette.default()
     private val serviceAccountTokenProvider by lazy {
         ServiceAccountTokenProvider(client)
     }
@@ -114,7 +110,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                 .addHeader("Authorization", "Bearer $accessToken")
                 .build()
         } else {
-            val key = keyOverride ?: keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
+            val key = keyOverride ?: providerSetting.pickApiKey(keyRoulette, providerSetting.id.toString())
             if (providerSetting.vertexAI) {
                 request.newBuilder()
                     .url(request.url.newBuilder().addQueryParameter("key", key).build())
@@ -129,16 +125,19 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
 
     override suspend fun listModels(providerSetting: ProviderSetting.Google): List<Model> =
         withContext(Dispatchers.IO) {
+            val apiKey = providerSetting.pickApiKey(keyRoulette, providerSetting.id.toString())
             val url = buildUrl(providerSetting = providerSetting, path = "models?pageSize=100")
             val request = transformRequest(
                 providerSetting = providerSetting,
                 request = Request.Builder()
                     .url(url)
                     .get()
-                    .build()
+                    .build(),
+                keyOverride = apiKey,
             )
             val response = client.proxied(providerSetting.proxy).newCall(request).await()
             if (response.isSuccessful) {
+                keyRoulette.reportSuccess(apiKey, providerSetting.id.toString())
                 val body = response.body.string()
                 Log.d(TAG, "listModels: $body")
                 val bodyObject = json.parseToJsonElement(body).jsonObject
@@ -171,7 +170,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
         messages: List<UIMessage>,
         params: TextGenerationParams,
     ): MessageChunk = withContext(Dispatchers.IO) {
-        val apiKey = keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
+        val apiKey = providerSetting.pickApiKey(keyRoulette, providerSetting.id.toString())
         val requestBody = buildCompletionRequestBody(messages, params)
 
         val url = buildUrl(
@@ -200,18 +199,12 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
         if (!response.isSuccessful) {
             val code = response.code
             val body = response.body.string()
-            if (code in COOLDOWN_STATUS_CODES) {
-                keyRoulette.reportFailure(
-                    key = apiKey,
-                    providerId = providerSetting.id.toString(),
-                    cooldownMs = providerSetting.fallbackConfig.cooldownSeconds * 1000L
-                )
-            }
+            keyRoulette.reportFailure(apiKey, providerSetting.id.toString(), providerSetting.fallbackConfig.cooldownSeconds * 1000L)
             throw Exception("Failed to get response: $code $body")
         }
-        keyRoulette.reportSuccess(apiKey, providerSetting.id.toString())
 
         val bodyStr = response.body.string()
+        keyRoulette.reportSuccess(apiKey, providerSetting.id.toString())
         val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
 
         val candidates = bodyJson["candidates"]!!.jsonArray
@@ -239,7 +232,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
         messages: List<UIMessage>,
         params: TextGenerationParams,
     ): Flow<MessageChunk> = callbackFlow {
-        val apiKey = keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
+        val apiKey = providerSetting.pickApiKey(keyRoulette, providerSetting.id.toString())
         val requestBody = buildCompletionRequestBody(messages, params)
 
         val url = buildUrl(
@@ -266,7 +259,14 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
 
         Log.i(TAG, "streamText: ${json.encodeToString(requestBody)}")
 
+        // 防止 onClosed 在 onFailure 之后被调用时误报 reportSuccess
+        var streamCompleted = false
+
         val listener = object : EventSourceListener() {
+            private val currentKey = apiKey
+            private val currentProviderId = providerSetting.id.toString()
+            private val currentCooldownMs = providerSetting.fallbackConfig.cooldownSeconds * 1000L
+
             override fun onEvent(
                 eventSource: EventSource,
                 id: String?,
@@ -330,16 +330,12 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
             ) {
                 var exception = t
 
-                Log.w(TAG, "onFailure: ${t?.message}", t)
+                Log.w(TAG, "onFailure: " + t?.message, t)
 
-                val statusCode = response?.code
-                if (statusCode != null && statusCode in COOLDOWN_STATUS_CODES) {
-                    keyRoulette.reportFailure(
-                        key = apiKey,
-                        providerId = providerSetting.id.toString(),
-                        cooldownMs = providerSetting.fallbackConfig.cooldownSeconds * 1000L
-                    )
-                }
+                // 报告 key 失败，触发冷却
+                streamCompleted = true
+                
+                keyRoulette.reportFailure(currentKey, currentProviderId, currentCooldownMs)
 
                 try {
                     if (t == null && response != null) {
@@ -366,8 +362,9 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
             }
 
             override fun onClosed(eventSource: EventSource) {
-                // 流正常结束时视为成功，重置冷却
-                keyRoulette.reportSuccess(apiKey, providerSetting.id.toString())
+                if (!streamCompleted) {
+                    keyRoulette.reportSuccess(currentKey, currentProviderId)
+                }
                 close()
             }
         }
@@ -874,7 +871,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
     ): EmbeddingGenerationResult = withContext(Dispatchers.IO) {
         require(params.input.isNotEmpty()) { "Embedding input cannot be empty" }
 
-        val apiKey = keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
+        val apiKey = providerSetting.pickApiKey(keyRoulette, providerSetting.id.toString())
 
         // Gemini embedding API: single or batch
         if (params.input.size == 1) {
@@ -913,17 +910,16 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
             if (!response.isSuccessful) {
                 val code = response.code
                 val body = response.body.string()
-                if (code in COOLDOWN_STATUS_CODES) {
-                    keyRoulette.reportFailure(apiKey, providerSetting.id.toString(),
-                        providerSetting.fallbackConfig.cooldownSeconds * 1000L)
-                }
+                keyRoulette.reportFailure(apiKey, providerSetting.id.toString(), providerSetting.fallbackConfig.cooldownSeconds * 1000L)
+                
                 throw Exception("Google embedding failed: $code $body")
             }
-            keyRoulette.reportSuccess(apiKey, providerSetting.id.toString())
 
             val bodyJson = json.parseToJsonElement(response.body.string()).jsonObject
             val values = bodyJson["embedding"]?.jsonObject?.get("values")?.jsonArray
                 ?: error("No embedding values in response")
+            keyRoulette.reportSuccess(apiKey, providerSetting.id.toString())
+            
             val embedding = values.map { it.jsonPrimitive.content.toFloat() }
 
             EmbeddingGenerationResult(
@@ -971,14 +967,12 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
             if (!response.isSuccessful) {
                 val code = response.code
                 val body = response.body.string()
-                if (code in COOLDOWN_STATUS_CODES) {
-                    keyRoulette.reportFailure(apiKey, providerSetting.id.toString(),
-                        providerSetting.fallbackConfig.cooldownSeconds * 1000L)
-                }
+                keyRoulette.reportFailure(apiKey, providerSetting.id.toString(), providerSetting.fallbackConfig.cooldownSeconds * 1000L)
+                
                 throw Exception("Google batch embedding failed: $code $body")
             }
-            keyRoulette.reportSuccess(apiKey, providerSetting.id.toString())
 
+            keyRoulette.reportSuccess(apiKey, providerSetting.id.toString())
             val bodyJson = json.parseToJsonElement(response.body.string()).jsonObject
             val embeddings = bodyJson["embeddings"]?.jsonArray
                 ?: error("No embeddings in batch response")
@@ -1003,6 +997,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
         }
 
         val items = withContext(Dispatchers.IO) {
+            val apiKey = providerSetting.pickApiKey(keyRoulette, providerSetting.id.toString())
             val requestBody = buildJsonObject {
                 putJsonArray("instances") {
                     add(buildJsonObject {
@@ -1035,11 +1030,14 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                         json.encodeToString(requestBody).toRequestBody("application/json".toMediaType())
                     )
                     .configureReferHeaders(providerSetting.baseUrl)
-                    .build()
+                    .build(),
+                keyOverride = apiKey,
             )
 
             val response = client.proxied(providerSetting.proxy).newCall(request).await()
             if (!response.isSuccessful) {
+                keyRoulette.reportFailure(apiKey, providerSetting.id.toString(), providerSetting.fallbackConfig.cooldownSeconds * 1000L)
+                
                 error("Failed to generate image: ${response.code} ${response.body.string()}")
             }
 
@@ -1048,6 +1046,8 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
 
             val predictions = bodyJson["predictions"]?.jsonArray ?: error("No predictions in response")
 
+            keyRoulette.reportSuccess(apiKey, providerSetting.id.toString())
+            
             predictions.mapNotNull { prediction ->
                 val predictionObj = prediction.jsonObject
                 val bytesBase64Encoded = predictionObj["bytesBase64Encoded"]?.jsonPrimitive?.contentOrNull

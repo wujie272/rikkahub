@@ -72,7 +72,7 @@ class OpenAIProvider(
     private val client: OkHttpClient,
     context: Context? = null
 ) : Provider<ProviderSetting.OpenAI> {
-    private val keyRoulette = if (context != null) KeyRoulette.lru(context) else KeyRoulette.default()
+    private val keyRoulette = if (context != null) KeyRoulette.tracked(context) else KeyRoulette.default()
 
     private val chatCompletionsAPI = ChatCompletionsAPI(client = client, keyRoulette = keyRoulette)
     private val responseAPI = ResponseAPI(client = client, keyRoulette = keyRoulette)
@@ -80,7 +80,7 @@ class OpenAIProvider(
 
     override suspend fun listModels(providerSetting: ProviderSetting.OpenAI): List<Model> =
         withContext(Dispatchers.IO) {
-            val key = keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
+            val key = providerSetting.pickApiKey(keyRoulette, providerSetting.id.toString())
             val request = Request.Builder()
                 .url("${providerSetting.baseUrl}/models")
                 .addHeader("Authorization", "Bearer $key")
@@ -91,7 +91,8 @@ class OpenAIProvider(
             val response = c.newCall(request).await()
             val bodyStr = response.body.string()
             if (!response.isSuccessful) {
-                error("Failed to get models: ${response.code} $bodyStr")
+                keyRoulette.reportFailure(key, providerSetting.id.toString(), providerSetting.fallbackConfig.cooldownSeconds * 1000L)
+                error("Failed to get models: " + response.code + " " + bodyStr)
             }
 
             val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
@@ -137,7 +138,7 @@ class OpenAIProvider(
         }
 
     override suspend fun getBalance(providerSetting: ProviderSetting.OpenAI): String = withContext(Dispatchers.IO) {
-        val key = keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
+        val key = providerSetting.pickApiKey(keyRoulette, providerSetting.id.toString())
         val url = if (providerSetting.balanceOption.apiPath.startsWith("http")) {
             providerSetting.balanceOption.apiPath
         } else {
@@ -151,7 +152,8 @@ class OpenAIProvider(
         val c = client.proxied(providerSetting.proxy)
         val response = c.newCall(request).await()
         if (!response.isSuccessful) {
-            error("Failed to get balance: ${response.code} ${response.body.string()}")
+            keyRoulette.reportFailure(key, providerSetting.id.toString(), providerSetting.fallbackConfig.cooldownSeconds * 1000L)
+            error("Failed to get balance: " + response.code + " " + response.body.string())
         }
 
         val bodyStr = response.body.string()
@@ -207,7 +209,7 @@ class OpenAIProvider(
     ): EmbeddingGenerationResult = withContext(Dispatchers.IO) {
         require(params.input.isNotEmpty()) { "Embedding input cannot be empty" }
 
-        val key = keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
+        val key = providerSetting.pickApiKey(keyRoulette, providerSetting.id.toString())
         val requestBody = json.encodeToString(
             buildJsonObject {
                 put("model", params.model.modelId)
@@ -233,7 +235,8 @@ class OpenAIProvider(
         val c = client.proxied(providerSetting.proxy)
         val response = c.newCall(request).await()
         if (!response.isSuccessful) {
-            error("Failed to generate embedding: ${response.code} ${response.body.string()}")
+            keyRoulette.reportFailure(key, providerSetting.id.toString(), providerSetting.fallbackConfig.cooldownSeconds * 1000L)
+            error("Failed to generate embedding: " + response.code + " " + response.body.string())
         }
 
         val bodyStr = response.body.string()
@@ -261,7 +264,7 @@ class OpenAIProvider(
             "Expected OpenAI provider setting"
         }
 
-        val key = keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
+        val key = providerSetting.pickApiKey(keyRoulette, providerSetting.id.toString())
 
         // OpenRouter has no /images/generations endpoint (that 404s to its website). Image
         // generation goes through /chat/completions with modalities:["image","text"].
@@ -297,7 +300,8 @@ class OpenAIProvider(
             val c = client.proxied(providerSetting.proxy)
             val response = c.newCall(request).await()
             if (!response.isSuccessful) {
-                error("Failed to generate image: ${response.code} ${response.body.string()}")
+                keyRoulette.reportFailure(key, providerSetting.id.toString(), providerSetting.fallbackConfig.cooldownSeconds * 1000L)
+                error("Failed to generate image: " + response.code + " " + response.body.string())
             }
             parseImageResponse(response.body.string())
         }
@@ -342,7 +346,8 @@ class OpenAIProvider(
         val response = c.newCall(request).await()
         val bodyStr = response.body.string()
         if (!response.isSuccessful) {
-            error("Failed to generate image: ${response.code} $bodyStr")
+            keyRoulette.reportFailure(key, providerSetting.id.toString(), providerSetting.fallbackConfig.cooldownSeconds * 1000L)
+            error("Failed to generate image: " + response.code + " " + bodyStr)
         }
         val message = json.parseToJsonElement(bodyStr).jsonObject["choices"]?.jsonArray
             ?.getOrNull(0)?.jsonObject?.get("message")?.jsonObject
@@ -375,7 +380,7 @@ class OpenAIProvider(
             "At least one image is required"
         }
 
-        val key = keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
+        val key = providerSetting.pickApiKey(keyRoulette, providerSetting.id.toString())
         val bodyBuilder = MultipartBody.Builder()
             .setType(MultipartBody.FORM)
             .addFormDataPart("model", params.model.modelId)
@@ -421,7 +426,8 @@ class OpenAIProvider(
             val c = client.proxied(providerSetting.proxy)
             val response = c.newCall(request).await()
             if (!response.isSuccessful) {
-                error("Failed to edit image: ${response.code} ${response.body.string()}")
+                keyRoulette.reportFailure(key, providerSetting.id.toString(), providerSetting.fallbackConfig.cooldownSeconds * 1000L)
+                error("Failed to edit image: " + response.code + " " + response.body.string())
             }
             parseImageResponse(response.body.string())
         }

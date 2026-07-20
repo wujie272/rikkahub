@@ -69,10 +69,6 @@ import kotlin.time.Clock
 
 private const val TAG = "ChatCompletionsAPI"
 
-// HTTP 状态码触发冷却：429 (限流) + 5xx (服务端错误)
-// 2xx/4xx(除429外) 不触发冷却以免误伤配置错误
-private val COOLDOWN_STATUS_CODES = setOf(429, 500, 502, 503, 504)
-
 class ChatCompletionsAPI(
     private val client: OkHttpClient,
     private val keyRoulette: KeyRoulette
@@ -82,7 +78,7 @@ class ChatCompletionsAPI(
         messages: List<UIMessage>,
         params: TextGenerationParams,
     ): MessageChunk = withContext(Dispatchers.IO) {
-        val apiKey = keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
+        val apiKey = providerSetting.pickApiKey(keyRoulette, providerSetting.id.toString())
         val requestBody =
             buildChatCompletionRequest(
                 messages = messages,
@@ -104,18 +100,12 @@ class ChatCompletionsAPI(
         if (!response.isSuccessful) {
             val code = response.code
             val body = response.body.string()
-            if (code in COOLDOWN_STATUS_CODES) {
-                keyRoulette.reportFailure(
-                    key = apiKey,
-                    providerId = providerSetting.id.toString(),
-                    cooldownMs = providerSetting.fallbackConfig.cooldownSeconds * 1000L
-                )
-            }
+            keyRoulette.reportFailure(apiKey, providerSetting.id.toString(), providerSetting.fallbackConfig.cooldownSeconds * 1000L)
             throw Exception("Failed to get response: $code $body")
         }
-        keyRoulette.reportSuccess(apiKey, providerSetting.id.toString())
 
         val bodyStr = response.body.string()
+        keyRoulette.reportSuccess(apiKey, providerSetting.id.toString())
         val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
 
         // 从 JsonObject 中提取必要的信息
@@ -150,7 +140,7 @@ class ChatCompletionsAPI(
         messages: List<UIMessage>,
         params: TextGenerationParams,
     ): Flow<MessageChunk> = callbackFlow {
-        val apiKey = keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
+        val apiKey = providerSetting.pickApiKey(keyRoulette, providerSetting.id.toString())
         val requestBody = buildChatCompletionRequest(
             messages = messages,
             params = params,
@@ -173,6 +163,10 @@ class ChatCompletionsAPI(
         // println(client.newCall(request).await().body.string())
 
         val listener = object : EventSourceListener() {
+            private val currentKey = apiKey
+            private val currentProviderId = providerSetting.id.toString()
+            private val currentCooldownMs = providerSetting.fallbackConfig.cooldownSeconds * 1000L
+
             override fun onEvent(
                 eventSource: EventSource,
                 id: String?,
@@ -180,6 +174,7 @@ class ChatCompletionsAPI(
                 data: String
             ) {
                 if (data == "[DONE]") {
+                    keyRoulette.reportSuccess(currentKey, currentProviderId)
                     println("[onEvent] (done) 结束流: $data")
                     close()
                     return
@@ -235,16 +230,10 @@ class ChatCompletionsAPI(
             override fun onFailure(eventSource: EventSource, t: Throwable?, response: Response?) {
                 var exception = t
 
-                Log.w(TAG, "onFailure: ${t?.javaClass?.name} ${t?.message} / $response", t)
+                Log.w(TAG, "onFailure: " + t?.javaClass?.name + " " + t?.message + " / $response", t)
 
-                val statusCode = response?.code
-                if (statusCode != null && statusCode in COOLDOWN_STATUS_CODES) {
-                    keyRoulette.reportFailure(
-                        key = apiKey,
-                        providerId = providerSetting.id.toString(),
-                        cooldownMs = providerSetting.fallbackConfig.cooldownSeconds * 1000L
-                    )
-                }
+                // 报告 key 失败，触发冷却
+                keyRoulette.reportFailure(currentKey, currentProviderId, currentCooldownMs)
 
                 val bodyRaw = response?.body?.stringSafe()
                 try {
@@ -263,8 +252,6 @@ class ChatCompletionsAPI(
             }
 
             override fun onClosed(eventSource: EventSource) {
-                // 流正常结束时视为成功，重置冷却
-                keyRoulette.reportSuccess(apiKey, providerSetting.id.toString())
                 close()
             }
         }

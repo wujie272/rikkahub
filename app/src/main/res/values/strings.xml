@@ -1837,6 +1837,7 @@
   <string name="setting_mcp_page_name_invalid">Name can only contain English letters and numbers</string>
   <string name="log_page_record_requests">Record requests</string>
   <string name="log_page_record_requests_desc">Capture request headers, bodies, and response metadata</string>
+  <string name="log_page_export">Export Logs</string>
   <string name="codex_provider_description">Uses the OpenAI Codex OAuth and Responses API flow. This integration depends on Codex service compatibility.</string>
   <string name="codex_sign_in">Sign in with OpenAI OAuth</string>
   <string name="codex_enable">Enable Codex</string>
@@ -1987,6 +1988,9 @@
   <string name="setting_provider_page_proxy_port">Port</string>
   <string name="setting_provider_page_proxy_username">Username</string>
   <string name="setting_provider_page_proxy_password">Password</string>
+    <string name="setting_provider_page_cooldown">Cooldown</string>
+    <string name="setting_provider_page_cooldown_disabled">Off</string>
+    <string name="setting_provider_page_cooldown_off">Off</string>
   
   <!-- Text Selection -->
   <string name="text_selection_menu_label">Ask RikkaHub</string>

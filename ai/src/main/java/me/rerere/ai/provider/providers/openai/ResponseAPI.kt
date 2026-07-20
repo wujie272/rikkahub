@@ -74,7 +74,7 @@ class ResponseAPI(
         messages: List<UIMessage>,
         params: TextGenerationParams
     ): MessageChunk {
-        val apiKey = keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
+        val apiKey = providerSetting.pickApiKey(keyRoulette, providerSetting.id.toString())
         val requestBody = buildRequestBody(
             providerSetting = providerSetting,
             messages = messages,
@@ -97,10 +97,12 @@ class ResponseAPI(
 
         val response = client.proxied(providerSetting.proxy).newCall(request).await()
         if (!response.isSuccessful) {
-            throw Exception("Failed to get response: ${response.code} ${response.body.string()}")
+            keyRoulette.reportFailure(apiKey, providerSetting.id.toString(), providerSetting.fallbackConfig.cooldownSeconds * 1000L)
+            throw Exception("Failed to get response: " + response.code + " " + response.body.string())
         }
 
         val bodyStr = response.body.string()
+        keyRoulette.reportSuccess(apiKey, providerSetting.id.toString())
         Log.i(TAG, "generateText: $bodyStr")
         val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
         val output = parseResponseOutput(bodyJson)
@@ -113,7 +115,7 @@ class ResponseAPI(
         messages: List<UIMessage>,
         params: TextGenerationParams
     ): Flow<MessageChunk> = callbackFlow {
-        val apiKey = keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
+        val apiKey = providerSetting.pickApiKey(keyRoulette, providerSetting.id.toString())
         val requestBody = buildRequestBody(
             providerSetting = providerSetting,
             messages = messages,
@@ -134,6 +136,10 @@ class ResponseAPI(
         Log.i(TAG, "streamText: ${json.encodeToString(requestBody)}")
 
         val listener = object : EventSourceListener() {
+            private val currentKey = apiKey
+            private val currentProviderId = providerSetting.id.toString()
+            private val currentCooldownMs = providerSetting.fallbackConfig.cooldownSeconds * 1000L
+
             override fun onEvent(
                 eventSource: EventSource,
                 id: String?,
@@ -153,6 +159,7 @@ class ResponseAPI(
                     }
                 }
                 if (type == "response.completed") {
+                    keyRoulette.reportSuccess(currentKey, currentProviderId)
                     close()
                 }
             }
@@ -160,7 +167,10 @@ class ResponseAPI(
             override fun onFailure(eventSource: EventSource, t: Throwable?, response: Response?) {
                 var exception = t
 
-                Log.w(TAG, "onFailure: ${t?.javaClass?.name} ${t?.message} / $response", t)
+                Log.w(TAG, "onFailure: " + t?.javaClass?.name + " " + t?.message + " / $response", t)
+
+                // 报告 key 失败，触发冷却
+                keyRoulette.reportFailure(currentKey, currentProviderId, currentCooldownMs)
 
                 val bodyRaw = response?.body?.stringSafe()
                 try {
