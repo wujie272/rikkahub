@@ -22,7 +22,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,12 +45,11 @@ import me.rerere.rikkahub.ui.theme.CustomColors
 import org.koin.androidx.compose.koinViewModel
 
 /**
- * Settings → Browser. Four sections:
+ * Settings → Browser. Three sections:
  *
  *  1. Browser — "Open browser" + "Clear browsing data".
- *  2. Saved cookies — 展示已保存 Cookie 的域名列表（仅当列表非空时显示）。
- *  3. Tools enabled — 17 个浏览器工具的开关。
- *  4. Defaults & limits — 搜索引擎、超时设置。
+ *  2. Tools enabled — 17 个浏览器工具的开关。
+ *  3. Defaults & limits — 搜索引擎、超时设置。
  */
 @Composable
 fun SettingBrowserPage(
@@ -62,14 +60,11 @@ fun SettingBrowserPage(
     val toolStates by vm.toolStates.collectAsStateWithLifecycle()
     val perToolTimeoutMs by vm.perToolTimeoutMs.collectAsStateWithLifecycle()
     val singleTaskTimeoutMs by vm.singleTaskTimeoutMs.collectAsStateWithLifecycle()
-    val domains by vm.cookieDomains.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     var showClearConfirm by remember { mutableStateOf(false) }
     val cleared = stringResource(R.string.setting_browser_clear_data_done)
 
-    // 页面显示时刷新 Cookie 列表
-    LaunchedEffect(Unit) { vm.refreshCookieDomains() }
 
     if (showClearConfirm) {
         AlertDialog(
@@ -80,7 +75,6 @@ fun SettingBrowserPage(
                 TextButton(onClick = {
                     showClearConfirm = false
                     vm.clearBrowsingData(ctx) {
-                        vm.refreshCookieDomains()
                         toaster.show(cleared, type = ToastType.Success)
                     }
                 }) {
@@ -115,14 +109,6 @@ fun SettingBrowserPage(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            // ── Section: Cookie 管理 ──
-            if (domains.isNotEmpty()) {
-                CookieDomainsCard(
-                    domains = domains,
-                    vm = vm,
-                )
-            }
-
             // Section: Browser
             CardGroup(
                 title = { Text(stringResource(R.string.setting_browser_section_browser)) },
@@ -230,83 +216,6 @@ fun SettingBrowserPage(
                     },
                 )
             }
-        }
-    }
-}
-
-/**
- * Cookie 管理卡片：展示所有已保存 Cookie 的域名，支持查看详情和删除。
- */
-@Composable
-private fun CookieDomainsCard(
-    domains: List<String>,
-    vm: SettingBrowserViewModel,
-) {
-    var selectedDomain by remember { mutableStateOf<String?>(null) }
-    var cookieContent by remember { mutableStateOf<String?>(null) }
-
-    if (selectedDomain != null) {
-        val domain = selectedDomain!!
-        AlertDialog(
-            onDismissRequest = {
-                selectedDomain = null
-                cookieContent = null
-            },
-            title = { Text(domain) },
-            text = {
-                val cookies = cookieContent ?: vm.getCookieString(domain)
-                if (cookies.isNullOrEmpty()) {
-                    Text("无 Cookie 数据")
-                } else {
-                    val lines = cookies.split(";").map { it.trim() }
-                    Column {
-                        Text(
-                            text = lines.joinToString("\n"),
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    vm.removeCookieDomain(domain)
-                    selectedDomain = null
-                    cookieContent = null
-                }) {
-                    Text("删除记录")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = {
-                    selectedDomain = null
-                    cookieContent = null
-                }) {
-                    Text(stringResource(android.R.string.cancel))
-                }
-            },
-        )
-    }
-
-    CardGroup(
-        title = { Text("已保存 Cookie 的网站") },
-    ) {
-        domains.forEach { domain ->
-            item(
-                onClick = {
-                    selectedDomain = domain
-                    cookieContent = vm.getCookieString(domain)
-                },
-                headlineContent = { Text(domain) },
-                supportingContent = {
-                    val cookies = vm.getCookieString(domain)
-                    if (cookies != null) {
-                        val count = cookies.count { it == '=' }
-                        Text("$count 个 Cookie")
-                    } else {
-                        Text("无 Cookie 数据")
-                    }
-                },
-            )
         }
     }
 }
