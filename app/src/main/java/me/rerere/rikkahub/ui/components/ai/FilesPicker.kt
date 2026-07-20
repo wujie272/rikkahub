@@ -53,10 +53,8 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Job
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.hugeicons.HugeIcons
-import me.rerere.hugeicons.stroke.BookOpen01
 import androidx.compose.ui.res.stringResource
 import me.rerere.rikkahub.R
-import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.Camera01
 import me.rerere.hugeicons.stroke.Codesandbox
 import me.rerere.hugeicons.stroke.ComputerTerminal01
@@ -168,48 +166,6 @@ internal fun FilesPicker(
             )
         }
 
-        // 知识库选择
-        var showKbSheet by remember { mutableStateOf(false) }
-        val currentKbName = knowledgeBases.firstOrNull { it.id == currentKbId }?.name
-        ListItem(
-            leadingContent = {
-                Icon(
-                    imageVector = HugeIcons.BookOpen01,
-                    contentDescription = stringResource(R.string.kb_title),
-                )
-            },
-            headlineContent = { Text(stringResource(R.string.kb_title)) },
-            supportingContent = {
-                Text(
-                    text = currentKbName ?: stringResource(R.string.kb_not_enabled),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            },
-            trailingContent = {
-                if (currentKbId != null) {
-                    IconButton(onClick = { onSelectKnowledgeBase(null) }) {
-                        Icon(HugeIcons.Cancel01, contentDescription = stringResource(R.string.kb_delete))
-                    }
-                }
-            },
-            colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-            modifier = Modifier
-                .clip(MaterialTheme.shapes.large)
-                .clickable { showKbSheet = true },
-        )
-        if (showKbSheet) {
-            KnowledgeBaseSelectSheet(
-                knowledgeBases = knowledgeBases,
-                currentKbId = currentKbId,
-                onSelect = { id ->
-                    onSelectKnowledgeBase(id)
-                    showKbSheet = false
-                },
-                onDismiss = { showKbSheet = false },
-            )
-        }
-
         if (settings.mcpServers.isNotEmpty()) {
             McpPickerListItem(
                 assistant = assistant,
@@ -219,7 +175,7 @@ internal fun FilesPicker(
             )
         }
 
-        // Extensions (Quick Messages + Prompt Injections + Skills)
+        // Extensions (Quick Messages + Prompt Injections + Skills + Knowledge Base)
         val modeAndLorebookCount =
             if (assistant.allowConversationPromptInjection) {
                 conversation.modeInjectionIds.size + conversation.lorebookIds.size
@@ -229,7 +185,8 @@ internal fun FilesPicker(
         val activeCount =
             assistant.quickMessageIds.size +
                 modeAndLorebookCount +
-                assistant.enabledSkills.size
+                assistant.enabledSkills.size +
+                (if (currentKbId != null) 1 else 0)
         ListItem(
             leadingContent = {
                 Icon(
@@ -335,6 +292,9 @@ internal fun FilesPicker(
             onUpdateConversation = onUpdateConversation,
             onDismiss = { onShowInjectionSheetChange(false) },
             onDismissAll = onDismiss,
+            knowledgeBases = knowledgeBases,
+            currentKbId = currentKbId,
+            onSelectKnowledgeBase = onSelectKnowledgeBase,
         )
     }
 
@@ -444,6 +404,9 @@ private fun InjectionQuickConfigSheet(
     onUpdateConversation: (Conversation) -> Unit,
     onDismiss: () -> Unit,
     onDismissAll: () -> Unit,
+    knowledgeBases: List<KnowledgeBaseEntity> = emptyList(),
+    currentKbId: String? = null,
+    onSelectKnowledgeBase: (String?) -> Unit = {},
 ) {
     val sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden, enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded))
     val navController = LocalNavController.current
@@ -476,7 +439,15 @@ private fun InjectionQuickConfigSheet(
                 onNavigateToSkills = {
                     onDismissAll()
                     navController.navigate(Screen.Skills)
-                })
+                },
+                onNavigateToKnowledgeBase = {
+                    onDismissAll()
+                    navController.navigate(Screen.KnowledgeBase)
+                },
+                knowledgeBases = knowledgeBases,
+                currentKbId = currentKbId,
+                onSelectKnowledgeBase = onSelectKnowledgeBase,
+            )
 
             Spacer(modifier = Modifier.height(16.dp))
         }
@@ -584,98 +555,5 @@ private fun BigIconTextButtonPreview() {
         }, text = {
             Text(stringResource(R.string.photo))
         }) {}
-    }
-}
-
-@Composable
-private fun KnowledgeBaseSelectSheet(
-    knowledgeBases: List<KnowledgeBaseEntity>,
-    currentKbId: String?,
-    onSelect: (String?) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    val sheetState = rememberBottomSheetState(
-        initialValue = SheetValue.Hidden,
-        enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded)
-    )
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Text(
-                text = stringResource(R.string.kb_select),
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
-
-            // "不启用" 选项
-            Surface(
-                onClick = { onSelect(null) },
-                color = if (currentKbId == null) MaterialTheme.colorScheme.primaryContainer
-                        else MaterialTheme.colorScheme.surfaceContainer,
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Row(
-                    modifier = Modifier.padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(
-                        imageVector = HugeIcons.Cancel01,
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp),
-                        tint = if (currentKbId == null) MaterialTheme.colorScheme.onPrimaryContainer
-                               else MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.width(12.dp))
-                    Text(stringResource(R.string.kb_disable))
-                }
-            }
-
-            knowledgeBases.forEach { kb ->
-                val isSelected = kb.id == currentKbId
-                Surface(
-                    onClick = { onSelect(kb.id) },
-                    color = if (isSelected) MaterialTheme.colorScheme.primaryContainer
-                            else MaterialTheme.colorScheme.surfaceContainer,
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(
-                            imageVector = HugeIcons.BookOpen01,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp),
-                            tint = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer
-                                   else MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Spacer(Modifier.width(12.dp))
-                        Column {
-                            Text(kb.name, style = MaterialTheme.typography.bodyLarge)
-                            if (kb.description.isNotBlank()) {
-                                Text(
-                                    text = kb.description,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(16.dp))
-        }
     }
 }

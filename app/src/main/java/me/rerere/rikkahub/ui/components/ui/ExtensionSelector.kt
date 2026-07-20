@@ -15,25 +15,25 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.files.SkillManager
 import me.rerere.rikkahub.data.files.SkillMetadata
+import me.rerere.rikkahub.data.knowledge.KnowledgeBaseEntity
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.ui.components.ai.ExtensionEmptyState
+import me.rerere.rikkahub.ui.components.ai.KnowledgeBaseContent
 import me.rerere.rikkahub.ui.components.ai.LorebooksContent
 import me.rerere.rikkahub.ui.components.ai.ModeInjectionsContent
 import me.rerere.rikkahub.ui.components.ai.QuickMessagesContent
 import me.rerere.rikkahub.ui.components.ai.SkillsContent
 import org.koin.compose.koinInject
-
 
 @Composable
 fun ExtensionSelector(
@@ -46,13 +46,15 @@ fun ExtensionSelector(
     onNavigateToQuickMessages: () -> Unit = {},
     onNavigateToPrompts: () -> Unit = {},
     onNavigateToSkills: () -> Unit = {},
+    onNavigateToKnowledgeBase: () -> Unit = {},
+    knowledgeBases: List<KnowledgeBaseEntity> = emptyList(),
+    currentKbId: String? = null,
+    onSelectKnowledgeBase: (String?) -> Unit = {},
 ) {
     val skillManager: SkillManager = koinInject()
     var skills by remember { mutableStateOf<List<SkillMetadata>>(emptyList()) }
 
     LaunchedEffect(Unit) {
-        // 打开扩展面板时清理运行时被删除的技能（残留的 enabledSkills 引用），
-        // prune 顺带返回现存技能列表，避免重复读盘
         skills = skillManager.pruneOrphanedEnabledSkills()
     }
 
@@ -69,12 +71,10 @@ fun ExtensionSelector(
         assistant.lorebookIds
     }
 
-    val pagerState = rememberPagerState { 4 }
+    val pagerState = rememberPagerState { 5 }
     val scope = rememberCoroutineScope()
 
-    Column(
-        modifier = modifier
-    ) {
+    Column(modifier = modifier) {
         SecondaryScrollableTabRow(
             selectedTabIndex = pagerState.currentPage,
             containerColor = Color.Transparent,
@@ -83,39 +83,34 @@ fun ExtensionSelector(
         ) {
             Tab(
                 selected = pagerState.currentPage == 0,
-                onClick = {
-                    scope.launch { pagerState.animateScrollToPage(0) }
-                },
+                onClick = { scope.launch { pagerState.animateScrollToPage(0) } },
                 text = { Text(stringResource(R.string.extension_selector_tab_quick_messages)) }
             )
             Tab(
                 selected = pagerState.currentPage == 1,
-                onClick = {
-                    scope.launch { pagerState.animateScrollToPage(1) }
-                },
+                onClick = { scope.launch { pagerState.animateScrollToPage(1) } },
                 text = { Text(stringResource(R.string.extension_selector_tab_mode_injections)) }
             )
             Tab(
                 selected = pagerState.currentPage == 2,
-                onClick = {
-                    scope.launch { pagerState.animateScrollToPage(2) }
-                },
+                onClick = { scope.launch { pagerState.animateScrollToPage(2) } },
                 text = { Text(stringResource(R.string.extension_selector_tab_lorebooks)) }
             )
             Tab(
                 selected = pagerState.currentPage == 3,
-                onClick = {
-                    scope.launch { pagerState.animateScrollToPage(3) }
-                },
+                onClick = { scope.launch { pagerState.animateScrollToPage(3) } },
                 text = { Text(stringResource(R.string.extension_selector_tab_skills)) }
+            )
+            Tab(
+                selected = pagerState.currentPage == 4,
+                onClick = { scope.launch { pagerState.animateScrollToPage(4) } },
+                text = { Text(stringResource(R.string.extension_selector_tab_knowledge)) }
             )
         }
 
         HorizontalPager(
             state = pagerState,
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
+            modifier = Modifier.fillMaxWidth().weight(1f)
         ) { page ->
             when (page) {
                 0 -> {
@@ -124,11 +119,7 @@ fun ExtensionSelector(
                             quickMessages = settings.quickMessages,
                             selectedIds = assistant.quickMessageIds,
                             onToggle = { id, checked ->
-                                val newIds = if (checked) {
-                                    assistant.quickMessageIds + id
-                                } else {
-                                    assistant.quickMessageIds - id
-                                }
+                                val newIds = if (checked) assistant.quickMessageIds + id else assistant.quickMessageIds - id
                                 onUpdate(assistant.copy(quickMessageIds = newIds))
                             },
                             onManage = onNavigateToQuickMessages,
@@ -148,11 +139,7 @@ fun ExtensionSelector(
                             modeInjections = settings.modeInjections,
                             selectedIds = selectedModeInjectionIds,
                             onToggle = { id, checked ->
-                                val newIds = if (checked) {
-                                    selectedModeInjectionIds + id
-                                } else {
-                                    selectedModeInjectionIds - id
-                                }
+                                val newIds = if (checked) selectedModeInjectionIds + id else selectedModeInjectionIds - id
                                 if (useConversationInjections) {
                                     onUpdateConversation(conversation.copy(modeInjectionIds = newIds))
                                 } else {
@@ -176,11 +163,7 @@ fun ExtensionSelector(
                             lorebooks = settings.lorebooks,
                             selectedIds = selectedLorebookIds,
                             onToggle = { id, checked ->
-                                val newIds = if (checked) {
-                                    selectedLorebookIds + id
-                                } else {
-                                    selectedLorebookIds - id
-                                }
+                                val newIds = if (checked) selectedLorebookIds + id else selectedLorebookIds - id
                                 if (useConversationInjections) {
                                     onUpdateConversation(conversation.copy(lorebookIds = newIds))
                                 } else {
@@ -204,11 +187,7 @@ fun ExtensionSelector(
                             skills = skills,
                             enabledSkills = assistant.enabledSkills,
                             onToggle = { name, checked ->
-                                val newSkills = if (checked) {
-                                    assistant.enabledSkills + name
-                                } else {
-                                    assistant.enabledSkills - name
-                                }
+                                val newSkills = if (checked) assistant.enabledSkills + name else assistant.enabledSkills - name
                                 onUpdate(assistant.copy(enabledSkills = newSkills))
                             },
                             onManage = onNavigateToSkills,
@@ -218,6 +197,23 @@ fun ExtensionSelector(
                             message = stringResource(R.string.extension_selector_skills_empty),
                             buttonText = stringResource(R.string.extension_selector_go_to_skills),
                             onAction = onNavigateToSkills,
+                        )
+                    }
+                }
+
+                4 -> {
+                    if (knowledgeBases.isNotEmpty()) {
+                        KnowledgeBaseContent(
+                            knowledgeBases = knowledgeBases,
+                            currentKbId = currentKbId,
+                            onSelect = { id -> onSelectKnowledgeBase(id) },
+                            onManage = onNavigateToKnowledgeBase,
+                        )
+                    } else {
+                        ExtensionEmptyState(
+                            message = stringResource(R.string.extension_selector_knowledge_empty),
+                            buttonText = stringResource(R.string.extension_selector_go_to_extensions),
+                            onAction = onNavigateToKnowledgeBase,
                         )
                     }
                 }

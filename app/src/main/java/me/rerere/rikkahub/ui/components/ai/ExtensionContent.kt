@@ -28,6 +28,7 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Link01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.files.SkillMetadata
+import me.rerere.rikkahub.data.knowledge.KnowledgeBaseEntity
 import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.QuickMessage
@@ -137,6 +138,62 @@ fun SkillsContent(
                     Switch(
                         checked = enabledSkills.contains(skill.name),
                         onCheckedChange = { checked -> onToggle(skill.name, checked) }
+                    )
+                },
+                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+            )
+        }
+        if (onManage != null) {
+            item {
+                ManageButton(onClick = onManage)
+            }
+        }
+    }
+}
+
+@Composable
+fun KnowledgeBaseContent(
+    knowledgeBases: List<KnowledgeBaseEntity>,
+    currentKbId: String?,
+    onSelect: (String?) -> Unit,
+    modifier: Modifier = Modifier,
+    onManage: (() -> Unit)? = null,
+) {
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        // "不启用" 选项
+        item {
+            ListItem(
+                headlineContent = { Text(stringResource(R.string.kb_disable)) },
+                trailingContent = {
+                    Switch(
+                        checked = currentKbId == null,
+                        onCheckedChange = { if (it) onSelect(null) }
+                    )
+                },
+                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+            )
+        }
+        items(knowledgeBases, key = { it.id }) { kb ->
+            ListItem(
+                headlineContent = { Text(kb.name) },
+                supportingContent = if (kb.description.isNotBlank()) {
+                    {
+                        Text(
+                            text = kb.description,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        )
+                    }
+                } else null,
+                trailingContent = {
+                    Switch(
+                        checked = kb.id == currentKbId,
+                        onCheckedChange = { checked ->
+                            if (checked) onSelect(kb.id)
+                        }
                     )
                 },
                 colors = ListItemDefaults.colors(containerColor = Color.Transparent),
