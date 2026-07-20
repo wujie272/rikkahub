@@ -300,8 +300,23 @@ fun ChatInput(
                                 )
                             }
 
-                        }
+                            // Auto-retry
+                            AutoRetryButton(
+                                autoRetryOnError = assistant.autoRetryOnError,
+                                maxRetryCount = assistant.maxRetryCount,
+                                retryModelId = assistant.retryModelId,
+                                providers = settings.providers,
+                                onUpdate = { enabled, count, modelId ->
+                                    onUpdateAssistant(assistant.copy(
+                                        autoRetryOnError = enabled,
+                                        maxRetryCount = count,
+                                        retryModelId = modelId,
+                                    ))
+                                },
+                            )
 
+
+                        }
                         ActionIconButton(
                             onClick = onMoreClick
                         ) {

@@ -73,6 +73,10 @@ data class Assistant(
     val postHistoryInstructions: String = "",                // 历史后指令
     val allowConversationSystemPrompt: Boolean = false, // 允许对话单独重写 system prompt
     val allowConversationPromptInjection: Boolean = false, // 允许对话单独绑定提示词注入
+    // Auto-retry on error. When enabled, generation failures trigger automatic retry.
+    val autoRetryOnError: Boolean = false,
+    val maxRetryCount: Int = 3,
+    val retryModelId: Uuid? = null, // null = 使用主模型重试
 )
 
 @Serializable
