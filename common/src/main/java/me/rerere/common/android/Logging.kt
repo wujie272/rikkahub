@@ -31,7 +31,16 @@ sealed class LogEntry {
         val responseCode: Int? = null,
         val responseHeaders: Map<String, String> = emptyMap(),
         val durationMs: Long? = null,
-        val error: String? = null
+        val error: String? = null,
+        // --- AI 层扩展字段 ---
+        val source: String = "",          // 来源分类 (CHAT, TITLE_SUMMARY, WELCOME_PHRASES, ...)
+        val providerName: String = "",    // 供应商名 (OpenAI, Google, Claude, ...)
+        val modelId: String = "",         // 模型 ID
+        val modelDisplayName: String = "", // 模型显示名
+        val stream: Boolean = false,       // 是否流式
+        val responseText: String = "",     // 过滤后的响应文本
+        val responseRawText: String = "",  // 原始响应 JSON
+        val paramsJson: String = "",       // 结构化参数 JSON (temperature, topP, tools 等)
     ) : LogEntry()
 }
 

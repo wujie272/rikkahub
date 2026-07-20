@@ -118,6 +118,16 @@ fun LoggingPaging(vm: DeveloperVM) {
                         }
                     }
                 }
+                is AILogging.Embedding -> {
+                    Card {
+                        Column(
+                            modifier = Modifier.fillMaxSize(),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+
+                        }
+                    }
+                }
             }
         }
     }

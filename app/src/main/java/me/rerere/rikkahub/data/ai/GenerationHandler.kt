@@ -316,6 +316,8 @@ class GenerationHandler(
         conversationModeInjectionIds: Set<Uuid> = emptySet(),
         conversationLorebookIds: Set<Uuid> = emptySet(),
         workspaceCwd: String? = null,
+        // 请求来源分类，用于日志记录
+        requestSource: AIRequestSource = AIRequestSource.OTHER,
     ): Flow<GenerationChunk> = flow {
         val provider = model.findProvider(settings.providers) ?: error("Provider not found")
         val providerImpl = providerManager.getProviderByType(provider)
@@ -416,6 +418,15 @@ class GenerationHandler(
             if (pendingTools.isEmpty()) {
                 AgentOverlay.updateText("AI 正在思考…")
                 try {
+                    // 设置请求日志上下文
+                    RequestLogContext.set(
+                        RequestLogContext.Context(
+                            source = requestSource,
+                            providerName = provider.name,
+                            modelId = model.modelId,
+                            modelDisplayName = model.displayName,
+                        )
+                    )
                     generateInternal(
                         assistant = assistant,
                         settings = settings,
@@ -453,7 +464,9 @@ class GenerationHandler(
                         conversationModeInjectionIds = conversationModeInjectionIds,
                         conversationLorebookIds = conversationLorebookIds,
                         workspaceCwd = workspaceCwd,
+                        requestSource = requestSource,
                     )
+                    RequestLogContext.clear()
                 } catch (t: Throwable) {
                     // CancellationException is honoured verbatim — stopGeneration has its
                     // own cancelToolByUser path that marks tools cancelled. We only need
@@ -980,6 +993,7 @@ class GenerationHandler(
         conversationModeInjectionIds: Set<Uuid> = emptySet(),
         conversationLorebookIds: Set<Uuid> = emptySet(),
         workspaceCwd: String? = null,
+        requestSource: AIRequestSource = AIRequestSource.OTHER,
     ) {
         val internalMessages = buildList {
             // Conversation-level system prompt override (upstream): when the assistant
@@ -1060,7 +1074,8 @@ class GenerationHandler(
                     params = params,
                     messages = messages,
                     providerSetting = provider,
-                    stream = true
+                    stream = true,
+                    source = requestSource,
                 )
             )
             providerImpl.streamText(
@@ -1086,7 +1101,8 @@ class GenerationHandler(
                     params = params,
                     messages = messages,
                     providerSetting = provider,
-                    stream = false
+                    stream = false,
+                    source = requestSource,
                 )
             )
             val chunk = providerImpl.generateText(
