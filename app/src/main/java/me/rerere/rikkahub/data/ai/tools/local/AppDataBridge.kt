@@ -133,7 +133,6 @@ class AppDataBridge(private val context: Context) {
     fun discoverByPackage(packageName: String): AppDataPlugin? {
         val pm = context.packageManager
 
-        // 检查是否安装
         val appInfo = try {
             pm.getApplicationInfo(packageName, 0)
         } catch (_: PackageManager.NameNotFoundException) {
@@ -141,29 +140,26 @@ class AppDataBridge(private val context: Context) {
         }
 
         val appLabel = pm.getApplicationLabel(appInfo).toString()
-        val intent = Intent().setPackage(packageName)
-        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            PackageManager.GET_META_DATA or PackageManager.MATCH_ALL
-        } else {
-            PackageManager.GET_META_DATA
-        }
-        val receivers: List<ResolveInfo> = pm.queryBroadcastReceivers(intent, flags)
 
-        for (resolve in receivers) {
-            val ri = resolve.activityInfo ?: continue
+        // 使用 getPackageInfo(GET_RECEIVERS | GET_META_DATA) 枚举所有 Receiver
+        val pkgInfo = try {
+            pm.getPackageInfo(packageName, PackageManager.GET_RECEIVERS or PackageManager.GET_META_DATA)
+        } catch (_: PackageManager.NameNotFoundException) {
+            return null
+        }
+
+        val receivers = pkgInfo.receivers ?: return null
+
+        for (ri in receivers) {
             if (!ri.exported) continue
             val meta = ri.metaData ?: continue
             if (meta.getString("app_data_bridge") != "v1") continue
 
-            // 提取 intent-filter 中的 action
-            val actions = resolve.filter?.let { filter ->
-                    (0 until filter.countActions()).map { filter.getAction(it) }
-                }.orEmpty()
-                .filter { it.startsWith("QUERY_") }
-            if (actions.isEmpty()) continue
+            // 协议规定：声明了 app_data_bridge=v1 的 Receiver 必须支持这 4 种 action
+            // 无需动态查 IntentFilter，直接用标准协议生成
+            val standardActions = listOf("QUERY_LOGS", "QUERY_SETTINGS", "QUERY_MONTH", "QUERY_TODAY")
 
-            // 自动生成 action 定义
-            val pluginActions = actions.map { action ->
+            val pluginActions = standardActions.map { action ->
                 val toolName = action.lowercase()
                 val desc = when (action) {
                     "QUERY_LOGS" -> "查询所有记录"
@@ -266,7 +262,7 @@ class AppDataBridge(private val context: Context) {
         }
         val filter = IntentFilter(resultAction)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
+            context.registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED)
         } else {
             @Suppress("UnspecifiedRegisterReceiverFlag")
             context.registerReceiver(receiver, filter)
