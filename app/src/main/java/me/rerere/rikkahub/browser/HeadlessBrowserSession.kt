@@ -13,7 +13,7 @@ import java.io.File
 
 /**
  * Pass 3: hosts a WebView offscreen, in the application process, for headless AI-driven
- * browsing (cron / sub-agent flows). The session is owned by a
+ * browsing (Telegram bot / cron / sub-agent flows). The session is owned by a
  * [HeadlessBrowserSessionPool] keyed on the calling conversation id.
  *
  * **Why no system Display.** The spec considered `DisplayManager.createVirtualDisplay`
@@ -86,29 +86,12 @@ class HeadlessBrowserSession(private val context: Context) {
             layoutParams = LinearLayout.LayoutParams(VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
         }
 
-        val wv = object : WebView(context) {
-            override fun onCreateInputConnection(outAttrs: android.view.inputmethod.EditorInfo?): android.view.inputmethod.InputConnection? {
-                if (outAttrs == null) return null
-                val ic = super.onCreateInputConnection(outAttrs)
-                if (ic == null) return null
-                // 清除 IME 导航标志 — 与 Foreground BrowserView 相同的修复
-                outAttrs.imeOptions = outAttrs.imeOptions
-                    .and(android.view.inputmethod.EditorInfo.IME_FLAG_NO_EXTRACT_UI.inv())
-                    .and(android.view.inputmethod.EditorInfo.IME_FLAG_NAVIGATE_NEXT.inv())
-                    .and(android.view.inputmethod.EditorInfo.IME_FLAG_NAVIGATE_PREVIOUS.inv())
-                outAttrs.imeOptions = outAttrs.imeOptions or android.view.inputmethod.EditorInfo.IME_FLAG_NO_FULLSCREEN
-                outAttrs.privateImeOptions = "disableFullscreen"
-                outAttrs.inputType = outAttrs.inputType
-                    .and(android.text.InputType.TYPE_TEXT_FLAG_AUTO_CORRECT.inv())
-                    .or(android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS)
-                return ic
-            }
-        }.apply {
+        val wv = WebView(context).apply {
             // Shared with foreground — every render-related setting (mixedContentMode,
             // hardware layer, autoplay, UA strip, file:// access) lives in
             // configureWebViewForRikka. Before this helper existed, headless mode lacked
             // the white-page render fixes from `1ac54c4b` / `3ac3b4b4` / `a1db859c` and
-            // silently streamed all-white PNGs to the user's remote chat on the long
+            // silently streamed all-white PNGs to the user's Telegram chat on the long
             // tail of mainstream sites. See BrowserWebViewConfig.kt for the history.
             configureWebViewForRikka(this)
             // Headless mode renders via WebView.draw(canvas), which CANNOT capture
@@ -128,25 +111,18 @@ class HeadlessBrowserSession(private val context: Context) {
                     request: WebResourceRequest?,
                 ): Boolean {
                     // Same file:// navigation gate as the foreground BrowserView: headless
-                    // sessions are model-driven (cron), so a page- or JS-initiated
+                    // sessions are model-driven (Telegram/cron), so a page- or JS-initiated
                     // hop into file:// would expose app-private files to browser_get_text.
                     val toFile = request?.url?.scheme.equals("file", ignoreCase = true)
                     return toFile && view?.url?.startsWith("file:", ignoreCase = true) != true
                 }
 
                 override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) {
+                    // 记录已保存 Cookie 的域名
+                    CookieStore.recordUrl(url)
+                    CookieStore.init(view.context)
                     super.onPageStarted(view, url, favicon)
-                    // Inject anti-bot JS shim before site code runs.
-                    view.evaluateJavascript(ANTI_BOT_SHIM_JS, null)
-                    // Visibility shim — headless WebView isn't on screen.
                     view.evaluateJavascript(VISIBILITY_SHIM_JS, null)
-                }
-
-                override fun onPageFinished(view: WebView, url: String?) {
-                    super.onPageFinished(view, url)
-                    // Cursor position shim — belt-and-suspenders for type="tel"
-                    // cursor-jump-to-start bug (Boss直聘登录页).
-                    view.evaluateJavascript(CURSOR_POSITION_SHIM_JS, null)
                 }
             }
             // Per-WebView third-party cookie enable — must be called after the WebView
@@ -244,7 +220,7 @@ class HeadlessBrowserSession(private val context: Context) {
  *
  * Eviction: callers are expected to call [release] on `browser_done`. As a defence against
  * forgotten teardowns, [release] is idempotent and the pool size is bounded by how many
- * concurrent headless conversations the FGS host actually keeps running — cron
+ * concurrent headless conversations the FGS host actually keeps running — Telegram bot
  * has at most one (the polling loop is single-threaded), cron jobs run sequentially in
  * their worker, and sub-agents are also serialised. So in practice the pool holds 0–1
  * sessions at a time.

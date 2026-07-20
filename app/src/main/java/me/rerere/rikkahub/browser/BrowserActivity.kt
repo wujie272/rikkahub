@@ -12,6 +12,7 @@ import androidx.compose.runtime.mutableStateOf
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 import me.rerere.rikkahub.ui.theme.RikkahubTheme
+import me.rerere.rikkahub.browser.CookieStore
 import java.io.File
 
 /**
@@ -63,6 +64,8 @@ class BrowserActivity : ComponentActivity() {
         // Global cookie store config — applies to every WebView in the process. Spec calls
         // for third-party cookies on so the AI can navigate sites that auth across domains.
         CookieManager.getInstance().setAcceptCookie(true)
+        // 初始化 CookieStore（记录已保存 Cookie 的网站）
+        CookieStore.init(this)
 
         // Hardware back: prefer WebView history, fall back to finishing the Activity.
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {

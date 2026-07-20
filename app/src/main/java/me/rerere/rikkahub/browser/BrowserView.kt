@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import me.rerere.rikkahub.BuildConfig
+import me.rerere.rikkahub.browser.CookieStore
 import java.io.File
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
@@ -59,8 +60,6 @@ fun BrowserView(
     onForwardTap: () -> Unit,
     onRefreshTap: () -> Unit,
     onStopAi: () -> Unit,
-    onToggleDesktopMode: () -> Unit,
-    onOpenInBrowser: () -> Unit,
     onNavigate: (String) -> Unit,
     initialUrl: String,
     conversationId: Uuid?,
@@ -76,8 +75,6 @@ fun BrowserView(
                 onForward = onForwardTap,
                 onRefresh = onRefreshTap,
                 onStopAi = onStopAi,
-                onToggleDesktopMode = onToggleDesktopMode,
-                onOpenInBrowser = onOpenInBrowser,
                 onNavigate = onNavigate,
             )
         },
@@ -134,36 +131,17 @@ private fun WebViewHost(
     onCanGoForwardChange: (Boolean) -> Unit,
 ) {
     val ctx = LocalContext.current
-    // 构造 WebView 一次 — `remember` 存活在 recomposition (Unit key 可以在 config 变化后存活，因为 Activity 声明了 `configChanges` 所以系统不会重建)。
-    // 每次 recomposition 重建 WebView 会丢失历史、滚动状态和 JS 状态。
+    // Construct the WebView ONCE — `remember` survives recomp + (with key=Unit) survives
+    // configuration changes (the Activity declares `configChanges` so the system never
+    // recreates us). Recreating per-recomp would reset history, scroll, and JS state.
     val webView = remember {
-        // 启用 Chrome DevTools 远程调试 (仅 debug 构建)
-        // 在 release 构建中开启此功能会允许任何拥有 adb 访问权限的人
-        // (借出的手机、ADB-over-WiFi 攻击者) 连接到 chrome://inspect
-        // 并读取 WebView 的 cookies/localStorage/已认证的会话内容。
-        // 仅在 debug 构建启用 — 在 release 构建中开启是一个用户从未同意过的隐私决定。
+        // Enable Chrome DevTools attachment ONLY in debug builds. In release, leaving
+        // this on lets anyone with adb (lent phone, ADB-over-WiFi attacker) attach
+        // chrome://inspect and read the WebView's cookies / localStorage / authenticated
+        // session bodies. Gate behind BuildConfig.DEBUG — turning Chrome inspection on
+        // in release is a privacy posture choice the user never consented to.
         if (BuildConfig.DEBUG) WebView.setWebContentsDebuggingEnabled(true)
-        object : WebView(ctx) {
-            override fun onCreateInputConnection(outAttrs: android.view.inputmethod.EditorInfo?): android.view.inputmethod.InputConnection? {
-                if (outAttrs == null) return null
-                val ic = super.onCreateInputConnection(outAttrs)
-                if (ic == null) return null
-                // 清除 IME 导航标志 — 这些标志会让 IME 在 type="tel" 输入框上
-                // 提交字符后重置光标到位置 0（Boss直聘登录页反转 bug 的根因）
-                outAttrs.imeOptions = outAttrs.imeOptions
-                    .and(android.view.inputmethod.EditorInfo.IME_FLAG_NO_EXTRACT_UI.inv())
-                    .and(android.view.inputmethod.EditorInfo.IME_FLAG_NAVIGATE_NEXT.inv())
-                    .and(android.view.inputmethod.EditorInfo.IME_FLAG_NAVIGATE_PREVIOUS.inv())
-                // 禁止全屏 IME 界面（某些输入法在全屏模式下行为异常）
-                outAttrs.imeOptions = outAttrs.imeOptions or android.view.inputmethod.EditorInfo.IME_FLAG_NO_FULLSCREEN
-                outAttrs.privateImeOptions = "disableFullscreen"
-                // 关闭自动修正 + 建议（减少 IME 额外操作导致光标跳转）
-                outAttrs.inputType = outAttrs.inputType
-                    .and(android.text.InputType.TYPE_TEXT_FLAG_AUTO_CORRECT.inv())
-                    .or(android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS)
-                return ic
-            }
-        }.apply {
+        WebView(ctx).apply {
             // Shared with HeadlessBrowserSession — every render-related setting
             // (mixedContentMode, hardware layer, autoplay, UA strip, file:// access)
             // lives in configureWebViewForRikka so foreground + headless behave
@@ -180,39 +158,21 @@ private fun WebViewHost(
                     view: WebView?,
                     request: WebResourceRequest?,
                 ): Boolean {
-                    if (request == null || request.url == null) return false
-                    val urlStr = request.url.toString()
-                    val host = request.url.host ?: ""
-
                     // Block page/JS-initiated navigation into file:// unless the current
-                    // document is already file:// (skill webview cards).
-                    if (request.url.scheme.equals("file", ignoreCase = true) &&
-                        view?.url?.startsWith("file:", ignoreCase = true) != true
-                    ) return true
-
-                    // Foreground-only: fall back to Chrome Custom Tabs for sites known
-                    // to block embedded WebViews (X/Twitter). Headless mode uses the
-                    // anti-detection layer + UA spoofing — Custom Tabs aren't available
-                    // offscreen, but headless browsing is AI-driven and handles partial
-                    // failures gracefully.
-                    if (host in WEBVIEW_BLOCKED_DOMAINS) {
-                        val ctx = view?.context ?: return false
-                        val intent = android.content.Intent(
-                            android.content.Intent.ACTION_VIEW,
-                            android.net.Uri.parse(urlStr)
-                        ).apply { addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK) }
-                        runCatching { ctx.startActivity(intent) }
-                        return true // intercepted — opened in Chrome
-                    }
-
-                    return false
+                    // document is already file:// (skill webview cards moving between
+                    // their own sub-pages). App-initiated loadUrl() bypasses this
+                    // callback, so opening a skill card stays unaffected. Without this,
+                    // a browsed page (or eval'd JS) could steer the WebView into
+                    // app-private files and exfiltrate them via browser_get_text.
+                    val toFile = request?.url?.scheme.equals("file", ignoreCase = true)
+                    return toFile && view?.url?.startsWith("file:", ignoreCase = true) != true
                 }
 
                 override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
-                    // Inject anti-bot JS shim BEFORE any site code runs.
-                    // onPageStarted fires before the page's own JS executes, so the
-                    // navigator.webdriver / navigator.plugins spoof takes effect first.
-                    view?.evaluateJavascript(ANTI_BOT_SHIM_JS, null)
+                    // 记录已保存 Cookie 的域名
+                    CookieStore.recordUrl(url)
+                    CookieStore.init(view?.context ?: return)
+                    super.onPageStarted(view, url, favicon)
                     if (url != null) onUrlChange(url)
                 }
                 override fun onPageFinished(view: WebView?, url: String?) {
@@ -220,13 +180,6 @@ private fun WebViewHost(
                     if (url != null) onUrlChange(url)
                     onCanGoBackChange(view?.canGoBack() == true)
                     onCanGoForwardChange(view?.canGoForward() == true)
-                    // ════════════════════════════════════════════════════════
-                    // Cursor position shim — belt-and-suspenders for type="tel"
-                    // cursor-jump-to-start bug (Boss直聘登录页). The IME flag fix
-                    // in onCreateInputConnection handles most IMEs; this JS covers
-                    // any that still fire cursor resets internally.
-                    // ════════════════════════════════════════════════════════
-                    view?.evaluateJavascript(CURSOR_POSITION_SHIM_JS, null)
                     // Adb-friendly white-page diagnostic. Tag = "RikkaWebView". Filter:
                     //   adb logcat -s RikkaWebView
                     // Dumps body innerText length + first 100 chars + meta viewport so

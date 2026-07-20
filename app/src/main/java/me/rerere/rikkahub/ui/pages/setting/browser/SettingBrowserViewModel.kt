@@ -5,6 +5,7 @@ import android.webkit.CookieManager
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
@@ -12,11 +13,15 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.browser.BrowserPreferences
 import me.rerere.rikkahub.browser.BrowserToolDefaults
+import me.rerere.rikkahub.browser.CookieStore
 import java.io.File
 
 class SettingBrowserViewModel(
     private val prefs: BrowserPreferences,
 ) : ViewModel() {
+
+    /** 已保存 Cookie 的域名列表。通过 [refreshCookieDomains] 刷新。 */
+    val cookieDomains: MutableStateFlow<List<String>> = MutableStateFlow(emptyList())
 
     /** Per-tool enabled map, keyed by [me.rerere.rikkahub.browser.BrowserToolDefaults.ALL_TOOLS]. */
     val toolStates: StateFlow<Map<String, Boolean>> = prefs.observeAll().stateIn(
@@ -45,6 +50,24 @@ class SettingBrowserViewModel(
         started = SharingStarted.WhileSubscribed(5_000),
         initialValue = BrowserToolDefaults.DEFAULT_SEARCH_ENGINE_INDEX,
     )
+
+    // ─────────────────────────────────────────────────────
+    // Cookie 域名记录
+    // ─────────────────────────────────────────────────────
+
+    /** 刷新 Cookie 域名列表。在页面显示时调用。 */
+    fun refreshCookieDomains() {
+        cookieDomains.value = CookieStore.getDomains().toList()
+    }
+
+    /** 获取某个域名的 Cookie 详情。 */
+    fun getCookieString(domain: String): String? = CookieStore.getCookieString(domain)
+
+    /** 删除某个域名的 Cookie 记录。 */
+    fun removeCookieDomain(domain: String) {
+        CookieStore.removeDomain(domain)
+        refreshCookieDomains()
+    }
 
     // ─────────────────────────────────────────────────────
     // Tool toggles
@@ -83,6 +106,7 @@ class SettingBrowserViewModel(
             }
             CookieManager.getInstance().removeAllCookies(null)
             CookieManager.getInstance().flush()
+            CookieStore.clear()
             onDone()
         }
     }
