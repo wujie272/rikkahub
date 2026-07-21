@@ -65,7 +65,7 @@ class FloatingTriggerBall(
             Mode.LIVE2D -> {
                 val renderer = me.rerere.rikkahub.ui.overlay.Live2DRenderer(context)
                 live2DRenderer = renderer
-                container.addView(renderer.surfaceView, FrameLayout.LayoutParams(size, size, Gravity.CENTER))
+                container.addView(renderer.textureView, FrameLayout.LayoutParams(size, size, Gravity.CENTER))
                 iconView = null
             }
         }
