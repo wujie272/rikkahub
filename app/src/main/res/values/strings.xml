@@ -2144,6 +2144,7 @@
   <string name="kb_disable">不启用知识库</string>
   <string name="kb_references">知识库引用 (%d 条)</string>
   <string name="kb_relevance">匹配度: %d%% · 块 #%d</string>
+  <string name="kb_sources_title">知识库来源 (%d)</string>
   <string name="kb_expand">展开</string>
   <string name="kb_collapse">收起</string>
     <string name="kb_stage_scanning">扫描目录...</string>

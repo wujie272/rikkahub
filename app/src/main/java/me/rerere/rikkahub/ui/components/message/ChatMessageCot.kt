@@ -2,9 +2,10 @@ package me.rerere.rikkahub.ui.components.message
 
 import androidx.compose.ui.util.fastForEachIndexed
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.service.KnowledgeSource
 
 /**
- * 思考步骤类型，用于分组 Reasoning 和 Tool
+ * 思考步骤类型，用于分组 Reasoning、Tool 和知识库来源
  */
 sealed interface ThinkingStep {
     data class ReasoningStep(
@@ -13,6 +14,13 @@ sealed interface ThinkingStep {
 
     data class ToolStep(
         val tool: UIMessagePart.Tool,
+    ) : ThinkingStep
+
+    /**
+     * 知识库来源步骤，显示 AI 回复时参考了哪些知识库文档
+     */
+    data class KnowledgeStep(
+        val sources: List<KnowledgeSource>,
     ) : ThinkingStep
 }
 

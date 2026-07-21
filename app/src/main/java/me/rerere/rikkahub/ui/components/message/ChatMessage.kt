@@ -49,6 +49,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.dp
@@ -71,6 +72,7 @@ import me.rerere.ai.ui.UIMessageAnnotation
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.isEmptyUIMessage
 import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.BookOpen01
 import me.rerere.hugeicons.stroke.File02
 import me.rerere.hugeicons.stroke.MusicNote03
 import me.rerere.hugeicons.stroke.Video01
@@ -83,10 +85,10 @@ import me.rerere.rikkahub.data.model.replaceRegexes
 import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
 import me.rerere.rikkahub.ui.components.richtext.ZoomableAsyncImage
 import me.rerere.rikkahub.ui.components.richtext.buildMarkdownPreviewHtml
-import me.rerere.rikkahub.ui.pages.chat.KnowledgeSourcesCard
 import me.rerere.rikkahub.service.KnowledgeSource
 import me.rerere.rikkahub.ui.components.webview.WebViewContentCache
 import me.rerere.rikkahub.ui.components.ui.ChainOfThought
+import me.rerere.rikkahub.ui.components.ui.ChainOfThoughtScope
 import me.rerere.rikkahub.ui.components.ui.Favicon
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.modifier.shimmer
@@ -173,6 +175,7 @@ fun ChatMessage(
                 annotations = message.annotations,
                 loading = loading,
                 model = model,
+                knowledgeSources = if (message.role == MessageRole.ASSISTANT) knowledgeSources else emptyList(),
                 onToolApproval = onToolApproval,
                 onToolAnswer = onToolAnswer,
                 onUserMessageClick = if (message.role == MessageRole.USER) onEdit else null,
@@ -221,14 +224,6 @@ fun ChatMessage(
 
         ProvideTextStyle(textStyle) {
             ChatMessageNerdLine(message = message)
-        }
-
-        // 知识库来源（内嵌在助手消息气泡底部）
-        if (knowledgeSources.isNotEmpty() && message.role == MessageRole.ASSISTANT) {
-            KnowledgeSourcesCard(
-                sources = knowledgeSources,
-                modifier = Modifier.padding(top = 4.dp),
-            )
         }
 
     }
@@ -285,6 +280,7 @@ private fun MessagePartsBlock(
     parts: List<UIMessagePart>,
     annotations: List<UIMessageAnnotation>,
     loading: Boolean,
+    knowledgeSources: List<KnowledgeSource> = emptyList(),
     onToolApproval: ((toolCallId: String, approved: Boolean, reason: String, scope: me.rerere.rikkahub.service.ChatService.ApprovalScope, toolName: String) -> Unit)? = null,
     onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
     onUserMessageClick: (() -> Unit)? = null,
@@ -333,7 +329,27 @@ private fun MessagePartsBlock(
     // sufficient to detect a meaningful change; the lastOrNull() hash catches in-place edits
     // on the tail part (e.g. streaming text appended to the final Text part).
     val partsKey = parts.size.toString() + (parts.lastOrNull()?.hashCode()?.toString() ?: "")
-    val groupedParts = remember(partsKey) { parts.groupMessageParts() }
+    val groupedParts = remember(partsKey, knowledgeSources) {
+        val blocks = parts.groupMessageParts().toMutableList()
+        // 将知识库来源注入到 ChainOfThought 中
+        if (knowledgeSources.isNotEmpty()) {
+            val knowledgeStep = ThinkingStep.KnowledgeStep(sources = knowledgeSources)
+            // 找最后一个 ThinkingBlock，把 KnowledgeStep 追加进去
+            val lastThinkingIdx = blocks.indexOfLast { it is MessagePartBlock.ThinkingBlock }
+            if (lastThinkingIdx >= 0) {
+                val thinkingBlock = blocks[lastThinkingIdx] as MessagePartBlock.ThinkingBlock
+                blocks[lastThinkingIdx] = thinkingBlock.copy(
+                    steps = thinkingBlock.steps + knowledgeStep
+                )
+            } else {
+                // 没有 ThinkingBlock 就新建一个
+                blocks.add(
+                    MessagePartBlock.ThinkingBlock(listOf(knowledgeStep))
+                )
+            }
+        }
+        blocks
+    }
     groupedParts.fastForEach { block ->
         when (block) {
             is MessagePartBlock.ThinkingBlock -> {
@@ -375,6 +391,14 @@ private fun MessagePartsBlock(
                                         loading = loading && !step.tool.isExecuted,
                                         onToolApproval = onToolApproval,
                                         onToolAnswer = onToolAnswer,
+                                    )
+                                }
+                            }
+
+                            is ThinkingStep.KnowledgeStep -> {
+                                key("knowledge_sources") {
+                                    KnowledgeSourcesStep(
+                                        sources = step.sources,
                                     )
                                 }
                             }
@@ -665,4 +689,69 @@ private fun MessagePartsBlock(
             }
         }
     }
+}
+
+/**
+ * 知识库来源步骤，渲染在 ChainOfThought 时间线中
+ */
+@Composable
+private fun ChainOfThoughtScope.KnowledgeSourcesStep(
+    sources: List<KnowledgeSource>,
+) {
+    ChainOfThoughtStep(
+        icon = {
+            Icon(
+                imageVector = HugeIcons.BookOpen01,
+                contentDescription = null,
+                modifier = Modifier.size(14.dp),
+                tint = MaterialTheme.colorScheme.primary,
+            )
+        },
+        label = {
+            Text(
+                text = stringResource(R.string.kb_sources_title, sources.size),
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.secondary,
+            )
+        },
+        content = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                sources.forEach { source ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            imageVector = HugeIcons.BookOpen01,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp),
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = source.fileName,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                text = source.content,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        Text(
+                            text = "${(source.score * 100).toInt()}%",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        },
+    )
 }
