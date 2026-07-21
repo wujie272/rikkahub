@@ -45,6 +45,8 @@ import androidx.compose.foundation.background
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.rememberSwipeToDismissBoxState
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.res.stringResource
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
@@ -66,6 +68,8 @@ fun KnowledgeBaseListPage(vm: KnowledgeVM = koinViewModel()) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     var pendingDeleteId by remember { mutableStateOf<String?>(null) }
     val pendingDeleteKb = pendingDeleteId?.let { id -> kbs.find { it.id == id } }
+    // 存储每个 item 的 dismissState，用于取消时复位
+    val dismissStates = remember { mutableMapOf<String, androidx.compose.material3.SwipeToDismissBoxState>() }
 
     Scaffold(
         topBar = {
@@ -125,6 +129,11 @@ fun KnowledgeBaseListPage(vm: KnowledgeVM = koinViewModel()) {
                             } else false
                         }
                     )
+                    // 记录 state 以便取消时复位
+                    LaunchedEffect(kb.id) { dismissStates[kb.id] = dismissState }
+                    DisposableEffect(kb.id) {
+                        onDispose { dismissStates.remove(kb.id) }
+                    }
                     SwipeToDismissBox(
                         state = dismissState,
                         backgroundContent = {
@@ -173,7 +182,11 @@ fun KnowledgeBaseListPage(vm: KnowledgeVM = koinViewModel()) {
                     }) { Text(stringResource(R.string.kb_delete), color = MaterialTheme.colorScheme.error) }
                 },
                 dismissButton = {
-                    TextButton(onClick = { pendingDeleteId = null }) { Text(stringResource(R.string.kb_cancel)) }
+                    TextButton(onClick = {
+                        // 取消删除：复位侧滑状态，让卡片滑回来
+                        pendingDeleteId?.let { dismissStates[it]?.snapTo(SwipeToDismissBoxValue.Settled) }
+                        pendingDeleteId = null
+                    }) { Text(stringResource(R.string.kb_cancel)) }
                 },
             )
         }
