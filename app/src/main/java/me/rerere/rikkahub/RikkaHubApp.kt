@@ -35,6 +35,7 @@ import me.rerere.rikkahub.data.ai.tools.HeadlessConversations
 import me.rerere.rikkahub.service.WebServerService
 import me.rerere.rikkahub.utils.CrashHandler
 import me.rerere.rikkahub.utils.DatabaseUtil
+import me.rerere.rikkahub.ui.overlay.FloatingBallInitializer
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.workspace.WorkspaceManager
 import org.koin.android.ext.android.get
@@ -151,6 +152,10 @@ class RikkaHubApp : Application() {
         // next inference / re-detect tap. User-set knobs (force-CPU toggle, max-context
         // override) are NOT touched.
         invalidateLocalLlmDecisionsOnSdkUpgrade()
+
+        // Initialize floating overlay system (trigger ball, chat window, etc.)
+        // No-op if SYSTEM_ALERT_WINDOW not granted.
+        FloatingBallInitializer.init(this, get<AppScope>())
 
         // Composer.setDiagnosticStackTraceMode(ComposeStackTraceMode.Auto)
     }

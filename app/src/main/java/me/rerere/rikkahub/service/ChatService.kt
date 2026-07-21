@@ -239,8 +239,8 @@ class ChatService(
      */
     private val sessionMutexes = ConcurrentHashMap<Uuid, Mutex>()
 
-    /** 自动重试计数器，key=conversationId, value=已重试次数 */
-    private val retryCounts = ConcurrentHashMap<Uuid, Int>()
+    /** 自动继续失败次数记录（仅用于限制死循环，不是重试次数） */
+    private val continueAttempts = ConcurrentHashMap<Uuid, Int>()
 
     private fun mutexFor(conversationId: Uuid): Mutex =
         sessionMutexes.getOrPut(conversationId) { Mutex() }
@@ -816,6 +816,7 @@ class ChatService(
         conversationId: Uuid,
         messageRange: ClosedRange<Int>? = null,
         modelOverride: Model? = null,
+        continueAddendum: String? = null,
     ) {
         val settings = settingsStore.settingsFlow.first()
         // Resolve the assistant from this conversation's own assistantId — the global
@@ -895,7 +896,13 @@ class ChatService(
                         messages = conversation.currentMessages,
                     )
                     if (kbContext != null) append(kbContext)
-                }.takeIf { it.isNotBlank() },
+
+                    // 自动继续指令（不污染对话历史，仅本次生成生效）
+                    if (continueAddendum != null) {
+                        appendLine()
+                        append(continueAddendum)
+                    }
+                }.takeIf { it.isNotBlank() || continueAddendum != null },
                 isToolAutoApproved = { toolName ->
                     // YOLO mode ("I AM STUPID" toggle in Settings → Tool approvals): every
                     // tool auto-approves. User opted into this explicitly. HARDLINE still
@@ -1116,43 +1123,42 @@ class ChatService(
                 Log.w(TAG, "handleMessageComplete: failure-path save failed", saveErr)
             }
 
-            // ═══ 自动重试逻辑 ═══
-            if (assistant.autoRetryOnError && assistant.maxRetryCount > 0) {
-                val retryCount = retryCounts.getOrDefault(conversationId, 0)
-                if (retryCount < assistant.maxRetryCount) {
-                    retryCounts[conversationId] = retryCount + 1
-                    Log.i(TAG, "autoRetry: attempt ${retryCount + 1}/${assistant.maxRetryCount} for $conversationId")
+            // ═══ 自动继续逻辑 ═══
+            // 保留失败的回复，注入 continue 指令让 LLM 从断点继续
+            if (assistant.autoContinueOnError) {
+                val attemptCount = continueAttempts.getOrDefault(conversationId, 0)
+                if (attemptCount < 5) { // 死循环防护，最多继续 5 次
+                    continueAttempts[conversationId] = attemptCount + 1
+                    Log.i(TAG, "autoContinue: attempt ${attemptCount + 1}/5 for $conversationId")
 
-                    // 解析重试模型（如果指定了）
-                    val retryModel = if (assistant.retryModelId != null) {
-                        settings.findModelById(assistant.retryModelId)
+                    // 解析继续模型（如果指定了）
+                    val continueModel = if (assistant.continueModelId != null) {
+                        settings.findModelById(assistant.continueModelId)
                     } else null
 
-                    // 清理失败的 assistant 回复
-                    val conv = getConversationFlow(conversationId).value
-                    val lastNode = conv.messageNodes.lastOrNull()
-                    if (lastNode?.role == MessageRole.ASSISTANT) {
-                        saveConversation(
-                            conversationId,
-                            conv.copy(messageNodes = conv.messageNodes.dropLast(1))
-                        )
-                    }
-
-                    // 重试
-                    handleMessageComplete(conversationId, modelOverride = retryModel)
+                    // 保留失败的回复，注入继续指令
+                    handleMessageComplete(
+                        conversationId,
+                        modelOverride = continueModel,
+                        continueAddendum = buildString {
+                            appendLine("Your previous response was interrupted by a temporary error. Continue from where you left off.")
+                            appendLine("Do NOT repeat what you already wrote. Do NOT re-execute tools that have already completed successfully.")
+                            appendLine("Error that caused the interruption: ${error.message?.take(200) ?: error.javaClass.simpleName}")
+                        },
+                    )
                     return@onFailure
                 }
             }
 
-            // 重试耗尽或未开启 → 正常报错
-            retryCounts.remove(conversationId)
+            // 自动继续未开启或死循环防护触发 → 正常报错
+            continueAttempts.remove(conversationId)
             error.printStackTrace()
             addError(error, conversationId, title = context.getString(R.string.error_title_generation))
             Logging.log(TAG, "handleMessageComplete: $error")
             Logging.log(TAG, error.stackTraceToString())
         }.onSuccess {
-            // 生成成功，清除重试计数器
-            retryCounts.remove(conversationId)
+            // 生成成功，清除继续计数器
+            continueAttempts.remove(conversationId)
 
             val finalConversation = getConversationFlow(conversationId).value
             saveConversation(conversationId, finalConversation)

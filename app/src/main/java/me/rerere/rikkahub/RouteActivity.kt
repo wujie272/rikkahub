@@ -565,10 +565,11 @@ class RouteActivity : ComponentActivity() {
                             }
 
                             entry<Screen.SettingPreferencesUI> {
+                                SettingPreferencesUIPage()
+                            }
+
                             entry<Screen.FloatingOverlay> {
                                 SettingFloatingPage()
-                            }
-                                SettingPreferencesUIPage()
                             }
 
                             entry<Screen.SettingProvider> {
@@ -896,6 +897,8 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object SettingPreferencesUI : Screen
+
+    @Serializable
     data object FloatingOverlay : Screen
 
     @Serializable

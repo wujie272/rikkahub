@@ -95,6 +95,10 @@ class OverlayManager(private val context: Context) {
             triggerBall.snapToEdge = config.snapToEdge
             triggerBall.autoDock = config.autoDock
             triggerBall.dockInsetPx = config.dockInsetPx
+            // 触发球已显示时动态调整大小
+            if (triggerBall.isShown()) {
+                triggerBall.applySize()
+            }
         }
     }
 

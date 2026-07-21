@@ -12,8 +12,7 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.platform.ComposeView
+
 import kotlin.math.roundToInt
 
 /**
@@ -22,13 +21,13 @@ import kotlin.math.roundToInt
  *
  * 用法：
  *   val window = DraggableFloatingWindow(context)
- *   window.show(composeContent = { MyComposable() })
- *   window.setContent { NewContent() }
+ *   window.show(contentView)
+ *   window.setContent(newContentView)
  *   window.hide()
  *
  * 接口设计：
  * - header 32dp：拖拽区域 + 右上角关闭按钮
- * - content：ComposeView 内容区（ScrollView 包裹）
+ * - content：内容 View 区（ScrollView 包裹）
  * - footer 24dp：右下角缩放把手
  * - 左上角锁定/解锁按钮
  */
@@ -89,26 +88,16 @@ class DraggableFloatingWindow(
     fun isShown(): Boolean = rootView != null
 
     /**
-     * 显示悬浮窗口。内容通过 Compose 方式提供。
+     * 显示悬浮窗口。内容通过 View 方式提供。
      */
-    fun show(content: @Composable () -> Unit) {
+    fun show(content: View) {
         if (isShown()) hide()
         val density = context.resources.displayMetrics.density
         val (screenW, screenH) = currentScreenSize()
         val w = (widthDp.coerceAtLeast(MIN_WIDTH_DP) * density).roundToInt()
         val h = (heightDp.coerceAtLeast(MIN_HEIGHT_DP) * density).roundToInt()
 
-        val root = buildShell()
-        contentSlot?.let { slot ->
-            slot.removeAllViews()
-            slot.addView(
-                ComposeView(context).apply { setContent { content() } },
-                FrameLayout.LayoutParams(
-                    FrameLayout.LayoutParams.MATCH_PARENT,
-                    FrameLayout.LayoutParams.MATCH_PARENT
-                )
-            )
-        }
+        val root = buildShell(content)
 
         val centerX = ((screenW - w) / 2).coerceAtLeast(0)
         val centerY = ((screenH - h) / 2).coerceAtLeast(0)
@@ -139,13 +128,13 @@ class DraggableFloatingWindow(
     }
 
     /**
-     * 替换内容区 Compose。不重建窗口，避免闪烁。
+     * 替换内容区 View。不重建窗口，避免闪烁。
      */
-    fun setContent(content: @Composable () -> Unit) {
+    fun setContent(content: View) {
         val slot = contentSlot ?: return
         slot.removeAllViews()
         slot.addView(
-            ComposeView(context).apply { setContent { content() } },
+            content,
             FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT
@@ -187,6 +176,7 @@ class DraggableFloatingWindow(
     }
 
     fun hide() {
+        setWindowFocusable(false)
         val v = rootView ?: return
         runCatching { wm.removeView(v) }
         rootView = null
@@ -221,10 +211,25 @@ class DraggableFloatingWindow(
         firePositionChanged()
     }
 
+
+    /**
+     * 切换窗口是否可获取焦点（用于输入法弹出/收回）。
+     * 弹输入法时需移除 FLAG_NOT_FOCUSABLE，收起时恢复。
+     */
+    fun setWindowFocusable(focusable: Boolean) {
+        val v = rootView ?: return
+        val params = layoutParams ?: return
+        if (focusable) {
+            params.flags = params.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()
+        } else {
+            params.flags = params.flags or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+        }
+        runCatching { wm.updateViewLayout(v, params) }
+    }
     // ==================== 内部实现 ====================
 
     @SuppressLint("ClickableViewAccessibility")
-    private fun buildShell(): View {
+    private fun buildShell(content: View): View {
         val density = context.resources.displayMetrics.density
         val headerH = (HEADER_HEIGHT_DP * density).roundToInt()
         val closeBtnSize = (CLOSE_BTN_DP * density).roundToInt()
@@ -276,8 +281,13 @@ class DraggableFloatingWindow(
         ))
         headerView = header
 
-        // ------ Content (ScrollView 包裹 ComposeView) ------
-        val slot = FrameLayout(context)
+        // ------ Content (ScrollView 包裹内容 View) ------
+        val slot = FrameLayout(context).apply {
+            addView(content, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            ))
+        }
         contentSlot = slot
         val scroll = ScrollView(context).apply {
             isFillViewport = false

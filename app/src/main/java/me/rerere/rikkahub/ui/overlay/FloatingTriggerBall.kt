@@ -209,6 +209,37 @@ class FloatingTriggerBall(
         v.post { if (dockSide != DockSide.NONE) snapToEdge() }
     }
 
+    /**
+     * 已显示时动态调整触发球大小。
+     * 更新 LiquidFloatingContainer 的 ballRadius、图标大小和窗口尺寸。
+     */
+    fun applySize() {
+        val v = view ?: return
+        val lp = layoutParams ?: return
+        val density = context.resources.displayMetrics.density
+        val newSize = (sizeDp.coerceIn(28, 96) * density).toInt()
+        val newContainerW = (newSize * 1.3f).toInt()
+        val newContainerH = (newSize * 1.4f).toInt()
+
+        // 更新 LiquidFloatingContainer 的球半径
+        liquidView?.ballRadius = newSize / 2f
+
+        // 更新图标大小
+        iconView?.let { iv ->
+            iv.layoutParams = FrameLayout.LayoutParams(newSize, newSize, Gravity.CENTER)
+            val pad = (newSize * 0.18f).toInt()
+            iv.setPadding(pad, pad, pad, pad)
+        }
+
+        // 更新窗口尺寸
+        lp.width = newContainerW
+        lp.height = newContainerH
+        runCatching { wm.updateViewLayout(v, lp) }
+
+        // 重新吸附
+        v.post { snapToEdge() }
+    }
+
     // ==================== Touch 处理 ====================
 
     @SuppressLint("ClickableViewAccessibility")
@@ -415,28 +446,69 @@ class FloatingTriggerBall(
             val top = (cy + offsetY - itemSize / 2f).toInt()
                 .coerceIn(0, (screenH - itemSize).coerceAtLeast(0))
 
-            val btn = android.widget.Button(context).apply {
-                text = item.icon
-                textSize = 18f
-                setBackgroundResource(android.R.drawable.ic_menu_help)
-                setTextColor(0xFFFFFFFF.toInt())
+            // 圆形按钮：圆底 + emoji + 文字标签
+            val btnWrapper = android.widget.LinearLayout(context).apply {
+                orientation = android.widget.LinearLayout.VERTICAL
+                gravity = Gravity.CENTER_HORIZONTAL
                 alpha = 0f
                 scaleX = 0.4f
                 scaleY = 0.4f
                 translationX = cx - (left + itemSize / 2f)
                 translationY = cy - (top + itemSize / 2f)
-                contentDescription = item.label
                 isClickable = true
                 setOnClickListener { item.onClick(); dismissArcMenu() }
+                contentDescription = item.label
             }
-            val lp = FrameLayout.LayoutParams(itemSize, itemSize).apply {
+
+            // 圆形背景 + emoji
+            val circleSize = itemSize
+            val circle = FrameLayout(context).apply {
+                background = android.graphics.drawable.GradientDrawable().apply {
+                    shape = android.graphics.drawable.GradientDrawable.OVAL
+                    setColor(0xCC2C2C3E.toInt())
+                    setStroke((1.5f * density).toInt(), 0x55FFFFFF.toInt())
+                }
+            }
+            val emoji = android.widget.TextView(context).apply {
+                text = item.icon
+                textSize = 22f
+                gravity = Gravity.CENTER
+                setTextColor(0xFFFFFFFF.toInt())
+            }
+            circle.addView(emoji, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            ))
+            btnWrapper.addView(circle, circleSize, circleSize)
+
+            // 文字标签
+            val label = android.widget.TextView(context).apply {
+                text = item.label
+                textSize = 11f
+                gravity = Gravity.CENTER
+                setTextColor(0xCCFFFFFF.toInt())
+                // 单行 + 省略号防溢出
+                maxLines = 1
+                ellipsize = android.text.TextUtils.TruncateAt.END
+            }
+            val labelMarginTop = (4 * density).toInt()
+            val labelLp = android.widget.LinearLayout.LayoutParams(
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = labelMarginTop }
+            btnWrapper.addView(label, labelLp)
+
+            val lp = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
                 leftMargin = left
                 topMargin = top
             }
-            root.addView(btn, lp)
+            root.addView(btnWrapper, lp)
 
             // 旋出动画
-            btn.animate()
+            btnWrapper.animate()
                 .alpha(0.85f).scaleX(1f).scaleY(1f)
                 .translationX(0f).translationY(0f)
                 .setStartDelay(50L * idx)

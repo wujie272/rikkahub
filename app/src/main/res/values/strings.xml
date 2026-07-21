@@ -873,8 +873,8 @@
   <string name="setting_page_preferences_general_desc">Interaction behavior, scrolling, input settings</string>
   <string name="setting_page_preferences_ui">UI Preferences</string>
   <string name="setting_page_preferences_ui_desc">Message display, fonts, code blocks</string>
-  <string name="setting_page_floating">Floating UI</string>
-  <string name="setting_page_floating_desc">Floating trigger ball, agent overlay, chat window</string>
+  <string name="setting_page_floating">悬浮 UI</string>
+  <string name="setting_page_floating_desc">悬浮触发球、AI 状态浮窗、对话浮窗</string>
   <string name="setting_page_documentation">Documentation</string>
   <string name="setting_page_documentation_desc">View app usage instructions and help documentation</string>
   <string name="setting_page_donate">Donate</string>

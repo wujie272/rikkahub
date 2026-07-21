@@ -74,15 +74,22 @@ fun SettingFloatingPage(vm: SettingVM = koinViewModel()) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val canDrawOverlay = Settings.canDrawOverlays(context)
     val manager = FloatingBallInitializer.getManager()
-    // 读取持久化配置（LaunchedEffect 异步加载）
-    var initialConfig by remember { mutableStateOf<OverlayManager.BallConfig?>(null) }
+    // 读取持久化配置
+    var ballSize by remember { mutableIntStateOf(48) }
+    var snapToEdge by remember { mutableStateOf(true) }
+    var autoDock by remember { mutableStateOf(false) }
+    var dockInsetDp by remember { mutableIntStateOf(0) }
     LaunchedEffect(manager) {
-        initialConfig = manager?.let { runCatching { it.loadBallConfig() }.getOrNull() }
+        manager?.let { mgr ->
+            runCatching {
+                val config = mgr.loadBallConfig()
+                ballSize = config.sizeDp
+                snapToEdge = config.snapToEdge
+                autoDock = config.autoDock
+                dockInsetDp = config.dockInsetPx / 2
+            }
+        }
     }
-    var ballSize by remember { mutableIntStateOf(initialConfig?.sizeDp ?: 48) }
-    var snapToEdge by remember { mutableStateOf(initialConfig?.snapToEdge ?: true) }
-    var autoDock by remember { mutableStateOf(initialConfig?.autoDock ?: false) }
-    var dockInsetDp by remember { mutableIntStateOf(initialConfig?.dockInsetPx?.div(2) ?: 0) } // px→dp 近似
     var ballVisible by remember { mutableStateOf(manager?.triggerBall?.isShown() ?: false) }
     var agentOverlayEnabled by remember { mutableStateOf(true) }
     // 保存配置到 DataStore 并应用到触发球

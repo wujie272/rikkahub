@@ -300,17 +300,15 @@ fun ChatInput(
                                 )
                             }
 
-                            // Auto-retry
+                            // Auto-continue
                             AutoRetryButton(
-                                autoRetryOnError = assistant.autoRetryOnError,
-                                maxRetryCount = assistant.maxRetryCount,
-                                retryModelId = assistant.retryModelId,
+                                autoContinueOnError = assistant.autoContinueOnError,
+                                continueModelId = assistant.continueModelId,
                                 providers = settings.providers,
-                                onUpdate = { enabled, count, modelId ->
+                                onUpdate = { enabled, modelId ->
                                     onUpdateAssistant(assistant.copy(
-                                        autoRetryOnError = enabled,
-                                        maxRetryCount = count,
-                                        retryModelId = modelId,
+                                        autoContinueOnError = enabled,
+                                        continueModelId = modelId,
                                     ))
                                 },
                             )
