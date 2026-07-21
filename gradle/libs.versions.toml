@@ -1,4 +1,5 @@
 [versions]
+dynamicanimation = "1.1.0"
 agp = "9.2.1"
 barcodeScanning = "17.3.0"
 cameraCore = "1.6.1"
@@ -52,7 +53,6 @@ webkit = "1.16.0"
 appcompat = "1.7.1"
 material = "1.14.0"
 ucrop = "2.2.11-native"
-floatingx = "2.3.7"
 haze = "2.0.0-alpha03"
 uiautomator = "2.4.0"
 benchmarkMacroJunit4 = "1.4.1"
@@ -67,6 +67,7 @@ termux = "0.118.0"
 diffutils = "4.17"
 
 [libraries]
+androidx-dynamicanimation = { module = "androidx.dynamicanimation:dynamicanimation", version.ref = "dynamicanimation" }
 androidx-camera-core = { module = "androidx.camera:camera-core", version.ref = "cameraCore" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 androidx-media3-common = { module = "androidx.media3:media3-common", version.ref = "media3" }
@@ -146,8 +147,6 @@ androidx-webkit = { group = "androidx.webkit", name = "webkit", version.ref = "w
 androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
 material = { group = "com.google.android.material", name = "material", version.ref = "material" }
 ucrop = { group = "com.github.yalantis", name = "ucrop", version.ref = "ucrop" }
-floatingx = { group = "io.github.petterpx", name = "floatingx", version.ref = "floatingx" }
-floatingx-compose = { group = "io.github.petterpx", name = "floatingx-compose", version.ref = "floatingx" }
 haze = { module = "dev.chrisbanes.haze:haze", version.ref = "haze" }
 haze-blur = { module = "dev.chrisbanes.haze:haze-blur", version.ref = "haze" }
 haze-blur-materials = { module = "dev.chrisbanes.haze:haze-blur-materials", version.ref = "haze" }

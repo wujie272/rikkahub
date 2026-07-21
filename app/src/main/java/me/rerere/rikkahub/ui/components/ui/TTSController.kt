@@ -53,10 +53,7 @@ fun TTSController() {
         }
     }
 
-    FloatingWindow(
-        tag = "tts_controller",
-        visibility = isVisible
-    ) {
+    if (isVisible) {
         val playbackState by ttsState.playbackState.collectAsStateWithLifecycle()
         var expand by remember { mutableStateOf(false) }
         Surface(

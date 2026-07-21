@@ -51,9 +51,7 @@ dependencies {
     api(libs.commons.text)
 
     // floating
-    // https://github.com/Petterpx/FloatingX
-    api(libs.floatingx)
-    api(libs.floatingx.compose)
+    api(libs.androidx.dynamicanimation)
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)

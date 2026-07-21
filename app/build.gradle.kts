@@ -119,6 +119,13 @@ android {
         generateLocaleConfig = true
     }
     packaging {
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
+    }
+
         jniLibs {
             useLegacyPackaging = true
             pickFirsts += "lib/*/libtermux.so"

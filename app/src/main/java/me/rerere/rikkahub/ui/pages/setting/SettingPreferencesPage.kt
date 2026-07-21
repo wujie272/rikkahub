@@ -19,6 +19,7 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Notification01
 import me.rerere.hugeicons.stroke.PaintBoard
 import me.rerere.hugeicons.stroke.Settings03
+import me.rerere.hugeicons.stroke.Circle
 import me.rerere.hugeicons.stroke.Sun01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
@@ -80,7 +81,12 @@ fun SettingPreferencesPage() {
                         onClick = { navController.navigate(Screen.SettingPreferencesUI) },
                         leadingContent = { Icon(HugeIcons.PaintBoard, null) },
                         headlineContent = { Text(stringResource(R.string.setting_page_preferences_ui)) },
-                        supportingContent = { Text(stringResource(R.string.setting_page_preferences_ui_desc)) },
+                    )
+                    item(
+                        onClick = { navController.navigate(Screen.FloatingOverlay) },
+                        leadingContent = { Icon(HugeIcons.Circle, null) },
+                        headlineContent = { Text("Floating UI") },
+                        supportingContent = { Text("Floating trigger ball, agent overlay, chat window") },
                     )
                 }
             }
