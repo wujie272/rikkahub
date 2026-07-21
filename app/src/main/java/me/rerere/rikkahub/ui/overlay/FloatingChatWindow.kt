@@ -103,9 +103,10 @@ object FloatingChatWindow {
         }
         composeView = cv
 
-        // 先 attach 再 addView（ComposeView 自带滚动，不包 ScrollView 防嵌套冲突）
-        owner.attach(cv)
-        fw.show(cv, wrapContent = false)
+        // 在 addView 前把 LifecycleOwner/ViewModelStoreOwner/SavedStateRegistryOwner
+        // 设到 root 上，ComposeView 的 onAttachedToWindow 通过 ViewTree 向上遍历就能找到
+        // ComposeView 自带滚动，不包 ScrollView 防嵌套冲突
+        fw.show(cv, wrapContent = false) { root -> owner.attach(root) }
         owner.start()
     }
 
