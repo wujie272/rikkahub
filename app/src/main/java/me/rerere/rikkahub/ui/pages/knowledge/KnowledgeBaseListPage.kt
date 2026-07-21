@@ -21,13 +21,11 @@ import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -38,15 +36,14 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Add01
 import me.rerere.hugeicons.stroke.Book03
 import me.rerere.hugeicons.stroke.Bookshelf01
+import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.File02
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.SwipeToDismissBox
-import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.rememberSwipeToDismissBoxState
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.res.stringResource
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
@@ -66,10 +63,6 @@ fun KnowledgeBaseListPage(vm: KnowledgeVM = koinViewModel()) {
     val loading by vm.loading.collectAsStateWithLifecycle()
     val navController = LocalNavController.current
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
-    var pendingDeleteId by remember { mutableStateOf<String?>(null) }
-    val pendingDeleteKb = pendingDeleteId?.let { id -> kbs.find { it.id == id } }
-    // 存储每个 item 的 dismissState，用于取消时复位
-    val dismissStates = remember { mutableMapOf<String, androidx.compose.material3.SwipeToDismissBoxState>() }
 
     Scaffold(
         topBar = {
@@ -121,37 +114,30 @@ fun KnowledgeBaseListPage(vm: KnowledgeVM = koinViewModel()) {
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 items(kbs, key = { it.id }) { kb ->
-                    val dismissState = rememberSwipeToDismissBoxState(
-                        confirmValueChange = { value ->
-                            if (value == SwipeToDismissBoxValue.EndToStart) {
-                                pendingDeleteId = kb.id
-                                true
-                            } else false
-                        }
-                    )
-                    // 记录 state 以便取消时复位
-                    LaunchedEffect(kb.id) { dismissStates[kb.id] = dismissState }
-                    DisposableEffect(kb.id) {
-                        onDispose { dismissStates.remove(kb.id) }
-                    }
+                    val dismissState = rememberSwipeToDismissBoxState()
+                    val scope = rememberCoroutineScope()
+
                     SwipeToDismissBox(
                         state = dismissState,
                         backgroundContent = {
-                            val color by animateColorAsState(
-                                targetValue = MaterialTheme.colorScheme.errorContainer,
-                                label = "swipe_bg"
-                            )
-                            Box(
+                            Row(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .background(color)
+                                    .background(MaterialTheme.colorScheme.errorContainer)
                                     .padding(end = 20.dp),
-                                contentAlignment = Alignment.CenterEnd
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
                             ) {
-                                Icon(
-                                    HugeIcons.Delete01, stringResource(R.string.kb_delete),
-                                    tint = MaterialTheme.colorScheme.onErrorContainer
-                                )
+                                FilledTonalIconButton(
+                                    onClick = { scope.launch { dismissState.reset() } }
+                                ) {
+                                    Icon(HugeIcons.Cancel01, null)
+                                }
+                                FilledTonalIconButton(
+                                    onClick = { vm.deleteKnowledgeBase(kb.id) }
+                                ) {
+                                    Icon(HugeIcons.Delete01, null)
+                                }
                             }
                         },
                         enableDismissFromStartToEnd = false,
@@ -167,27 +153,6 @@ fun KnowledgeBaseListPage(vm: KnowledgeVM = koinViewModel()) {
                     }
                 }
             }
-        }
-
-        if (pendingDeleteKb != null) {
-            androidx.compose.material3.AlertDialog(
-                onDismissRequest = { pendingDeleteId = null },
-                title = { Text(stringResource(R.string.kb_delete_confirm)) },
-                text = { Text(stringResource(R.string.kb_delete_message, pendingDeleteKb.name)) },
-                confirmButton = {
-                    TextButton(onClick = {
-                        vm.deleteKnowledgeBase(pendingDeleteKb.id)
-                        pendingDeleteId = null
-                    }) { Text(stringResource(R.string.kb_delete), color = MaterialTheme.colorScheme.error) }
-                },
-                dismissButton = {
-                    TextButton(onClick = {
-                        // 取消删除：复位侧滑状态，让卡片滑回来
-                        pendingDeleteId?.let { dismissStates[it]?.snapTo(SwipeToDismissBoxValue.Settled) }
-                        pendingDeleteId = null
-                    }) { Text(stringResource(R.string.kb_cancel)) }
-                },
-            )
         }
     }
 }
