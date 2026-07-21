@@ -1,5 +1,6 @@
 package me.rerere.rikkahub
 
+import android.app.Activity
 import android.app.Application
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -17,6 +18,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import me.rerere.rikkahub.data.files.FileFolders
 import java.io.File
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
@@ -156,6 +158,9 @@ class RikkaHubApp : Application() {
         // Initialize floating overlay system (trigger ball, chat window, etc.)
         // No-op if SYSTEM_ALERT_WINDOW not granted.
         FloatingBallInitializer.init(this, get<AppScope>(), autoShowBall = false)
+
+        // 当 RikkaHub 自身在前台时隐藏悬浮球，切到后台时恢复
+        registerActivityLifecycleCallbacks(rikkahubOverlayVisibilityController())
 
         // Composer.setDiagnosticStackTraceMode(ComposeStackTraceMode.Auto)
     }
@@ -479,6 +484,41 @@ class RikkaHubApp : Application() {
         super.onTerminate()
         get<AppScope>().cancel()
         stopService(Intent(this, WebServerService::class.java))
+    }
+
+    /**
+     * 控制悬浮球在 RikkaHub 前台时隐藏，后台时恢复。
+     * 避免悬浮球遮挡 App 自身 UI。
+     */
+    private fun rikkahubOverlayVisibilityController(): ActivityLifecycleCallbacks {
+        val started = AtomicInteger(0)
+        return object : ActivityLifecycleCallbacks {
+            override fun onActivityStarted(activity: Activity) {
+                if (started.getAndIncrement() == 0) {
+                    // App 回到前台 → 隐藏悬浮球
+                    val manager = FloatingBallInitializer.getManager()
+                    if (manager?.triggerBall?.isShown() == true) {
+                        manager.hideBall()
+                    }
+                }
+            }
+
+            override fun onActivityStopped(activity: Activity) {
+                if (started.decrementAndGet() == 0) {
+                    // App 进入后台 → 恢复悬浮球
+                    val manager = FloatingBallInitializer.getManager()
+                    if (manager != null) {
+                        manager.showBall()
+                    }
+                }
+            }
+
+            override fun onActivityCreated(activity: Activity, savedInstanceState: android.os.Bundle?) {}
+            override fun onActivityResumed(activity: Activity) {}
+            override fun onActivityPaused(activity: Activity) {}
+            override fun onActivitySaveInstanceState(activity: Activity, outState: android.os.Bundle) {}
+            override fun onActivityDestroyed(activity: Activity) {}
+        }
     }
 }
 
