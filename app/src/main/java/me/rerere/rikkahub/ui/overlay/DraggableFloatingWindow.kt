@@ -89,15 +89,19 @@ class DraggableFloatingWindow(
 
     /**
      * 显示悬浮窗口。内容通过 View 方式提供。
+     *
+     * @param wrapContent 是否用 ScrollView 包裹内容。
+     *        如果内容是 ComposeView（自带 LazyColumn 等滚动容器），应传 false，
+     *        避免嵌套滚动冲突。
      */
-    fun show(content: View) {
+    fun show(content: View, wrapContent: Boolean = true) {
         if (isShown()) hide()
         val density = context.resources.displayMetrics.density
         val (screenW, screenH) = currentScreenSize()
         val w = (widthDp.coerceAtLeast(MIN_WIDTH_DP) * density).roundToInt()
         val h = (heightDp.coerceAtLeast(MIN_HEIGHT_DP) * density).roundToInt()
 
-        val root = buildShell(content)
+        val root = buildShell(content, wrapContent)
 
         val centerX = ((screenW - w) / 2).coerceAtLeast(0)
         val centerY = ((screenH - h) / 2).coerceAtLeast(0)
@@ -229,7 +233,7 @@ class DraggableFloatingWindow(
     // ==================== 内部实现 ====================
 
     @SuppressLint("ClickableViewAccessibility")
-    private fun buildShell(content: View): View {
+    private fun buildShell(content: View, wrapContent: Boolean = true): View {
         val density = context.resources.displayMetrics.density
         val headerH = (HEADER_HEIGHT_DP * density).roundToInt()
         val closeBtnSize = (CLOSE_BTN_DP * density).roundToInt()
@@ -281,7 +285,7 @@ class DraggableFloatingWindow(
         ))
         headerView = header
 
-        // ------ Content (ScrollView 包裹内容 View) ------
+        // ------ Content ------
         val slot = FrameLayout(context).apply {
             addView(content, FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
@@ -289,16 +293,24 @@ class DraggableFloatingWindow(
             ))
         }
         contentSlot = slot
-        val scroll = ScrollView(context).apply {
-            isFillViewport = false
-            addView(slot, FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT
+        if (wrapContent) {
+            // 旧 View 内容：用 ScrollView 包裹，支持滚动
+            val scroll = ScrollView(context).apply {
+                isFillViewport = false
+                addView(slot, FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.WRAP_CONTENT
+                ))
+            }
+            wrap.addView(scroll, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
+            ))
+        } else {
+            // Compose 内容自带滚动（LazyColumn），直接放 slot
+            wrap.addView(slot, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
             ))
         }
-        wrap.addView(scroll, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
-        ))
 
         // ------ Footer (缩放) ------
         val footer = FrameLayout(context).apply {

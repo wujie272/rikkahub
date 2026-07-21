@@ -14,7 +14,10 @@ import androidx.dynamicanimation.animation.FloatValueHolder
 import androidx.dynamicanimation.animation.SpringAnimation
 import androidx.dynamicanimation.animation.SpringForce
 import kotlin.math.abs
-import kotlin.math.roundToInt
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 private typealias DockSide = LiquidFloatingContainer.DockSide
 
@@ -80,6 +83,8 @@ class FloatingTriggerBall(
     @Volatile var onLongPress: (() -> Unit)? = null
     @Volatile var onRegionPick: (() -> Unit)? = null
     @Volatile var onPositionChanged: ((x: Int, y: Int) -> Unit)? = null
+    /** 用于位置持久化的协程作用域，由 OverlayManager 注入，默认使用 IO 调度器 */
+    @Volatile var ioScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     @Volatile var snapToEdge: Boolean = true
     @Volatile var autoDock: Boolean = false
     @Volatile var sizeDp: Int = DEFAULT_SIZE_DP
@@ -285,10 +290,12 @@ class FloatingTriggerBall(
                         v.removeCallbacks(longPressRunnable)
                         snapAnimX?.cancel()
                         if (dockSide != DockSide.NONE) {
-                            liquidView?.side = DockSide.NONE
-                            v.alpha = 1.0f
+                            // 唤醒：从 dock 状态平滑滑出，不瞬时跳变
+                            val wakeX = wakeFromSnap()
+                            initX = wakeX
+                        } else {
+                            initX = params.x
                         }
-                        initX = params.x
                         initY = params.y
                         downX = ev.rawX
                         downY = ev.rawY
@@ -307,7 +314,7 @@ class FloatingTriggerBall(
                     } else if (moved) {
                         initialX = params.x
                         initialY = params.y
-                        persistPositionDebounced()
+                        persistPosition()
                         if (snapToEdge) snapToEdge()
                     }
                     if (autoDock && snapToEdge) {
@@ -319,6 +326,44 @@ class FloatingTriggerBall(
                 else -> false
             }
         }
+    }
+
+    // ==================== Dock 唤醒 ====================
+
+    /**
+     * 从 dock 吸附态唤醒：恢复 alpha，用 SpringAnimation 平滑滑离边缘到 8dp margin 处。
+     * 返回唤醒后的 X，用于 touch listener 重置 initX，让拖动从正确位置开始。
+     */
+    private fun wakeFromSnap(): Int {
+        val v = view
+        val params = layoutParams ?: return 0
+        v?.animate()?.cancel()
+        v?.alpha = 1.0f
+        val docked = dockSide != DockSide.NONE
+        if (docked) liquidView?.side = DockSide.NONE
+        if (!docked) return params.x
+
+        val (screenW, _) = currentScreenSize()
+        val size = params.width
+        val density = context.resources.displayMetrics.density
+        val margin = (8 * density).toInt()
+        val centerX = params.x + size / 2
+        val targetX = if (centerX < screenW / 2) margin
+        else (screenW - size - margin).coerceAtLeast(0)
+
+        snapAnimX?.cancel()
+        snapAnimX = SpringAnimation(FloatValueHolder(params.x.toFloat())).apply {
+            spring = SpringForce(targetX.toFloat()).apply {
+                dampingRatio = SpringForce.DAMPING_RATIO_NO_BOUNCY
+                stiffness = SpringForce.STIFFNESS_HIGH
+            }
+            addUpdateListener { _, value, _ ->
+                params.x = value.toInt()
+                runCatching { wm.updateViewLayout(v, params) }
+            }
+            start()
+        }
+        return targetX
     }
 
     // ==================== 吸附 ====================
@@ -353,7 +398,7 @@ class FloatingTriggerBall(
                     runCatching { wm.updateViewLayout(v, params) }
                 }
                 addEndListener { _, _, _, _ ->
-                    persistPositionDebounced()
+                    persistPosition()
                     v.animate().alpha(0.75f).setDuration(220L).start()
                 }
                 start()
@@ -362,7 +407,7 @@ class FloatingTriggerBall(
             liquidView?.side = DockSide.NONE
             v.animate().cancel()
             v.alpha = 1.0f
-            persistPositionDebounced()
+            persistPosition()
         }
 
         snapAnimY = SpringAnimation(FloatValueHolder(params.y.toFloat())).apply {
@@ -453,6 +498,7 @@ class FloatingTriggerBall(
                 alpha = 0f
                 scaleX = 0.4f
                 scaleY = 0.4f
+                rotation = -360f
                 translationX = cx - (left + itemSize / 2f)
                 translationY = cy - (top + itemSize / 2f)
                 isClickable = true
@@ -507,9 +553,10 @@ class FloatingTriggerBall(
             }
             root.addView(btnWrapper, lp)
 
-            // 旋出动画
+            // 旋出动画：从球中心旋转飞出，OvershootInterpolator 让落位时轻微过冲再回弹
             btnWrapper.animate()
                 .alpha(0.85f).scaleX(1f).scaleY(1f)
+                .rotation(0f)
                 .translationX(0f).translationY(0f)
                 .setStartDelay(50L * idx)
                 .setDuration(380L)
@@ -556,15 +603,15 @@ class FloatingTriggerBall(
     // ==================== 持久化 ====================
 
     @Volatile private var positionPersistPending = false
-    private fun persistPositionDebounced() {
+    private fun persistPosition() {
         if (positionPersistPending) return
         positionPersistPending = true
         val params = layoutParams ?: run { positionPersistPending = false; return }
         val x = params.x; val y = params.y
-        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-            positionPersistPending = false
+        ioScope.launch {
             onPositionChanged?.invoke(x, y)
-        }, 100L)
+            positionPersistPending = false
+        }
     }
 
     // ==================== 工具方法 ====================

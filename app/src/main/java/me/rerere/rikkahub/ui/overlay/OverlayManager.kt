@@ -50,6 +50,7 @@ class OverlayManager(private val context: Context) {
     /** 悬浮触发球 */
     val triggerBall: FloatingTriggerBall by lazy {
         FloatingTriggerBall(context.applicationContext).apply {
+            ioScope = this@OverlayManager.ioScope
             onPositionChanged = { x, y -> saveBallPosition(x, y) }
         }
     }

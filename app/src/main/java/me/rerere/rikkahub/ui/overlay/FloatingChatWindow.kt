@@ -2,26 +2,54 @@ package me.rerere.rikkahub.ui.overlay
 
 import android.content.Context
 import android.content.Intent
-import android.graphics.Color
-import android.graphics.drawable.GradientDrawable
-import android.os.Handler
-import android.os.Looper
 import android.provider.Settings
 import android.util.Log
-import android.util.TypedValue
-import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
-import android.widget.EditText
-import android.widget.FrameLayout
-import android.widget.ImageView
-import android.widget.LinearLayout
-import android.widget.ScrollView
-import android.widget.TextView
-
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 /**
  * AI 对话浮窗管理器。
- * 使用 View-based 方式构建聊天界面，避免 ComposeView 在 WindowManager 中需要 LifecycleOwner 的问题。
+ * 使用 Jetpack Compose 构建聊天界面，通过 [OverlayLifecycleOwner] 提供生命周期支持。
  */
 object FloatingChatWindow {
     private const val TAG = "FloatingChatWindow"
@@ -30,18 +58,15 @@ object FloatingChatWindow {
     private var floatingWindow: DraggableFloatingWindow? = null
 
     @Volatile
-    private var appContext: Context? = null
+    private var lifecycleOwner: OverlayLifecycleOwner? = null
 
     @Volatile
-    private var messages: MutableList<ChatMessage> = mutableListOf(
+    private var composeView: ComposeView? = null
+
+    /** 消息列表状态，由 Compose 持有 */
+    private val _messages = mutableStateListOf(
         ChatMessage("你好！我是 Rikka AI，随时为你服务。", isUser = false)
     )
-
-    private val mainHandler = Handler(Looper.getMainLooper())
-
-    // 缓存当前 View 引用，方便刷新
-    private var messageContainer: LinearLayout? = null
-    private var inputField: EditText? = null
 
     data class ChatMessage(
         val text: String,
@@ -52,218 +77,221 @@ object FloatingChatWindow {
 
     fun show(context: Context) {
         val app = context.applicationContext
-        appContext = app
         if (!canShow(app)) {
             Log.d(TAG, "SYSTEM_ALERT_WINDOW not granted")
             return
         }
-        mainHandler.post { showInternal(app) }
-    }
-
-    fun hide() {
-        floatingWindow?.hide()
-        floatingWindow = null
-        messageContainer = null
-        inputField = null
-    }
-
-    fun isShowing(): Boolean = floatingWindow?.isShown() == true
-
-    fun addMessage(text: String, isUser: Boolean) {
-        messages.add(ChatMessage(text, isUser))
-        mainHandler.post { refreshContent() }
-    }
-
-    private fun showInternal(app: Context) {
         if (floatingWindow?.isShown() == true) return
+
         val fw = DraggableFloatingWindow(app).apply {
             widthDp = 320
             heightDp = 400
             onDismiss = { hide() }
         }
         floatingWindow = fw
-        fw.show(buildChatView(app))
+
+        // 创建 ComposeView + 生命周期 Owner
+        val owner = OverlayLifecycleOwner()
+        lifecycleOwner = owner
+        val cv = ComposeView(app).apply {
+            id = View.generateViewId()
+            setContent { FloatingChatContent() }
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+        }
+        composeView = cv
+
+        // 先 attach 再 addView（ComposeView 自带滚动，不包 ScrollView 防嵌套冲突）
+        owner.attach(cv)
+        fw.show(cv, wrapContent = false)
+        owner.start()
     }
 
-    private fun refreshContent() {
-        val fw = floatingWindow ?: return
-        if (!fw.isShown()) return
-        val ctx = appContext ?: return
-        messageContainer?.let { mc ->
-            mc.removeAllViews()
-            messages.forEach { msg ->
-                mc.addView(createMessageBubble(ctx, msg))
+    fun hide() {
+        lifecycleOwner?.pause()
+        // 先移除 View（触发 Compose 的 DisposeOnDetachedFromWindow），再销毁 LifecycleOwner
+        floatingWindow?.hide()
+        lifecycleOwner?.destroy()
+        lifecycleOwner = null
+        floatingWindow = null
+        composeView = null
+    }
+
+    fun isShowing(): Boolean = floatingWindow?.isShown() == true
+
+    fun addMessage(text: String, isUser: Boolean) {
+        _messages.add(ChatMessage(text, isUser))
+    }
+
+    fun clearMessages() {
+        _messages.clear()
+    }
+
+    // ==================== Compose UI ====================
+
+    @Composable
+    private fun FloatingChatContent() {
+        val context = LocalContext.current
+        val listState = rememberLazyListState()
+        var inputText by remember { mutableStateOf("") }
+
+        // 新消息时自动滚动到底部
+        val msgCount = _messages.size
+        LaunchedEffect(msgCount) {
+            if (msgCount > 0) {
+                listState.animateScrollToItem(msgCount - 1)
             }
-            // 滚动到底部
-            mc.post {
-                (mc.parent as? View)?.let { parent ->
-                    (parent.parent as? ScrollView)?.fullScroll(View.FOCUS_DOWN)
+        }
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(12.dp)
+        ) {
+            // 标题
+            Text(
+                text = "💬 AI 助手",
+                style = MaterialTheme.typography.titleSmall,
+                color = Color.White
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // 分隔线
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(Color.White.copy(alpha = 0.25f))
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // 消息列表
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                items(
+                    items = _messages,
+                    key = { it.hashCode() }
+                ) { msg ->
+                    ChatBubble(msg)
                 }
             }
-        }
-    }
 
-    private fun buildChatView(context: Context): View {
-        val density = context.resources.displayMetrics.density
-        val pad8 = (8 * density).toInt()
-        val pad4 = (4 * density).toInt()
+            Spacer(modifier = Modifier.height(8.dp))
 
-        // 外层容器
-        val root = LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(pad8, pad8, pad8, pad8)
-            background = GradientDrawable().apply {
-                cornerRadius = 12f
-                setColor(0xE61E1E2E.toInt())
-            }
-        }
+            // 分隔线
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(Color.White.copy(alpha = 0.25f))
+            )
 
-        // 标题
-        val title = TextView(context).apply {
-            text = "💬 AI 助手"
-            setTextColor(Color.WHITE)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-        }
-        root.addView(title, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT
-        ).apply { bottomMargin = pad4 })
+            Spacer(modifier = Modifier.height(8.dp))
 
-        // 分隔线
-        val divider = View(context).apply {
-            setBackgroundColor(0x40FFFFFF.toInt())
-        }
-        root.addView(divider, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, 1
-        ))
-
-        // 消息列表（ScrollView 包裹 LinearLayout）
-        val mc = LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(0, pad4, 0, pad4)
-        }
-        messageContainer = mc
-        messages.forEach { msg ->
-            mc.addView(createMessageBubble(context, msg))
-        }
-
-        val scroll = ScrollView(context).apply {
-            isFillViewport = false
-            addView(mc, FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT
-            ))
-        }
-        root.addView(scroll, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
-        ))
-
-        // 分隔线
-        val divider2 = View(context).apply {
-            setBackgroundColor(0x40FFFFFF.toInt())
-        }
-        root.addView(divider2, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, 1
-        ).apply { topMargin = pad4 })
-
-        // 输入区域
-        val inputRow = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            setPadding(0, pad4, 0, 0)
-        }
-
-        val editText = EditText(context).apply {
-            hint = "输入消息…"
-            setHintTextColor(0x80FFFFFF.toInt())
-            setTextColor(Color.WHITE)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-            maxLines = 3
-            background = GradientDrawable().apply {
-                cornerRadius = 8f
-                setStroke(1, 0x40FFFFFF.toInt())
-                setColor(0x00000000)
-            }
-            setPadding(pad8, (6 * density).toInt(), pad8, (6 * density).toInt())
-        }
-        inputField = editText
-
-        // 输入框获取焦点时让窗口可聚焦，弹出输入法
-        editText.setOnFocusChangeListener { _, hasFocus ->
-            floatingWindow?.setWindowFocusable(hasFocus)
-        }
-
-        val sendBtn = ImageView(context).apply {
-            setImageResource(android.R.drawable.ic_media_play)
-            imageTintList = android.content.res.ColorStateList.valueOf(Color.WHITE)
-            val btnPad = (8 * density).toInt()
-            setPadding(btnPad, btnPad, btnPad, btnPad)
-            isClickable = true
-            isFocusable = true
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(0xFF60A5FA.toInt())
-            }
-            setOnClickListener {
-                val text = editText.text.toString().trim()
-                if (text.isNotEmpty()) {
-                    addMessage(text, isUser = true)
-                    editText.setText("")
-                    openMainChat(context, text)
-                }
-            }
-        }
-
-        val inputLp = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-        inputLp.rightMargin = pad4
-        inputRow.addView(editText, inputLp)
-        inputRow.addView(sendBtn, LinearLayout.LayoutParams(
-            (40 * density).toInt(),
-            (40 * density).toInt()
-        ))
-
-        root.addView(inputRow, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT
-        ))
-
-        return root
-    }
-
-    private fun createMessageBubble(context: Context, msg: ChatMessage): View {
-        val density = context.resources.displayMetrics.density
-        val bgColor = if (msg.isUser) 0xFF60A5FA.toInt() else 0x40FFFFFF.toInt()
-        val gravity = if (msg.isUser) Gravity.END else Gravity.START
-
-        val bubble = TextView(context).apply {
-            text = msg.text
-            setTextColor(Color.WHITE)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-            maxLines = 10
-            setPadding((10 * density).toInt(), (6 * density).toInt(),
-                (10 * density).toInt(), (6 * density).toInt())
-            background = GradientDrawable().apply {
-                cornerRadii = floatArrayOf(
-                    8f, 8f,  // top-left
-                    8f, 8f,  // top-right
-                    if (msg.isUser) 8f else 0f, if (msg.isUser) 8f else 0f,  // bottom-right
-                    if (msg.isUser) 0f else 8f, if (msg.isUser) 0f else 8f   // bottom-left
+            // 输入区域
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                TextField(
+                    value = inputText,
+                    onValueChange = { inputText = it },
+                    placeholder = {
+                        Text(
+                            "输入消息…",
+                            color = Color.White.copy(alpha = 0.5f),
+                            fontSize = 13.sp
+                        )
+                    },
+                    textStyle = MaterialTheme.typography.bodySmall.copy(
+                        color = Color.White
+                    ),
+                    modifier = Modifier.weight(1f),
+                    maxLines = 3,
+                    singleLine = false,
+                    shape = RoundedCornerShape(8.dp),
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = Color.Transparent,
+                        unfocusedContainerColor = Color.Transparent,
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent,
+                        cursorColor = Color.White,
+                    ),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                    keyboardActions = KeyboardActions(
+                        onSend = {
+                            val text = inputText.trim()
+                            if (text.isNotEmpty()) {
+                                addMessage(text, isUser = true)
+                                inputText = ""
+                                openMainChat(context, text)
+                            }
+                        }
+                    )
                 )
-                setColor(bgColor)
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                // 发送按钮
+                IconButton(
+                    onClick = {
+                        val text = inputText.trim()
+                        if (text.isNotEmpty()) {
+                            addMessage(text, isUser = true)
+                            inputText = ""
+                            openMainChat(context, text)
+                        }
+                    },
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF60A5FA))
+                ) {
+                    // 使用简单的三角形文本作为发送图标
+                    Text(
+                        text = "▶",
+                        color = Color.White,
+                        fontSize = 18.sp,
+                        textAlign = TextAlign.Center
+                    )
+                }
             }
         }
+    }
 
-        val container = FrameLayout(context)
-        val lp = FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.WRAP_CONTENT,
-            FrameLayout.LayoutParams.WRAP_CONTENT
-        ).apply {
-            this.gravity = gravity
-            val margin4 = (4 * density).toInt()
-            setMargins(margin4, margin4, margin4, margin4)
+    @Composable
+    private fun ChatBubble(msg: ChatMessage) {
+        val isUser = msg.isUser
+        val bgColor = if (isUser) Color(0xFF60A5FA) else Color.White.copy(alpha = 0.25f)
+        val shape = RoundedCornerShape(
+            topStart = 8.dp,
+            topEnd = 8.dp,
+            bottomStart = if (isUser) 8.dp else 0.dp,
+            bottomEnd = if (isUser) 0.dp else 8.dp
+        )
+
+        Box(
+            modifier = Modifier.fillMaxWidth(),
+            contentAlignment = if (isUser) Alignment.CenterEnd else Alignment.CenterStart
+        ) {
+            Text(
+                text = msg.text,
+                color = Color.White,
+                fontSize = 13.sp,
+                maxLines = 10,
+                modifier = Modifier
+                    .clip(shape)
+                    .background(bgColor)
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+            )
         }
-        container.addView(bubble, lp)
-
-        return container
     }
 
     private fun openMainChat(context: Context, message: String) {
