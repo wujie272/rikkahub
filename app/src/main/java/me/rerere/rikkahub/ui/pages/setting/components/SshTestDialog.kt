@@ -42,6 +42,8 @@ import me.rerere.rikkahub.data.ai.tools.local.isUsable
 import me.rerere.rikkahub.data.ai.tools.local.newJSch
 import me.rerere.rikkahub.data.ai.tools.local.openSshSession
 import me.rerere.rikkahub.data.ai.tools.local.probeReachability
+import me.rerere.rikkahub.data.ai.tools.local.runOnSession
+import kotlinx.serialization.json.jsonPrimitive
 
 private const val SSH_TEST_TIMEOUT_MS = 15_000
 
@@ -214,30 +216,11 @@ private suspend fun runTest(context: Context, host: SshHostEntity): TestResult =
         val handshakeMs = System.currentTimeMillis() - handshakeStart
         val hostKey = session.getHostKey()
         val fingerprint = hostKey?.getFingerPrint(jsch)?.takeIf { it.isNotBlank() }
-            ?: "SHA256:${hostKey?.getKey()?.let { java.lang.Long.toHexString(it.hashCode().toLong()) }}"
 
         // 3) 验证命令
-        val cmdStart = System.currentTimeMillis()
-        val channel = session.openChannel("exec") as com.jcraft.jsch.ChannelExec
-        var cmdOk = false
-        try {
-            channel.setCommand("echo ok && whoami")
-            channel.connect(SSH_TEST_TIMEOUT_MS)
-            val out = java.io.ByteArrayOutputStream()
-            val input = channel.inputStream
-            val buf = ByteArray(1024)
-            var len: Int
-            while (input.read(buf).also { len = it } > 0) {
-                out.write(buf, 0, len)
-            }
-            val output = out.toString(Charsets.UTF_8).trim()
-            cmdOk = output.contains("ok") && output.lines().size >= 2
-        } catch (_: Exception) {
-            cmdOk = false
-        } finally {
-            try { channel.disconnect() } catch (_: Exception) {}
-            try { session.disconnect() } catch (_: Exception) {}
-        }
+        val cmdResult = runOnSession(session, "echo ok && whoami", SSH_TEST_TIMEOUT_MS)
+        val cmdOk = cmdResult["error"] == null && cmdResult["success"]?.jsonPrimitive?.boolean == true
+        try { session.disconnect() } catch (_: Exception) {}
 
         TestResult(
             networkLabel = probe.winningLabel,
