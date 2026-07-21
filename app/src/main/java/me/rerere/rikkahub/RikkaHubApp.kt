@@ -155,7 +155,7 @@ class RikkaHubApp : Application() {
 
         // Initialize floating overlay system (trigger ball, chat window, etc.)
         // No-op if SYSTEM_ALERT_WINDOW not granted.
-        FloatingBallInitializer.init(this, get<AppScope>())
+        FloatingBallInitializer.init(this, get<AppScope>(), autoShowBall = false)
 
         // Composer.setDiagnosticStackTraceMode(ComposeStackTraceMode.Auto)
     }

@@ -57,8 +57,12 @@ object FloatingBallInitializer {
         // 配置触发球行为
         manager.triggerBall.apply {
             this.onTap = onBallTap ?: {
-                // 默认：打开对话浮窗
-                manager.chatWindow.show(context)
+                // 默认：切换对话浮窗显示/隐藏
+                if (manager.chatWindow.isShowing()) {
+                    manager.chatWindow.hide()
+                } else {
+                    manager.chatWindow.show(context)
+                }
             }
             this.onLongPress = onBallLongPress ?: {
                 // 默认：显示对话浮窗快捷入口

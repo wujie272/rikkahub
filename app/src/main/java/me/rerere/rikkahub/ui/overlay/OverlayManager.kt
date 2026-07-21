@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * 统一管理所有浮窗组件的生命周期和配置。
@@ -95,9 +96,11 @@ class OverlayManager(private val context: Context) {
             triggerBall.snapToEdge = config.snapToEdge
             triggerBall.autoDock = config.autoDock
             triggerBall.dockInsetPx = config.dockInsetPx
-            // 触发球已显示时动态调整大小
+            // 触发球已显示时动态调整大小（View 操作必须切回主线程）
             if (triggerBall.isShown()) {
-                triggerBall.applySize()
+                withContext(Dispatchers.Main) {
+                    triggerBall.applySize()
+                }
             }
         }
     }
@@ -121,13 +124,15 @@ class OverlayManager(private val context: Context) {
         ioScope.launch {
             // 先加载配置再显示
             val config = loadBallConfig()
-            triggerBall.sizeDp = config.sizeDp
-            triggerBall.snapToEdge = config.snapToEdge
-            triggerBall.autoDock = config.autoDock
-            triggerBall.dockInsetPx = config.dockInsetPx
-            restoreBallPosition()
+            withContext(Dispatchers.Main) {
+                triggerBall.sizeDp = config.sizeDp
+                triggerBall.snapToEdge = config.snapToEdge
+                triggerBall.autoDock = config.autoDock
+                triggerBall.dockInsetPx = config.dockInsetPx
+                restoreBallPosition()
+                triggerBall.show()
+            }
         }
-        triggerBall.show()
     }
 
     fun hideBall() {
