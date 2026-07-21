@@ -169,6 +169,7 @@ fun KnowledgeEditPage(
                                     vm.updateEditForm { f ->
                                         f.copy(modelId = model.id, modelDisplayName = model.displayName)
                                     }
+                                    vm.detectModelDimensions(model.id)
                                     modelDropdownExpanded = false
                                 }
                             )
