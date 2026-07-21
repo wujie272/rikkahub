@@ -163,7 +163,6 @@ fun KnowledgeBaseListPage(vm: KnowledgeVM = koinViewModel()) {
                                 vm.selectKnowledgeBase(kb.id)
                                 navController.navigate(Screen.KnowledgeBaseDetail(kb.id))
                             },
-                            onDelete = { pendingDeleteId = kb.id }
                         )
                     }
                 }
@@ -197,7 +196,6 @@ fun KnowledgeBaseListPage(vm: KnowledgeVM = koinViewModel()) {
 private fun KnowledgeBaseCard(
     kb: KnowledgeBaseEntity,
     onClick: () -> Unit,
-    onDelete: () -> Unit,
 ) {
     val dateFormat = remember { SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()) }
     Card(
@@ -226,9 +224,7 @@ private fun KnowledgeBaseCard(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
             }
-            IconButton(onClick = onDelete) {
-                Icon(HugeIcons.Delete01, stringResource(R.string.kb_delete), tint = MaterialTheme.colorScheme.error)
-            }
+
         }
     }
 }
