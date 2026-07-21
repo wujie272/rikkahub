@@ -219,7 +219,7 @@ private suspend fun runTest(context: Context, host: SshHostEntity): TestResult =
 
         // 3) 验证命令
         val cmdResult = runOnSession(session, "echo ok && whoami", SSH_TEST_TIMEOUT_MS)
-        val cmdOk = cmdResult["error"] == null && cmdResult["success"]?.jsonPrimitive?.boolean == true
+        val cmdOk = cmdResult["error"] == null && cmdResult["success"]?.jsonPrimitive?.content == "true"
         try { session.disconnect() } catch (_: Exception) {}
 
         TestResult(
