@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.widget.Toast
 import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.BookOpen01
 import me.rerere.hugeicons.stroke.Book02
 import me.rerere.hugeicons.stroke.Book04
 import me.rerere.hugeicons.stroke.Earth
@@ -54,6 +55,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
@@ -86,6 +88,7 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.service.KnowledgeSource
 import me.rerere.rikkahub.ui.components.message.MessagePartBlock
 import me.rerere.rikkahub.ui.components.message.ThinkingStep
 import me.rerere.rikkahub.ui.components.message.groupMessageParts
@@ -574,6 +577,12 @@ private fun ExportedChatMessage(
                                             tool = step.tool
                                         )
                                     }
+
+                                    is ThinkingStep.KnowledgeStep -> {
+                                        ExportedKnowledgeStep(
+                                            sources = step.sources
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -769,6 +778,54 @@ private fun ChainOfThoughtScope.ExportedToolStep(
         },
         contentVisible = false,
         content = null,
+    )
+}
+
+@Composable
+private fun ChainOfThoughtScope.ExportedKnowledgeStep(
+    sources: List<KnowledgeSource>,
+) {
+    ChainOfThoughtStep(
+        icon = {
+            Icon(
+                imageVector = HugeIcons.BookOpen01,
+                contentDescription = null,
+                modifier = Modifier.size(14.dp),
+                tint = MaterialTheme.colorScheme.primary,
+            )
+        },
+        label = {
+            Text(
+                text = stringResource(R.string.kb_sources_title, sources.size),
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.secondary,
+            )
+        },
+        content = {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                sources.forEach { source ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = source.fileName,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Text(
+                            text = "${(source.score * 100).toInt()}%",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        },
     )
 }
 
