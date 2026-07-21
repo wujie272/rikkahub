@@ -61,9 +61,7 @@ import me.rerere.hugeicons.stroke.File02
 import me.rerere.hugeicons.stroke.Folder01
 import me.rerere.hugeicons.stroke.GlobalSearch
 import me.rerere.hugeicons.stroke.Link01
-import me.rerere.hugeicons.stroke.Upload02
 import me.rerere.hugeicons.stroke.Settings02
-import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.Search01
 import me.rerere.hugeicons.stroke.Refresh01
 import me.rerere.hugeicons.stroke.BookOpen01
