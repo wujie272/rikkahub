@@ -126,7 +126,7 @@ class KnowledgeSearchService(
         }
 
         // 6. 融合分数（带动态阈值降级）
-        val effectiveThreshold = findEffectiveThreshold(minScore, query, semanticScores, candidates)
+        val effectiveThreshold = findEffectiveThreshold(minScore, semanticScores, bm25Scores)
         val merged = candidates.mapNotNull { doc ->
             val semanticScore = semanticScores[doc.id] ?: 0f
             val bm25Score = bm25Scores[doc.id] ?: 0f
@@ -167,7 +167,7 @@ class KnowledgeSearchService(
 
         // 8. Reranking：用原 query 对展开上下文做关键词匹配加分
         if (enableRerank && deduped.size > 1) {
-            val queryTerms = query.lowercase().split(Regex("\\s+")).filter { it.length > 1 }.toSet()
+            val queryTerms = tokenizeQuery(query)
             if (queryTerms.isNotEmpty()) {
                 return deduped.map { result ->
                     val context = (result.expandedContext + " " + result.content).lowercase()
@@ -282,21 +282,15 @@ class KnowledgeSearchService(
     /**
      * 动态阈值降级：如果当前阈值搜不到结果，逐步降低阈值
      * 直到有结果或达到最小阈值
+     *
+     * 直接复用 Step 5 已算好的 bm25Scores，避免重复建索引
      */
     private fun findEffectiveThreshold(
         requestedThreshold: Float,
-        query: String,
         semanticScores: Map<String, Float>,
-        candidates: List<KnowledgeDocumentEntity>,
+        bm25Scores: Map<String, Float>,
     ): Float {
         if (semanticScores.isEmpty()) return requestedThreshold
-
-        // 预先构建 BM25 索引（只建一次，避免循环内反复重建）
-        val bm25Scores = if (query.isNotBlank()) {
-            computeBm25ScoresSync(query, candidates)
-        } else {
-            emptyMap()
-        }
 
         var threshold = requestedThreshold
         while (threshold >= MIN_THRESHOLD) {
@@ -330,56 +324,32 @@ class KnowledgeSearchService(
     }
 
     /**
-     * 计算两个文本的 Jaccard 相似度
-     * 中文用字符 bigram（2-gram），英文用空格分词
-     * 避免中文因无空格分词导致整个段落变成一个词
+     * 对查询文本进行分词，同时支持中文和英文
+     * - 中文：字符 bigram（2-gram），兼顾匹配精度和召回
+     * - 英文：按空格分词
      */
-    private fun textJaccardSimilarity(a: String, b: String): Float {
-        val textA = a.lowercase()
-        val textB = b.lowercase()
-
-        val hasChinese = textA.any { it in '\u4e00'..'\u9fff' } ||
-                textB.any { it in '\u4e00'..'\u9fff' }
-
-        val setA: Set<String>
-        val setB: Set<String>
-
-        if (hasChinese) {
-            // 中文：使用字符 bigram（相邻两字组合），对字母/数字也保留
-            setA = textA.windowed(2, 1)
-                .filter { it.any { c -> c.isLetterOrDigit() } }
-                .toSet()
-            setB = textB.windowed(2, 1)
+    private fun tokenizeQuery(query: String): Set<String> {
+        val text = query.lowercase()
+        val hasChinese = text.any { it in '\u4e00'..'\u9fff' }
+        return if (hasChinese) {
+            text.windowed(2, 1)
                 .filter { it.any { c -> c.isLetterOrDigit() } }
                 .toSet()
         } else {
-            // 英文：按空格分词，过滤单字符词
-            setA = textA.split(Regex("\\s+")).filter { it.length > 1 }.toSet()
-            setB = textB.split(Regex("\\s+")).filter { it.length > 1 }.toSet()
+            text.split(Regex("\\s+")).filter { it.length > 1 }.toSet()
         }
+    }
 
+    /**
+     * 计算两个文本的 Jaccard 相似度
+     * 复用 tokenizeQuery 的分词逻辑，同时支持中文 bigram 和英文空格分词
+     */
+    private fun textJaccardSimilarity(a: String, b: String): Float {
+        val setA = tokenizeQuery(a)
+        val setB = tokenizeQuery(b)
         if (setA.isEmpty() || setB.isEmpty()) return 0f
         val intersection = setA.intersect(setB).size.toFloat()
         val union = setA.union(setB).size.toFloat()
         return intersection / union
-    }
-
-    /**
-     * 同步版 BM25 计算（用于阈值判断，避免 suspend 嵌套）
-     */
-    private fun computeBm25ScoresSync(
-        query: String,
-        candidates: List<KnowledgeDocumentEntity>,
-    ): Map<String, Float> {
-        if (candidates.isEmpty()) return emptyMap()
-        val texts = candidates.map { it.chunkText }
-        val index = Bm25Index(documents = texts).build()
-        val results = index.search(query)
-        if (results.isEmpty()) return emptyMap()
-        val maxScore = results.maxOfOrNull { it.second } ?: 1f
-        return results.associate { (idx, score) ->
-            val docId = candidates.getOrNull(idx)?.id ?: return@associate "" to 0f
-            docId to (score / maxScore).coerceIn(0f, 1f)
-        }
     }
 }
