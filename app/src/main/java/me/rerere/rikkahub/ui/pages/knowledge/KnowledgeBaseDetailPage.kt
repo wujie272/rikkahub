@@ -33,6 +33,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -60,13 +61,12 @@ import me.rerere.hugeicons.stroke.File02
 import me.rerere.hugeicons.stroke.Folder01
 import me.rerere.hugeicons.stroke.GlobalSearch
 import me.rerere.hugeicons.stroke.Link01
-import me.rerere.hugeicons.stroke.Note01
 import me.rerere.hugeicons.stroke.Upload02
-import me.rerere.hugeicons.stroke.Download01
-import me.rerere.hugeicons.stroke.Setting06
-import me.rerere.hugeicons.stroke.RecycleBin01
-import me.rerere.hugeicons.stroke.TestTube01
-import me.rerere.hugeicons.stroke.Replace
+import me.rerere.hugeicons.stroke.Settings02
+import me.rerere.hugeicons.stroke.Delete01
+import me.rerere.hugeicons.stroke.Search01
+import me.rerere.hugeicons.stroke.Refresh01
+import me.rerere.hugeicons.stroke.BookOpen01
 import me.rerere.rikkahub.data.knowledge.SearchResult
 import androidx.compose.ui.res.stringResource
 import me.rerere.rikkahub.R
@@ -81,10 +81,7 @@ import me.rerere.rikkahub.ui.components.settings.FailedImportBanner
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.theme.CustomColors
 import org.koin.androidx.compose.koinViewModel
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.foundation.background
-import androidx.compose.ui.draw.alpha
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -193,22 +190,22 @@ fun KnowledgeBaseDetailPage(
                                     vm.initEditForm(kb ?: return@DropdownMenuItem)
                                     navController.navigate(Screen.KnowledgeBaseEdit(kbId))
                                 },
-                                leadingIcon = { Icon(HugeIcons.Setting06, null, modifier = Modifier.size(18.dp)) }
+                                leadingIcon = { Icon(HugeIcons.Settings02, null, modifier = Modifier.size(18.dp)) }
                             )
                             DropdownMenuItem(
                                 text = { Text("搜索测试") },
                                 onClick = { showMenu = false },
-                                leadingIcon = { Icon(HugeIcons.TestTube01, null, modifier = Modifier.size(18.dp)) }
+                                leadingIcon = { Icon(HugeIcons.Search01, null, modifier = Modifier.size(18.dp)) }
                             )
                             DropdownMenuItem(
                                 text = { Text("重建索引") },
                                 onClick = { showMenu = false },
-                                leadingIcon = { Icon(HugeIcons.Replace, null, modifier = Modifier.size(18.dp)) }
+                                leadingIcon = { Icon(HugeIcons.Refresh01, null, modifier = Modifier.size(18.dp)) }
                             )
                             DropdownMenuItem(
                                 text = { Text("回收站") },
                                 onClick = { showMenu = false },
-                                leadingIcon = { Icon(HugeIcons.RecycleBin01, null, modifier = Modifier.size(18.dp)) }
+                                leadingIcon = { Icon(HugeIcons.Delete01, null, modifier = Modifier.size(18.dp)) }
                             )
                         }
                     }
@@ -365,24 +362,30 @@ private fun FileListItem(
                 )
                 Spacer(Modifier.height(4.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    AssistChip(
-                        onClick = {},
-                        label = { Text("工作区", style = MaterialTheme.typography.labelSmall) },
-                        size = AssistChipDefaults.smallSize(),
+                    Surface(
                         shape = RoundedCornerShape(4.dp),
-                    )
-                    AssistChip(
-                        onClick = {},
-                        label = { Text("就绪", style = MaterialTheme.typography.labelSmall) },
-                        size = AssistChipDefaults.smallSize(),
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        tonalElevation = 0.dp,
+                    ) {
+                        Text("工作区", modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                            style = MaterialTheme.typography.labelSmall)
+                    }
+                    Surface(
                         shape = RoundedCornerShape(4.dp),
-                    )
-                    AssistChip(
-                        onClick = {},
-                        label = { Text("刚刚", style = MaterialTheme.typography.labelSmall) },
-                        size = AssistChipDefaults.smallSize(),
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        tonalElevation = 0.dp,
+                    ) {
+                        Text("就绪", modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                            style = MaterialTheme.typography.labelSmall)
+                    }
+                    Surface(
                         shape = RoundedCornerShape(4.dp),
-                    )
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        tonalElevation = 0.dp,
+                    ) {
+                        Text("刚刚", modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                            style = MaterialTheme.typography.labelSmall)
+                    }
                 }
             }
 
@@ -541,7 +544,7 @@ private fun AddDataSourceSheet(
 
         // 笔记
         DataSourceOption(
-            icon = HugeIcons.Note01,
+            icon = HugeIcons.BookOpen01,
             title = "笔记",
             subtitle = "从笔记中选择，提取笔记内容",
             onClick = { /* 笔记选择器 */ }
