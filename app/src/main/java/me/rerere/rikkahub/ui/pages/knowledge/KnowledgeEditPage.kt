@@ -47,8 +47,6 @@ import androidx.compose.ui.res.stringResource
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.theme.CustomColors
 import org.koin.androidx.compose.koinViewModel
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -258,24 +256,41 @@ fun KnowledgeEditPage(
                             Text(desc)
                         }
                     ) {
-                        @OptIn(ExperimentalMaterial3Api::class)
-                        @Composable
-                        fun StrategyChip(value: String, label: String) {
-                            FilterChip(
-                                selected = form.chunkStrategy == value,
-                                onClick = { vm.updateEditForm { f -> f.copy(chunkStrategy = value) } },
-                                label = { Text(label) },
+                        var strategyDropdownExpanded by remember { mutableStateOf(false) }
+                        val strategyOptions = listOf(
+                            "fixed" to stringResource(R.string.kb_strategy_fixed),
+                            "paragraph" to stringResource(R.string.kb_strategy_paragraph),
+                            "markdown" to stringResource(R.string.kb_strategy_markdown),
+                            "code" to stringResource(R.string.kb_strategy_code),
+                            "semantic" to stringResource(R.string.kb_strategy_semantic),
+                        )
+                        val currentLabel = strategyOptions.first { it.first == form.chunkStrategy }.second
+                        ExposedDropdownMenuBox(
+                            expanded = strategyDropdownExpanded,
+                            onExpandedChange = { strategyDropdownExpanded = it }
+                        ) {
+                            OutlinedTextField(
+                                value = currentLabel,
+                                onValueChange = {},
+                                readOnly = true,
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = strategyDropdownExpanded) },
+                                modifier = Modifier.menuAnchor().fillMaxWidth(),
+                                label = { Text(stringResource(R.string.kb_chunk_strategy)) }
                             )
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            StrategyChip("fixed", stringResource(R.string.kb_strategy_fixed))
-                            StrategyChip("paragraph", stringResource(R.string.kb_strategy_paragraph))
-                            StrategyChip("markdown", stringResource(R.string.kb_strategy_markdown))
-                            StrategyChip("code", stringResource(R.string.kb_strategy_code))
-                        }
-                        Spacer(Modifier.height(4.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            StrategyChip("semantic", stringResource(R.string.kb_strategy_semantic))
+                            ExposedDropdownMenu(
+                                expanded = strategyDropdownExpanded,
+                                onDismissRequest = { strategyDropdownExpanded = false }
+                            ) {
+                                strategyOptions.forEach { (value, label) ->
+                                    DropdownMenuItem(
+                                        text = { Text(label) },
+                                        onClick = {
+                                            vm.updateEditForm { f -> f.copy(chunkStrategy = value) }
+                                            strategyDropdownExpanded = false
+                                        }
+                                    )
+                                }
+                            }
                         }
                     }
 

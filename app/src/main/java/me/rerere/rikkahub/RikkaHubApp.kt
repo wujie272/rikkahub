@@ -53,6 +53,9 @@ const val CHAT_LIVE_UPDATE_NOTIFICATION_CHANNEL_ID = "chat_live_update"
 const val WEB_SERVER_NOTIFICATION_CHANNEL_ID = "web_server"
 
 class RikkaHubApp : Application() {
+    /** 进入前台前悬浮球是否可见，用于后台恢复 */
+    private var ballWasShownBeforeForeground = false
+
     override fun onCreate() {
         super.onCreate()
         startKoin {
@@ -489,26 +492,29 @@ class RikkaHubApp : Application() {
     /**
      * 控制悬浮球在 RikkaHub 前台时隐藏，后台时恢复。
      * 避免悬浮球遮挡 App 自身 UI。
+     *
+     * 只有用户主动开启过悬浮球（ballWasShownBeforeForeground = true），
+     * 切到后台时才会恢复显示；默认关闭时不会自动弹出。
      */
     private fun rikkahubOverlayVisibilityController(): ActivityLifecycleCallbacks {
         val started = AtomicInteger(0)
         return object : ActivityLifecycleCallbacks {
             override fun onActivityStarted(activity: Activity) {
                 if (started.getAndIncrement() == 0) {
-                    // App 回到前台 → 隐藏悬浮球
+                    // App 回到前台 → 记录状态并隐藏悬浮球
                     val manager = FloatingBallInitializer.getManager()
-                    if (manager?.triggerBall?.isShown() == true) {
-                        manager.hideBall()
+                    ballWasShownBeforeForeground = manager?.triggerBall?.isShown() == true
+                    if (ballWasShownBeforeForeground) {
+                        manager?.hideBall()
                     }
                 }
             }
 
             override fun onActivityStopped(activity: Activity) {
                 if (started.decrementAndGet() == 0) {
-                    // App 进入后台 → 恢复悬浮球
-                    val manager = FloatingBallInitializer.getManager()
-                    if (manager != null) {
-                        manager.showBall()
+                    // App 进入后台 → 仅当之前可见时才恢复
+                    if (ballWasShownBeforeForeground) {
+                        FloatingBallInitializer.getManager()?.showBall()
                     }
                 }
             }
