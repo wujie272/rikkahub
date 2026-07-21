@@ -80,6 +80,12 @@ fun SettingPreferencesPage() {
                         onClick = { navController.navigate(Screen.SettingPreferencesUI) },
                         leadingContent = { Icon(HugeIcons.PaintBoard, null) },
                         headlineContent = { Text(stringResource(R.string.setting_page_preferences_ui)) },
+                    item(
+                        onClick = { navController.navigate(Screen.FloatingOverlay) },
+                        leadingContent = { Icon(HugeIcons.Circle, null) },
+                        headlineContent = { Text("Floating UI") },
+                        supportingContent = { Text("Floating trigger ball, agent overlay, chat window") },
+                    )
                         supportingContent = { Text(stringResource(R.string.setting_page_preferences_ui_desc)) },
                     )
                 }
