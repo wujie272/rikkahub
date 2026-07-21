@@ -753,6 +753,19 @@ enum class ChatFontFamily {
 }
 
 @Serializable
+enum class ToolResultHistoryMode {
+    @SerialName("keep_all")
+    KEEP_ALL,
+    @SerialName("discard")
+    DISCARD,
+}
+
+const val TOOL_RESULT_KEEP_USER_MESSAGES_MIN = 1
+const val TOOL_RESULT_KEEP_USER_MESSAGES_MAX = 50
+
+fun DisplaySetting.getToolResultKeepUserMessages(): Int =
+    toolResultKeepUserMessages.coerceIn(TOOL_RESULT_KEEP_USER_MESSAGES_MIN, TOOL_RESULT_KEEP_USER_MESSAGES_MAX)
+
 data class DisplaySetting(
     val userAvatar: Avatar = Avatar.Dummy,
     val userNickname: String = "",
@@ -791,6 +804,13 @@ data class DisplaySetting(
     val chatCustomFontName: String = "",
     val enableVolumeKeyScroll: Boolean = false,
     val hideStatusBar: Boolean = false,
+    val embeddingRetrievalTimeoutSeconds: Int = 30,
+    val mcpToolCallTimeoutSeconds: Int = 60,
+    val httpRetryMaxRetries: Int = 3,
+    val httpRetryDelaySeconds: Int = 5,
+    val toolResultHistoryMode: ToolResultHistoryMode = ToolResultHistoryMode.KEEP_ALL,
+    val toolResultKeepUserMessages: Int = 5,
+    val useLastTurnMemoryOnSkip: Boolean = false,
     val volumeKeyScrollRatio: Float = 1.0f,
 )
 

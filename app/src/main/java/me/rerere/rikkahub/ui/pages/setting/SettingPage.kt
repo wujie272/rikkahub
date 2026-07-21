@@ -304,6 +304,20 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                 }
             }
 
+            item("advancedSettings") {
+                CardGroup(
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                    title = { Text("高级设置") },
+                ) {
+                    item(
+                        onClick = { navController.navigate(Screen.SettingAdvanced) },
+                        leadingContent = { Icon(HugeIcons.Developer, null) },
+                        supportingContent = { Text("超时、重试、工具结果优化等") },
+                        headlineContent = { Text("高级设置") },
+                    )
+                }
+            }
+
             item("dataSettings") {
                 val storageState by produceState(-1 to 0L) {
                     value = filesManager.countChatFiles()
