@@ -1,50 +1,83 @@
 package me.rerere.rikkahub.ui.overlay
 
 import android.content.Context
+import android.opengl.GLSurfaceView
 import android.util.Log
-import android.view.TextureView
-import com.bandori.pet.live2d.Live2DRenderView
+import android.view.MotionEvent
+import com.arkueid.alive2d.Live2D
+import com.arkueid.alive2d.Live2DModel
+import java.io.File
+import javax.microedition.khronos.egl.EGLConfig
+import javax.microedition.khronos.opengles.GL10
 
 /**
- * Live2D 渲染器 (基于 Bandori Pet 引擎)。
- * 使用 TextureView + LuaJIT 渲染 Live2D 模型。
+ * Live2D 渲染器。
+ * 管理 GLSurfaceView 和 JNI 桥接，为悬浮球提供 Live2D 角色渲染。
  *
- * 相比 alive2d 方案:
- * - 不需要官方 Cubism SDK (零授权问题)
- * - 只有 1 个 C++ 文件 (轻型)
- * - 支持 MOC2 + MOC3
- * - 支持触摸交互、双指缩放、拖拽
+ * 用法：
+ *   val renderer = Live2DRenderer(context)
+ *   renderer.loadModel(modelPath)
+ *   glSurfaceView = renderer.surfaceView  // 添加到悬浮球
  */
 class Live2DRenderer(private val context: Context) {
     companion object {
         private const val TAG = "Live2DRenderer"
     }
 
-    /** TextureView 实例，可添加到悬浮球中 */
-    val textureView: Live2DRenderView
+    /** GLSurfaceView 实例，可添加到悬浮球中 */
+    val surfaceView: GLSurfaceView
 
-    /** 当前加载的模型路径 */
+    /** 当前加载的模型 */
+    private var currentModel: Live2DModel? = null
+
+    /** 模型路径 */
     private var modelPath: String? = null
 
+    /** 是否已初始化 */
+    private var initialized = false
+
     init {
-        textureView = Live2DRenderView(context).apply {
-            setInteractionLocked(false)
-            statusChanged = { status ->
-                if (status != null) Log.i(TAG, "Status: $status")
+        surfaceView = object : GLSurfaceView(context) {
+            override fun onTouchEvent(event: MotionEvent): Boolean {
+                return onTouch(event)
             }
+        }.apply {
+            setEGLContextClientVersion(2)
+            setRenderer(object : GLSurfaceView.Renderer {
+                override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
+                    if (!initialized) {
+                        Live2D.init()
+                        initialized = true
+                    }
+                    modelPath?.let { loadModelInternal(it) }
+                }
+
+                override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
+                    Live2D.setViewSize(width, height)
+                }
+
+                override fun onDrawFrame(gl: GL10?) {
+                    Live2D.update()
+                }
+            })
+            renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
         }
     }
 
     /**
      * 加载模型
-     * @param path model3.json 或 .zst 文件路径
+     * @param path model3.json 文件路径
      */
     fun loadModel(path: String) {
-        if (path == modelPath) return
+        val file = File(path)
+        if (!file.exists()) {
+            Log.w(TAG, "Model file not found: $path")
+            return
+        }
         modelPath = path
-        // Live2DRenderView 的 setModel 需要 ModelChoice 对象
-        // 简化处理：直接使用 NativeLive2D 的底层方法
-        loadModelDirect(path)
+        if (initialized) {
+            surfaceView.queueEvent { loadModelInternal(path) }
+        }
     }
 
     /**
@@ -52,36 +85,64 @@ class Live2DRenderer(private val context: Context) {
      */
     fun clearModel() {
         modelPath = null
-        textureView.setModel(null)
+        surfaceView.queueEvent {
+            currentModel?.release()
+            currentModel = null
+        }
     }
 
     /**
-     * 暂停渲染
+     * 暂停渲染（悬浮球隐藏时调用）
      */
     fun onPause() {
-        // TextureView 不需要 pause/resume
+        surfaceView.onPause()
     }
 
     /**
-     * 恢复渲染
+     * 恢复渲染（悬浮球显示时调用）
      */
     fun onResume() {
-        modelPath?.let { loadModel(it) }
+        surfaceView.onResume()
     }
 
     /**
      * 释放资源
      */
     fun release() {
-        textureView.release()
+        clearModel()
+        Live2D.dispose()
+        initialized = false
     }
 
-    private fun loadModelDirect(path: String) {
+    // ==================== 内部实现 ====================
+
+    private fun loadModelInternal(path: String) {
         try {
-            // 使用 NativeLive2D 直接加载
-            Log.i(TAG, "Loading model: $path")
+            currentModel?.release()
+            val model = Live2DModel.loadModel(path)
+            currentModel = model
+            Log.i(TAG, "Model loaded: $path")
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to load model", e)
+            Log.e(TAG, "Failed to load model: $path", e)
         }
+    }
+
+    private fun onTouch(event: MotionEvent): Boolean {
+        val model = currentModel ?: return false
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                model.onTouchBegan(event.x, event.y)
+                return true
+            }
+            MotionEvent.ACTION_MOVE -> {
+                model.onTouchMoved(event.x, event.y)
+                return true
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                model.onTouchEnded(event.x, event.y)
+                return true
+            }
+        }
+        return false
     }
 }
