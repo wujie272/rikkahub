@@ -76,6 +76,7 @@ data class Assistant(
     // Auto-continue on error. When enabled, interrupted generations automatically continue
     // instead of showing an error. The failed partial response is preserved.
     val autoContinueOnError: Boolean = false,
+    val maxContinueCount: Int = 5,
     val continueModelId: Uuid? = null, // null = 使用主模型继续
 )
 

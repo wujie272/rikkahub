@@ -303,11 +303,13 @@ fun ChatInput(
                             // Auto-continue
                             AutoRetryButton(
                                 autoContinueOnError = assistant.autoContinueOnError,
+                                maxContinueCount = assistant.maxContinueCount,
                                 continueModelId = assistant.continueModelId,
                                 providers = settings.providers,
-                                onUpdate = { enabled, modelId ->
+                                onUpdate = { enabled, maxCount, modelId ->
                                     onUpdateAssistant(assistant.copy(
                                         autoContinueOnError = enabled,
+                                        maxContinueCount = maxCount,
                                         continueModelId = modelId,
                                     ))
                                 },

@@ -1127,9 +1127,9 @@ class ChatService(
             // 保留失败的回复，注入 continue 指令让 LLM 从断点继续
             if (assistant.autoContinueOnError) {
                 val attemptCount = continueAttempts.getOrDefault(conversationId, 0)
-                if (attemptCount < 5) { // 死循环防护，最多继续 5 次
+                if (attemptCount < assistant.maxContinueCount) {
                     continueAttempts[conversationId] = attemptCount + 1
-                    Log.i(TAG, "autoContinue: attempt ${attemptCount + 1}/5 for $conversationId")
+                    Log.i(TAG, "autoContinue: attempt ${attemptCount + 1}/${assistant.maxContinueCount} for $conversationId")
 
                     // 解析继续模型（如果指定了）
                     val continueModel = if (assistant.continueModelId != null) {
