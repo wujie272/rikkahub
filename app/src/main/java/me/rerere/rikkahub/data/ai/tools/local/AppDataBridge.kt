@@ -233,11 +233,32 @@ class AppDataBridge(private val context: Context) {
     /**
      * 执行一次数据查询
      */
+    /**
+     * 执行一次数据查询，如果超时则自动重试一次（应对 App 冷启动场景）。
+     */
     suspend fun query(
         plugin: AppDataPlugin,
         action: PluginAction,
         args: Map<String, Any> = emptyMap(),
-        timeoutMs: Long = 5000,
+        timeoutMs: Long = 15000,
+    ): BridgeResult {
+        val first = queryOnce(plugin, action, args, timeoutMs)
+        if (first is BridgeResult.Timeout) {
+            Log.i(TAG, "First query timed out, retrying once (cold start?)")
+            // 第二次用短超时——第一次已经触发了冷启动，进程应该活了
+            return queryOnce(plugin, action, args, 5000)
+        }
+        return first
+    }
+
+    /**
+     * 单次数据查询（不重试）。
+     */
+    private suspend fun queryOnce(
+        plugin: AppDataPlugin,
+        action: PluginAction,
+        args: Map<String, Any> = emptyMap(),
+        timeoutMs: Long = 15000,
     ): BridgeResult {
         val state = checkPluginState(plugin)
         when (state) {
@@ -282,9 +303,11 @@ class AppDataBridge(private val context: Context) {
         }
 
         val intentActionStr = action.intentAction
+        // 标记为前台广播，提高系统启动目标进程的意愿
         val intent = Intent().apply {
             setClassName(plugin.packageName, plugin.componentClass)
             setAction(intentActionStr)
+            addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
             putExtra("callback", pi)
             args.forEach { (key, value) ->
                 when (value) {
