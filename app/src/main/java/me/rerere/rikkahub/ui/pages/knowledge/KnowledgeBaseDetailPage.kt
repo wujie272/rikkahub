@@ -177,7 +177,7 @@ fun KnowledgeBaseDetailPage(
                     // "..." 菜单按钮
                     Box {
                         IconButton(onClick = { showMenu = true }) {
-                            Icon(HugeIcons.Setting06, "更多")
+                            Icon(HugeIcons.Settings02, "更多")
                         }
                         DropdownMenu(
                             expanded = showMenu,
