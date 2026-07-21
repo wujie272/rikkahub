@@ -1,5 +1,5 @@
 [versions]
-dynamicanimation = "1.4.1"
+dynamicanimation = "1.1.0"
 agp = "9.2.1"
 barcodeScanning = "17.3.0"
 cameraCore = "1.6.1"
