@@ -26,6 +26,7 @@ val knowledgeModule = module {
         EmbeddingService(
             providerManager = get(),
             settingsStore = get(),
+            requestLogManager = get(),
         )
     }
 

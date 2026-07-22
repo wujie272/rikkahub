@@ -1,0 +1,564 @@
+package me.rerere.rikkahub.data.ai.requestlog
+
+import android.util.Log
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.serializer
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import me.rerere.ai.core.MessageRole
+import me.rerere.ai.provider.CustomBody
+import me.rerere.ai.provider.CustomHeader
+import me.rerere.ai.provider.Model
+import me.rerere.ai.provider.TextGenerationParams
+import me.rerere.ai.provider.ProviderSetting
+import me.rerere.ai.ui.UIMessage
+import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.data.ai.AIRequestSource
+import me.rerere.rikkahub.utils.JsonInstant
+
+private const val REQUEST_LOG_KEEP_LATEST = 200
+private const val REQUEST_LOG_MAX_JSON_CHARS = 120_000
+private const val REQUEST_LOG_MAX_PREVIEW_CHARS = 240
+private const val TAG = "AIRequestLogManager"
+
+private const val REQUEST_LOG_MAX_MESSAGES = 24
+private const val REQUEST_LOG_MAX_SYSTEM_PROMPT_CHARS = 16_000
+private const val REQUEST_LOG_MAX_TEXT_PART_CHARS = 2_000
+private const val REQUEST_LOG_MAX_TOOL_ARGS_CHARS = 4_000
+private const val REQUEST_LOG_MAX_JSON_ELEMENT_CHARS = 8_000
+private const val REQUEST_LOG_MAX_URL_CHARS = 240
+
+private const val MASKED_VALUE = "********"
+
+private val SENSITIVE_NAMES = setOf(
+    "authorization", "x-api-key", "api-key", "apikey", "api_key",
+    "x-auth-token", "cookie", "set-cookie", "token", "access_token",
+    "refresh_token", "secret", "password", "private_key", "client_secret",
+)
+
+@Serializable
+private data class TextGenerationParamsLog(
+    val temperature: Float?,
+    val topP: Float?,
+    val maxTokens: Int?,
+    val toolNames: List<String>,
+    val customHeaders: List<CustomHeader>,
+    val customBody: List<CustomBody>,
+)
+
+@Serializable
+private data class EmbeddingParamsLog(
+    val inputCount: Int,
+    val totalChars: Int,
+)
+
+@Serializable
+private data class EmbeddingResponseLog(
+    val embeddingCount: Int,
+    val dimensions: Int?,
+)
+
+class AIRequestLogManager(
+    private val dao: AIRequestLogDao,
+) {
+    @Volatile
+    private var didReclassifyRecentLogs: Boolean = false
+
+    fun observeRecent(limit: Int = REQUEST_LOG_KEEP_LATEST): Flow<List<AIRequestLogEntity>> =
+        dao.observeRecent(limit)
+
+    fun observeById(id: Long): Flow<AIRequestLogEntity?> = dao.observeById(id)
+
+    suspend fun clearAll() = withContext(Dispatchers.IO) {
+        runCatching { dao.clearAll() }
+    }
+
+    suspend fun logTextGeneration(
+        source: AIRequestSource,
+        providerSetting: ProviderSetting,
+        params: TextGenerationParams,
+        requestMessages: List<UIMessage>,
+        requestBodyJson: String? = null,
+        responseText: String,
+        responseRawText: String = "",
+        stream: Boolean,
+        latencyMs: Long?,
+        durationMs: Long?,
+        error: Throwable? = null,
+    ) = withContext(Dispatchers.IO) {
+        runCatching {
+            val paramsJson = buildTextGenerationParamsJson(params)
+                .truncateTo(REQUEST_LOG_MAX_JSON_CHARS)
+            val requestMessagesJson = JsonInstant.encodeToString(
+                serializer = ListSerializer(UIMessage.serializer()),
+                value = sanitizeRequestMessagesForLog(requestMessages),
+            )
+            val requestPayloadJson = requestBodyJson
+                ?.takeIf { it.isNotBlank() }
+                ?.sanitizeRequestBodyJsonForLog()
+                ?: requestMessagesJson.truncateTo(REQUEST_LOG_MAX_JSON_CHARS)
+
+            val requestPreview = buildRequestPreview(requestMessages)
+            val normalizedResponseText = responseText.trim()
+            val normalizedRawResponseText = responseRawText.trim()
+            val responsePreview = buildResponsePreview(
+                filteredResponseText = normalizedResponseText,
+                rawResponseText = normalizedRawResponseText,
+            )
+
+            val providerType = providerSetting::class.simpleName ?: "Provider"
+            val requestUrl = buildTextGenerationRequestUrl(providerSetting, params)
+
+            dao.insert(
+                AIRequestLogEntity(
+                    createdAt = System.currentTimeMillis(),
+                    latencyMs = latencyMs,
+                    durationMs = durationMs,
+                    source = source.name,
+                    providerName = providerSetting.name,
+                    providerType = providerType,
+                    modelId = params.model.modelId,
+                    modelDisplayName = params.model.displayName,
+                    stream = stream,
+                    paramsJson = paramsJson,
+                    requestMessagesJson = requestPayloadJson,
+                    requestUrl = requestUrl,
+                    requestPreview = requestPreview,
+                    responsePreview = responsePreview,
+                    responseText = normalizedResponseText.truncateTo(REQUEST_LOG_MAX_JSON_CHARS),
+                    responseRawText = normalizedRawResponseText.truncateTo(REQUEST_LOG_MAX_JSON_CHARS),
+                    error = error?.let { "[${it.javaClass.simpleName}] ${it.message}".take(800) },
+                )
+            )
+            dao.pruneKeepLatest(REQUEST_LOG_KEEP_LATEST)
+        }.onFailure {
+            Log.w(TAG, "logTextGeneration failed: ${it.message}", it)
+        }
+    }
+
+    suspend fun logEmbedding(
+        source: AIRequestSource,
+        providerSetting: ProviderSetting,
+        model: Model,
+        inputs: List<String>,
+        requestBodyJson: String? = null,
+        embeddingCount: Int?,
+        dimensions: Int?,
+        durationMs: Long?,
+        error: Throwable? = null,
+    ) = withContext(Dispatchers.IO) {
+        runCatching {
+            val providerType = providerSetting::class.simpleName ?: "Provider"
+
+            val safeInputs = inputs.map { it.trim().truncateTo(2_000) }
+            val requestMessagesJson = JsonInstant.encodeToString(
+                serializer = ListSerializer(String.serializer()),
+                value = safeInputs,
+            ).truncateTo(REQUEST_LOG_MAX_JSON_CHARS)
+            val requestPayloadJson = requestBodyJson
+                ?.takeIf { it.isNotBlank() }
+                ?.sanitizeRequestBodyJsonForLog()
+                ?: requestMessagesJson
+
+            val paramsJson = JsonInstant.encodeToString(
+                EmbeddingParamsLog.serializer(),
+                EmbeddingParamsLog(
+                    inputCount = inputs.size,
+                    totalChars = inputs.sumOf { it.length },
+                )
+            ).truncateTo(REQUEST_LOG_MAX_JSON_CHARS)
+
+            val responseJson = if (embeddingCount != null) {
+                JsonInstant.encodeToString(
+                    EmbeddingResponseLog.serializer(),
+                    EmbeddingResponseLog(
+                        embeddingCount = embeddingCount,
+                        dimensions = dimensions,
+                    )
+                )
+            } else {
+                ""
+            }
+
+            val requestUrl = buildEmbeddingRequestUrl(providerSetting, model)
+            val requestPreview = safeInputs.firstOrNull().orEmpty()
+                .replace("\r", "")
+                .replace("\n", " ")
+                .take(REQUEST_LOG_MAX_PREVIEW_CHARS)
+
+            val responsePreview = buildString {
+                if (embeddingCount != null) append("embeddings=$embeddingCount")
+                if (dimensions != null) {
+                    if (isNotEmpty()) append(", ")
+                    append("dims=$dimensions")
+                }
+            }.ifBlank { "-" }.take(REQUEST_LOG_MAX_PREVIEW_CHARS)
+
+            dao.insert(
+                AIRequestLogEntity(
+                    createdAt = System.currentTimeMillis(),
+                    latencyMs = durationMs,
+                    durationMs = durationMs,
+                    source = source.name,
+                    providerName = providerSetting.name,
+                    providerType = providerType,
+                    modelId = model.modelId,
+                    modelDisplayName = model.displayName,
+                    stream = false,
+                    paramsJson = paramsJson,
+                    requestMessagesJson = requestPayloadJson,
+                    requestUrl = requestUrl,
+                    requestPreview = requestPreview,
+                    responsePreview = responsePreview,
+                    responseText = responseJson.truncateTo(REQUEST_LOG_MAX_JSON_CHARS),
+                    responseRawText = "",
+                    error = error?.let { "[${it.javaClass.simpleName}] ${it.message}".take(800) },
+                )
+            )
+            dao.pruneKeepLatest(REQUEST_LOG_KEEP_LATEST)
+        }.onFailure {
+            Log.w(TAG, "logEmbedding failed: ${it.message}", it)
+        }
+    }
+
+    /**
+     * 从 OkHttp 拦截器写入 HTTP 级请求日志
+     * 与 logTextGeneration 不同，这里没有 UIMessage 等结构化数据，只有原始 HTTP 内容
+     */
+    suspend fun logHttpRequest(
+        source: String,
+        providerName: String,
+        providerType: String,
+        modelId: String,
+        modelDisplayName: String,
+        url: String,
+        method: String,
+        requestHeaders: Map<String, String>,
+        requestBody: String?,
+        responseCode: Int?,
+        responseHeaders: Map<String, String>,
+        responseBody: String?,
+        durationMs: Long?,
+        error: String?,
+        stream: Boolean = false,
+    ) = withContext(Dispatchers.IO) {
+        runCatching {
+            val requestBodyTruncated = requestBody?.sanitizeRequestBodyJsonForLog().orEmpty()
+            val responseBodyTruncated = responseBody?.sanitizeResponseRawForLog().orEmpty()
+
+            dao.insert(
+                AIRequestLogEntity(
+                    createdAt = System.currentTimeMillis(),
+                    latencyMs = durationMs,
+                    durationMs = durationMs,
+                    source = source,
+                    providerName = providerName,
+                    providerType = providerType,
+                    modelId = modelId,
+                    modelDisplayName = modelDisplayName,
+                    stream = stream,
+                    paramsJson = "",
+                    requestMessagesJson = requestBodyTruncated,
+                    requestUrl = url.take(REQUEST_LOG_MAX_URL_CHARS),
+                    requestPreview = requestBodyTruncated.take(REQUEST_LOG_MAX_PREVIEW_CHARS),
+                    responsePreview = responseBodyTruncated.take(REQUEST_LOG_MAX_PREVIEW_CHARS),
+                    responseText = responseBodyTruncated.truncateTo(REQUEST_LOG_MAX_JSON_CHARS),
+                    responseRawText = responseBodyTruncated.truncateTo(REQUEST_LOG_MAX_JSON_CHARS),
+                    error = error?.take(800),
+                )
+            )
+            dao.pruneKeepLatest(REQUEST_LOG_KEEP_LATEST)
+        }.onFailure {
+            Log.w(TAG, "logHttpRequest failed: ${it.message}", it)
+        }
+    }
+
+    suspend fun reclassifyRecentLogsIfNeeded(limit: Int = REQUEST_LOG_KEEP_LATEST) = withContext(Dispatchers.IO) {
+        if (didReclassifyRecentLogs) return@withContext
+        didReclassifyRecentLogs = true
+
+        runCatching {
+            val logs = dao.getRecent(limit)
+            logs.forEach { log ->
+                val newSource = reclassifyLogSourceOrNull(log) ?: return@forEach
+                if (newSource != log.source) {
+                    dao.updateSource(id = log.id, source = newSource)
+                }
+            }
+        }.onFailure {
+            Log.w(TAG, "reclassifyRecentLogsIfNeeded failed: ${it.message}", it)
+        }
+    }
+}
+
+private fun reclassifyLogSourceOrNull(log: AIRequestLogEntity): String? {
+    // 群聊路由：OTHER 且请求预览包含路由关键词
+    if (log.source == AIRequestSource.OTHER.name && log.requestPreview.contains("route the speakers", ignoreCase = true)) {
+        return AIRequestSource.GROUP_CHAT_ROUTING.name
+    }
+
+    // 嵌入日志：根据输入字符数判断
+    val embeddingParams = log.paramsJson.parseEmbeddingParamsOrNull()
+    if (embeddingParams != null) {
+        if (log.source == AIRequestSource.MEMORY_EMBEDDING.name) {
+            return AIRequestSource.MEMORY_RETRIEVAL.name.takeIf { embeddingParams.totalChars < 200 }
+        }
+        return AIRequestSource.MEMORY_EMBEDDING.name.takeIf {
+            log.source == AIRequestSource.OTHER.name && embeddingParams.totalChars >= 200
+        }
+    }
+
+    return null
+}
+
+private fun String.parseEmbeddingParamsOrNull(): EmbeddingParamsLog? {
+    val trimmed = trim()
+    if (trimmed.isBlank()) return null
+    return runCatching { JsonInstant.decodeFromString(EmbeddingParamsLog.serializer(), trimmed) }.getOrNull()
+}
+
+private fun buildTextGenerationParamsJson(params: TextGenerationParams): String {
+    val safeHeaders = params.customHeaders.map { header ->
+        if (header.name.isSensitiveName()) header.copy(value = MASKED_VALUE) else header
+    }
+    val safeBodies = params.customBody.map { body ->
+        if (body.key.isSensitiveName()) {
+            body.copy(value = JsonPrimitive(MASKED_VALUE))
+        } else {
+            body.copy(value = body.value.maskSensitiveValuesInJsonElement())
+        }
+    }
+
+    val safe = TextGenerationParamsLog(
+        temperature = params.temperature,
+        topP = params.topP,
+        maxTokens = params.maxTokens,
+        toolNames = params.tools.map { it.name },
+        customHeaders = safeHeaders,
+        customBody = safeBodies,
+    )
+
+    return JsonInstant.encodeToString(TextGenerationParamsLog.serializer(), safe)
+}
+
+private fun buildRequestPreview(messages: List<UIMessage>): String {
+    val lastUser = messages.asReversed().firstOrNull { it.role == MessageRole.USER }
+    val userText = lastUser?.parts
+        ?.filterIsInstance<UIMessagePart.Text>()
+        ?.joinToString("\n") { it.text }
+        ?.trim()
+        .orEmpty()
+    if (userText.isNotBlank()) {
+        return userText.replace("\r", "").replace("\n", " ").take(REQUEST_LOG_MAX_PREVIEW_CHARS)
+    }
+
+    val text = messages.asSequence()
+        .flatMap { it.parts.asSequence() }
+        .filterIsInstance<UIMessagePart.Text>()
+        .joinToString("\n") { it.text }
+        .trim()
+    return text.replace("\r", "").replace("\n", " ").take(REQUEST_LOG_MAX_PREVIEW_CHARS)
+}
+
+private fun buildResponsePreview(filteredResponseText: String, rawResponseText: String): String {
+    val normalized = filteredResponseText
+        .ifBlank { rawResponseText }
+        .trim()
+        .replace("\r", "")
+        .replace("\n", " ")
+    return normalized.take(REQUEST_LOG_MAX_PREVIEW_CHARS)
+}
+
+private fun sanitizeRequestMessagesForLog(messages: List<UIMessage>): List<UIMessage> {
+    val system = messages.firstOrNull { it.role == MessageRole.SYSTEM }
+    val tail = messages.filterNot { it.role == MessageRole.SYSTEM }
+        .takeLast(REQUEST_LOG_MAX_MESSAGES)
+
+    return buildList {
+        system?.let { add(sanitizeMessageForLog(it, system = true)) }
+        tail.forEach { add(sanitizeMessageForLog(it, system = false)) }
+    }
+}
+
+private fun sanitizeMessageForLog(message: UIMessage, system: Boolean): UIMessage {
+    return message.copy(
+        parts = message.parts.map { part -> sanitizePartForLog(part, system = system) },
+        annotations = message.annotations.take(10),
+        translation = message.translation?.truncateTo(REQUEST_LOG_MAX_TEXT_PART_CHARS),
+    )
+}
+
+private fun sanitizePartForLog(part: UIMessagePart, system: Boolean): UIMessagePart {
+    return when (part) {
+        is UIMessagePart.Text -> part.copy(
+            text = part.text.truncateTo(if (system) REQUEST_LOG_MAX_SYSTEM_PROMPT_CHARS else REQUEST_LOG_MAX_TEXT_PART_CHARS),
+            metadata = null,
+        )
+        is UIMessagePart.Image -> part.copy(
+            url = sanitizeUrlForLog(part.url),
+            metadata = null,
+        )
+        is UIMessagePart.Video -> part.copy(
+            url = sanitizeUrlForLog(part.url),
+            metadata = null,
+        )
+        is UIMessagePart.Audio -> part.copy(
+            url = sanitizeUrlForLog(part.url),
+            metadata = null,
+        )
+        is UIMessagePart.Document -> part.copy(
+            url = sanitizeUrlForLog(part.url),
+            fileName = part.fileName.truncateInline(120),
+            mime = part.mime.truncateInline(80),
+            metadata = null,
+        )
+        is UIMessagePart.Reasoning -> part.copy(
+            reasoning = part.reasoning.truncateTo(REQUEST_LOG_MAX_TEXT_PART_CHARS),
+            metadata = null,
+        )
+        is UIMessagePart.ToolCall -> part.copy(
+            toolCallId = part.toolCallId.truncateInline(120),
+            toolName = part.toolName.truncateInline(120),
+            arguments = part.arguments.truncateTo(REQUEST_LOG_MAX_TOOL_ARGS_CHARS),
+            metadata = null,
+        )
+        is UIMessagePart.ToolResult -> part.copy(
+            toolCallId = part.toolCallId.truncateInline(120),
+            toolName = part.toolName.truncateInline(120),
+            content = part.content.truncateJsonForLog(REQUEST_LOG_MAX_JSON_ELEMENT_CHARS),
+            arguments = part.arguments.truncateJsonForLog(REQUEST_LOG_MAX_JSON_ELEMENT_CHARS),
+            metadata = null,
+        )
+        is UIMessagePart.Tool -> part.copy(
+            toolCallId = part.toolCallId.truncateInline(120),
+            toolName = part.toolName.truncateInline(120),
+            input = part.input.truncateTo(REQUEST_LOG_MAX_TOOL_ARGS_CHARS),
+            metadata = null,
+        )
+        UIMessagePart.Search -> UIMessagePart.Search
+    }
+}
+
+private fun sanitizeUrlForLog(url: String): String {
+    val trimmed = url.trim()
+    if (trimmed.startsWith("data:", ignoreCase = true) && "base64," in trimmed) {
+        val prefix = trimmed.substringBefore("base64,") + "base64,"
+        val payload = trimmed.substringAfter("base64,", "")
+        return prefix + payload.truncateInline(120)
+    }
+    return trimmed.truncateInline(REQUEST_LOG_MAX_URL_CHARS)
+}
+
+private fun JsonElement.truncateJsonForLog(maxChars: Int): JsonElement {
+    val masked = maskSensitiveValuesInJsonElement()
+    val raw = runCatching { JsonInstant.encodeToString(JsonElement.serializer(), masked) }
+        .getOrElse { return JsonPrimitive("(json encode failed)") }
+
+    if (raw.length <= maxChars) return masked
+
+    return JsonObject(
+        mapOf(
+            "_truncated" to JsonPrimitive(true),
+            "preview" to JsonPrimitive(raw.truncateInline(maxChars)),
+        )
+    )
+}
+
+private fun buildTextGenerationRequestUrl(providerSetting: ProviderSetting, params: TextGenerationParams): String {
+    return when (providerSetting) {
+        is ProviderSetting.OpenAI -> {
+            val base = providerSetting.baseUrl.trimEnd('/')
+            val path = if (providerSetting.useResponseApi) {
+                "/responses"
+            } else {
+                providerSetting.chatCompletionsPath.ifBlank { "/chat/completions" }
+            }
+            base + (if (path.startsWith("/")) path else "/$path")
+        }
+        is ProviderSetting.Google -> {
+            if (providerSetting.vertexAI) {
+                "https://aiplatform.googleapis.com/v1/projects/${providerSetting.projectId}/locations/${providerSetting.location}/publishers/google/models/${params.model.modelId}:generateContent"
+            } else {
+                val base = providerSetting.baseUrl.trimEnd('/')
+                "$base/models/${params.model.modelId}:generateContent"
+            }
+        }
+        is ProviderSetting.Claude -> {
+            val base = providerSetting.baseUrl.trimEnd('/')
+            "$base/messages"
+        }
+        else -> ""
+    }
+}
+
+private fun buildEmbeddingRequestUrl(providerSetting: ProviderSetting, model: Model): String {
+    return when (providerSetting) {
+        is ProviderSetting.OpenAI -> {
+            val base = providerSetting.baseUrl.trimEnd('/')
+            "$base/embeddings"
+        }
+        is ProviderSetting.Google -> {
+            if (providerSetting.vertexAI) {
+                "https://aiplatform.googleapis.com/v1/projects/${providerSetting.projectId}/locations/${providerSetting.location}/publishers/google/models/${model.modelId}:embedContent"
+            } else {
+                val base = providerSetting.baseUrl.trimEnd('/')
+                "$base/models/${model.modelId}:embedContent"
+            }
+        }
+        else -> ""
+    }
+}
+
+private fun String.sanitizeRequestBodyJsonForLog(): String {
+    val raw = trim()
+    if (raw.isBlank()) return ""
+    return runCatching {
+        val masked = JsonInstant.parseToJsonElement(raw).maskSensitiveValuesInJsonElement()
+        JsonInstant.encodeToString(JsonElement.serializer(), masked)
+    }.getOrElse {
+        raw
+    }.truncateTo(REQUEST_LOG_MAX_JSON_CHARS)
+}
+
+private fun String.sanitizeResponseRawForLog(): String {
+    return sanitizeRequestBodyJsonForLog()
+}
+
+private fun String.truncateTo(maxChars: Int): String {
+    if (length <= maxChars) return this
+    return take(maxChars) + "\n...(truncated)"
+}
+
+private fun String.truncateInline(maxChars: Int): String {
+    if (length <= maxChars) return this
+    return take(maxChars) + "...(truncated)"
+}
+
+private fun String.isSensitiveName(): Boolean {
+    return trim().lowercase() in SENSITIVE_NAMES
+}
+
+private fun JsonElement.maskSensitiveValuesInJsonElement(): JsonElement {
+    return when (this) {
+        is JsonObject -> JsonObject(
+            this.entries.associate { (key, value) ->
+                if (key.isSensitiveName()) {
+                    key to JsonPrimitive(MASKED_VALUE)
+                } else {
+                    key to value.maskSensitiveValuesInJsonElement()
+                }
+            }
+        )
+        is JsonArray -> JsonArray(this.jsonArray.map { it.maskSensitiveValuesInJsonElement() })
+        else -> this
+    }
+}
