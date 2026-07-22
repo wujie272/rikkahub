@@ -258,6 +258,7 @@
   <string name="chat_message_tool_scrape_web">Scrape web page</string>
   <string name="chat_message_tool_search_prefix">Search: %1$s</string>
   <string name="chat_message_tool_search_results_count">%1$d results</string>
+  <string name="chat_message_tool_schedule_job_warning">⚠️ This schedules a job that runs tools without asking. Review the job details below.</string>
   <string name="chat_message_tool_search_web">Search web: %1$s</string>
   <string name="chat_message_tool_submit">Submit</string>
   <string name="chat_page_cancel">Cancel</string>
@@ -1225,6 +1226,10 @@
   <string name="assistant_page_local_tools_media_scanner_desc">Notify Android\'s media scanner about new files so they appear in gallery/music apps.</string>
   <string name="assistant_page_local_tools_media_scanner_title">Media scanner</string>
   <string name="assistant_page_local_tools_notification_desc">Post Android notifications on the user\'s behalf.</string>
+  <string name="assistant_page_local_tools_toast_title">Toast</string>
+  <string name="assistant_page_local_tools_toast_desc">Show a brief popup message on screen.</string>
+  <string name="assistant_page_local_tools_share_title">Share</string>
+  <string name="assistant_page_local_tools_share_desc">Open the system share sheet to send text, images, or files to other apps.</string>
   <string name="assistant_page_local_tools_notification_title">Notification</string>
   <string name="assistant_page_local_tools_perm_denied_toast">%1$s permission denied</string>
   <string name="assistant_page_local_tools_perm_needed">Permission required — tap to grant</string>
@@ -1235,6 +1240,8 @@
   <string name="assistant_page_local_tools_section_hardware">Hardware control</string>
   <string name="assistant_page_local_tools_section_media">Media</string>
   <string name="assistant_page_local_tools_section_output">Output</string>
+  <string name="assistant_page_local_tools_vibrate_title">Vibrate</string>
+  <string name="assistant_page_local_tools_vibrate_desc">Trigger the device vibrator for haptic feedback.</string>
   <string name="assistant_page_local_tools_torch_desc">Turn the camera flashlight on or off.</string>
   <string name="assistant_page_local_tools_torch_title">Torch</string>
   <string name="assistant_page_local_tools_volume_desc">Read and set audio stream volumes. Ring/notification streams require DND access.</string>
@@ -1243,6 +1250,9 @@
   <string name="setting_page_tool_approvals_yolo_off">Off. Side-effecting tools prompt for approval before running.</string>
   <string name="setting_page_tool_approvals_yolo_dialog_title">Turn off all approval prompts?</string>
   <string name="setting_page_tool_approvals_yolo_dialog_body">Every tool — local shell, SSH, file writes, screen automation, Telegram outbound, MCP — will run without asking you. The agent could send messages, run commands on remote hosts, take photos, write files, schedule jobs, all without confirmation.\n\nHARDLINE protections still apply: rm -rf /, mkfs, shutdown / reboot, dd to block devices, fork bomb, encoded payload pipes — those keep blocking.\n\nThis is a foot-gun. Only enable if you trust the model + assistant config + your own prompts to behave responsibly.</string>
+  <string name="setting_page_tool_approvals_yolo_title">I AM STUPID: Skip all approvals</string>
+  <string name="setting_page_tool_approvals_yolo_dialog_confirm">I understand the risks, enable YOLO mode</string>
+  <string name="setting_page_tool_approvals_yolo_dialog_cancel">Cancel</string>
   <string name="language_arabic">🇸🇦 العربية</string>
   <string name="language_persian">🇮🇷 فارسی</string>
   <string name="language_urdu">🇵🇰 اردو</string>
