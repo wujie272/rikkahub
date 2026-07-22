@@ -920,14 +920,13 @@ private fun KeySheetCard(
     onThaw: () -> Unit,
     onTest: (() -> Unit)? = null,
 ) {
-    val disabled = state?.disabled == true || !apiKey.enabled
     val isCooling = state?.isCoolingDown == true
     val remainingSec = if (isCooling) (state!!.remainingCooldownMs / 1000).toInt() else 0
     val progress = state?.cooldownProgress ?: 0f
 
     Card(
         colors = androidx.compose.material3.CardDefaults.cardColors(
-            containerColor = if (disabled)
+            containerColor = if (!apiKey.enabled)
                 MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
             else
                 MaterialTheme.colorScheme.surface
@@ -959,18 +958,7 @@ private fun KeySheetCard(
                     )
                 }
 
-                if (disabled) {
-                    Surface(
-                        shape = RoundedCornerShape(4.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                    ) {
-                        Text(
-                            text = "⛔ ${stringResource(R.string.setting_provider_page_disabled)}",
-                            style = MaterialTheme.typography.labelSmall,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        )
-                    }
-                } else if (isCooling) {
+                if (isCooling) {
                     Surface(
                         shape = RoundedCornerShape(4.dp),
                         color = MaterialTheme.colorScheme.errorContainer,
@@ -998,7 +986,7 @@ private fun KeySheetCard(
                         Icon(HugeIcons.Delete01, contentDescription = stringResource(R.string.delete), modifier = Modifier.size(16.dp))
                     }
                     // 单 key 测试按钮
-                    if (onTest != null && !disabled) {
+                    if (onTest != null && apiKey.enabled) {
                         if (isTesting) {
                             LinearWavyProgressIndicator(modifier = Modifier.size(24.dp))
                         } else {
@@ -1018,7 +1006,7 @@ private fun KeySheetCard(
                         style = MaterialTheme.typography.labelSmall,
                     )
                     Switch(
-                        checked = apiKey.enabled && !disabled,
+                        checked = apiKey.enabled,
                         onCheckedChange = { onToggleEnabled() },
                         modifier = Modifier.height(24.dp),
                     )
@@ -1074,7 +1062,7 @@ private fun KeySheetCard(
             }
 
             // 统计（仅非冷却时显示）
-            if (state != null && !isCooling && !disabled) {
+            if (state != null && !isCooling && apiKey.enabled) {
                 Text(
                     text = "${stringResource(R.string.setting_provider_page_requests)}: ${state.totalRequests} · ${stringResource(R.string.setting_provider_page_success)}: ${state.successfulRequests} · ${stringResource(R.string.setting_provider_page_failures)}: ${state.failedRequests}",
                     style = MaterialTheme.typography.labelSmall,
