@@ -1132,10 +1132,6 @@
   <string name="assistant_page_fast_path_router_desc">對於高信心度的請求（如「我的電量是多少」、「現在幾點」或「列出工作流程」），跳過大型語言模型。比對的工具直接執行，你立即得到答案。保守策略 — 任何含糊的請求仍會交給模型。記錄到 logcat（標籤：FastPathRouter）。</string>
   <string name="assistant_page_local_tools_app_launcher_desc">按套件名稱開啟已安裝的應用程式（例如 Termux、設定）並列出可用應用程式。與螢幕自動化搭配可實現完整的介面控制。</string>
   <string name="assistant_page_local_tools_app_launcher_title">應用程式啟動器</string>
-  <string name="assistant_page_local_tools_audio_info_desc">讀取響鈴模式、音樂播放狀態、耳機連接和輸出裝置。</string>
-  <string name="assistant_page_local_tools_audio_info_title">音訊資訊</string>
-  <string name="assistant_page_local_tools_battery_desc">讀取電量、充電狀態、充電方式、溫度和健康度。</string>
-  <string name="assistant_page_local_tools_battery_title">電池</string>
   <string name="assistant_page_local_tools_brightness_desc">讀取和設定螢幕亮度。設定需要 WRITE_SETTINGS 權限。</string>
   <string name="assistant_page_local_tools_brightness_title">亮度</string>
   <string name="assistant_page_local_tools_browser_desc">AI 驅動的網頁瀏覽器。17 個可單獨開關的工具 — 在 設定 → 瀏覽器 中設定讀/寫存取權限。</string>
@@ -1195,8 +1191,6 @@
   <string name="assistant_page_local_tools_section_output">輸出</string>
   <string name="assistant_page_local_tools_section_personal_data">個人資料</string>
   <string name="assistant_page_local_tools_section_screen_automation">螢幕自動化</string>
-  <string name="assistant_page_local_tools_sensors_desc">列出裝置感測器並讀取短樣本（加速度感測器、陀螺儀、光線等）。</string>
-  <string name="assistant_page_local_tools_sensors_title">感測器</string>
   <string name="assistant_page_local_tools_share_desc">開啟系統分享面板，將文字或網址傳送到其他應用程式。</string>
   <string name="assistant_page_local_tools_share_title">分享</string>
   <string name="assistant_page_local_tools_skill_import_desc">讓助理從網址或已有的文字安裝技能（例如透過 SSH / curl / MCP 從需認證的伺服器取得）。支援原生、openclaw 和 Hermes 格式。每次安裝都需要逐次授權（已停用「永遠允許」 — 你每次都要審查來源）。</string>
@@ -1207,14 +1201,10 @@
   <string name="assistant_page_local_tools_speech_to_text_title">語音轉文字</string>
   <string name="assistant_page_local_tools_ssh_desc">讓助理透過 SSH/SFTP 在遠端主機上執行 shell 指令和傳輸檔案。支援儲存主機、密碼或私鑰認證、accept-new 主機金鑰檢查。</string>
   <string name="assistant_page_local_tools_ssh_title">SSH</string>
-  <string name="assistant_page_local_tools_storage_desc">讀取內部和外部儲存空間的總計/可用/已用容量。</string>
-  <string name="assistant_page_local_tools_storage_title">儲存空間資訊</string>
   <string name="assistant_page_local_tools_sub_agents_desc">讓助理將專注的子任務（研究、多步驟工作）作為獨立的大型語言模型執行派發到背景。每次執行都需授權、有上限（每個助理預設並行 3 個，全域 16 個），且內部仍然適用 HARDLINE。</string>
   <string name="assistant_page_local_tools_sub_agents_title">子代理</string>
   <string name="assistant_page_local_tools_system_intents_desc">讓助理為你預先填寫系統應用程式，由你最終確認：日曆活動、新增聯絡人、電子郵件編輯器、簡訊編輯器、WiFi 設定、地圖。沒有你在目標應用程式中的點選，不會儲存或傳送任何內容。</string>
   <string name="assistant_page_local_tools_system_intents_title">系統 Intent</string>
-          <string name="assistant_page_local_tools_telephony_desc">讀取 SIM 卡和網路資訊（電信業者、網路類型）。需要 READ_PHONE_STATE 權限。</string>
-  <string name="assistant_page_local_tools_telephony_title">電話資訊</string>
   <string name="assistant_page_local_tools_termux_postgrant_command">mkdir -p ~/.termux &amp;&amp; echo \'allow-external-apps=true\' &gt;&gt; ~/.termux/termux.properties</string>
   <string name="assistant_page_local_tools_termux_postgrant_copied">指令已複製 — 將其貼到 Termux 中。</string>
   <string name="assistant_page_local_tools_termux_postgrant_copy">複製指令</string>
@@ -1239,8 +1229,6 @@
   <string name="assistant_page_local_tools_vibrate_title">震動</string>
   <string name="assistant_page_local_tools_volume_desc">讀取和設定音訊串流音量。鈴聲/通知音量串流需要勿擾模式存取權限。</string>
   <string name="assistant_page_local_tools_volume_title">音量</string>
-  <string name="assistant_page_local_tools_wifi_desc">讀取目前 Wi-Fi 連線（SSID、IP、訊號）。讀取 SSID 需要位置權限。</string>
-  <string name="assistant_page_local_tools_wifi_title">Wi-Fi 資訊</string>
   <string name="assistant_page_local_tools_workflows_desc">讓助理建立由觸發器執行的自動化 — WiFi 連接、排程、地理圍欄、通知到達等。</string>
   <string name="assistant_page_local_tools_workflows_hint_message">工作流程已啟用。某些觸發器類型需要開關無法請求的權限：\n\n• 地理圍欄（你到達某地）：設定 → 應用程式 → RikkaHub → 權限 → 位置 → 一律允許。\n• 通知到達：設定 → 應用程式 → 特殊存取權限 → 通知存取權 → 啟用 RikkaHub。\n• 應用程式啟動/關閉：設定 → 無障礙 → 啟用 RikkaHub。\n• 藍牙連接/中斷：在系統詢問時授予 BLUETOOTH_CONNECT。\n\n排程、WiFi、耳機、電源、螢幕開/關和電池觸發器開箱即用。當你建立需要額外設定的工作流程時，助理會即時提示。</string>
   <string name="assistant_page_local_tools_workflows_hint_title">工作流程需要額外設定</string>

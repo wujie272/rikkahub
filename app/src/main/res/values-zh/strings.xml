@@ -1186,10 +1186,6 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="assistant_page_fast_path_router_desc">对于高置信度的请求（如“我的电量是多少”、“现在几点”或“列出工作流”），跳过大模型。匹配的工具直接运行，你立即得到答案。保守策略 — 任何含糊的请求仍会交给模型。记录到 logcat（标签：FastPathRouter）。</string>
   <string name="assistant_page_local_tools_app_launcher_desc">按包名打开已安装的应用（例如 Termux、设置）并列出可用应用。与屏幕自动化配合可实现完整的界面控制。</string>
   <string name="assistant_page_local_tools_app_launcher_title">应用启动器</string>
-  <string name="assistant_page_local_tools_audio_info_desc">读取响铃模式、音乐播放状态、耳机连接和输出设备。</string>
-  <string name="assistant_page_local_tools_audio_info_title">音频信息</string>
-  <string name="assistant_page_local_tools_battery_desc">读取电量、充电状态、充电方式、温度和健康度。</string>
-  <string name="assistant_page_local_tools_battery_title">电池</string>
   <string name="assistant_page_local_tools_brightness_desc">读取和设置屏幕亮度。设置需要 WRITE_SETTINGS 权限。</string>
   <string name="assistant_page_local_tools_brightness_title">亮度</string>
   <string name="assistant_page_local_tools_browser_desc">AI 驱动的网页浏览器。17 个可单独开关的工具 — 在 设置 → 浏览器 中配置读/写访问权限。</string>
@@ -1249,8 +1245,6 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="assistant_page_local_tools_section_output">输出</string>
   <string name="assistant_page_local_tools_section_personal_data">个人数据</string>
   <string name="assistant_page_local_tools_section_screen_automation">屏幕自动化</string>
-  <string name="assistant_page_local_tools_sensors_desc">列出设备传感器并读取短样本（加速度计、陀螺仪、光线等）。</string>
-  <string name="assistant_page_local_tools_sensors_title">传感器</string>
   <string name="assistant_page_local_tools_share_desc">打开系统分享面板，将文本或网址发送到其他应用。</string>
   <string name="assistant_page_local_tools_share_title">分享</string>
   <string name="assistant_page_local_tools_skill_import_desc">让助手从网址或已有的文本安装技能（例如通过 SSH / curl / MCP 从需认证的服务器获取）。支持原生、openclaw 和 Hermes 格式。每次安装都需要逐次授权（已禁用“始终允许” — 你每次都要审查来源）。</string>
@@ -1261,14 +1255,10 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="assistant_page_local_tools_speech_to_text_title">语音转文字</string>
   <string name="assistant_page_local_tools_ssh_desc">让助手通过 SSH/SFTP 在远程主机上运行 shell 命令和传输文件。支持保存主机、密码或私钥认证、accept-new 主机密钥检查。</string>
   <string name="assistant_page_local_tools_ssh_title">SSH</string>
-  <string name="assistant_page_local_tools_storage_desc">读取内部和外部存储卷的总计/可用/已用空间。</string>
-  <string name="assistant_page_local_tools_storage_title">存储信息</string>
   <string name="assistant_page_local_tools_sub_agents_desc">让助手将专注的子任务（研究、多步骤工作）作为独立的大模型运行派发到后台。每次运行都需授权、有上限（每个助手默认并发 3 个，全局 16 个），且内部仍然适用 HARDLINE。</string>
   <string name="assistant_page_local_tools_sub_agents_title">子智能体</string>
   <string name="assistant_page_local_tools_system_intents_desc">让助手为你预填系统应用，由你最终确认：日历事件、新建联系人、邮件编辑器、短信编辑器、WiFi 设置、地图。没有你在目标应用中的点击，不会保存或发送任何内容。</string>
   <string name="assistant_page_local_tools_system_intents_title">系统 Intent</string>
-          <string name="assistant_page_local_tools_telephony_desc">读取 SIM 卡和网络信息（运营商、网络类型）。需要 READ_PHONE_STATE 权限。</string>
-  <string name="assistant_page_local_tools_telephony_title">电话信息</string>
   <string name="assistant_page_local_tools_termux_postgrant_command">mkdir -p ~/.termux &amp;&amp; echo \'allow-external-apps=true\' &gt;&gt; ~/.termux/termux.properties</string>
   <string name="assistant_page_local_tools_termux_postgrant_copied">命令已复制 — 将其粘贴到 Termux 中。</string>
   <string name="assistant_page_local_tools_termux_postgrant_copy">复制命令</string>
@@ -1293,8 +1283,6 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="assistant_page_local_tools_vibrate_title">振动</string>
   <string name="assistant_page_local_tools_volume_desc">读取和设置音频流音量。铃声/通知音量流需要勿扰模式访问权限。</string>
   <string name="assistant_page_local_tools_volume_title">音量</string>
-  <string name="assistant_page_local_tools_wifi_desc">读取当前 Wi-Fi 连接（SSID、IP、信号）。读取 SSID 需要位置权限。</string>
-  <string name="assistant_page_local_tools_wifi_title">Wi-Fi 信息</string>
   <string name="assistant_page_local_tools_workflows_desc">让助手创建由触发器运行的自动化 — WiFi 连接、定时、地理围栏、通知到达等。</string>
   <string name="assistant_page_local_tools_workflows_hint_message">工作流已启用。某些触发器类型需要开关无法请求的权限：\n\n• 地理围栏（你到达某地）：设置 → 应用 → RikkaHub → 权限 → 位置 → 始终允许。\n• 通知到达：设置 → 应用 → 特殊访问权限 → 通知使用权 → 启用 RikkaHub。\n• 应用启动/关闭：设置 → 无障碍 → 启用 RikkaHub。\n• 蓝牙连接/断开：在系统询问时授予 BLUETOOTH_CONNECT。\n\n定时、WiFi、耳机、电源、屏幕开/关和电池触发器开箱即用。当你创建需要额外设置的工作流时，助手会即时提示。</string>
   <string name="assistant_page_local_tools_workflows_hint_title">工作流需要额外设置</string>
