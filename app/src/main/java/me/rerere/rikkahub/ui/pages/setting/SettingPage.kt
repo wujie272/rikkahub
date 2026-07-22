@@ -190,6 +190,12 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         supportingContent = { Text(stringResource(R.string.setting_page_extensions_desc)) },
                         headlineContent = { Text(stringResource(R.string.setting_page_extensions)) },
                     )
+                    item(
+                        onClick = { navController.navigate(Screen.SettingAdvanced) },
+                        leadingContent = { Icon(HugeIcons.Developer, null) },
+                        supportingContent = { Text("超时、重试、工具结果优化等") },
+                        headlineContent = { Text("高级设置") },
+                    )
                 }
             }
 
@@ -300,20 +306,6 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         leadingContent = { Icon(HugeIcons.Shield01, null) },
                         supportingContent = { Text(stringResource(R.string.setting_page_permissions_desc)) },
                         headlineContent = { Text(stringResource(R.string.setting_page_permissions)) },
-                    )
-                }
-            }
-
-            item("advancedSettings") {
-                CardGroup(
-                    modifier = Modifier.padding(horizontal = 8.dp),
-                    title = { Text("高级设置") },
-                ) {
-                    item(
-                        onClick = { navController.navigate(Screen.SettingAdvanced) },
-                        leadingContent = { Icon(HugeIcons.Developer, null) },
-                        supportingContent = { Text("超时、重试、工具结果优化等") },
-                        headlineContent = { Text("高级设置") },
                     )
                 }
             }
