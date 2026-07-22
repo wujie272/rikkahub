@@ -14,6 +14,7 @@ import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.knowledge.KnowledgeBaseEntity
 import me.rerere.rikkahub.data.knowledge.KnowledgeDocumentEntity
 import me.rerere.rikkahub.data.knowledge.KnowledgeService
+import me.rerere.rikkahub.data.knowledge.EmbeddingService
 import me.rerere.rikkahub.data.knowledge.SearchResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -29,6 +30,7 @@ class KnowledgeVM(
     private val context: Application,
     private val knowledgeService: KnowledgeService,
     private val settingsStore: SettingsStore,
+    private val embeddingService: EmbeddingService,
 ) : ViewModel() {
 
     // ============ 列表页状态 ============
@@ -105,6 +107,23 @@ class KnowledgeVM(
     }
 
     fun dismissSnackbar() { _snackbar.value = null }
+
+    /**
+     * 检测模型的实际嵌入维度
+     * 通过嵌入一段测试文本，从返回的向量长度获取真实维度
+     */
+    fun detectModelDimensions(modelId: String) {
+        viewModelScope.launch {
+            try {
+                val testVector = embeddingService.embed("test", modelId)
+                if (testVector.isNotEmpty()) {
+                    _editForm.value = _editForm.value.copy(dimensions = testVector.size)
+                }
+            } catch (_: Exception) {
+                // 检测失败时保持原有维度值不变
+            }
+        }
+    }
 
     // ============ 创建/编辑 ============
     fun loadEmbeddingModels() {

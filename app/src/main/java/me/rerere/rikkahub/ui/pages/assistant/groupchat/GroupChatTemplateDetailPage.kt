@@ -69,7 +69,6 @@ import kotlinx.coroutines.launch
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import me.rerere.rikkahub.data.model.GroupChatSeat
-import me.rerere.rikkahub.data.model.GroupChatRuntimeConfig
 import me.rerere.hugeicons.stroke.Zap
 import me.rerere.hugeicons.stroke.Star
 import me.rerere.hugeicons.stroke.Bot
@@ -470,36 +469,17 @@ fun GroupChatTemplateDetailPage(id: String) {
                                 TextButton(
                                     onClick = {
                                         scope.launch {
-                                            val config = GroupChatRuntimeConfig.roundRobinDefaults()
                                             val convId = chatService.startGroupChatConversation(
                                                 templateId = currentTemplate.id,
                                                 userMessage = emptyList(),
-                                                runtimeConfig = config,
                                             )
-                                            navController.navigate(Screen.GroupChat(id = convId.toString()))
+                                            navController.navigate(Screen.Chat(id = convId.toString()))
                                         }
                                         showModeDialog = false
                                     },
                                     modifier = Modifier.fillMaxWidth(),
                                 ) {
-                                    Text("💬 自由讨论（轮流发言）")
-                                }
-                                TextButton(
-                                    onClick = {
-                                        scope.launch {
-                                            val config = GroupChatRuntimeConfig.debateDefaults()
-                                            val convId = chatService.startGroupChatConversation(
-                                                templateId = currentTemplate.id,
-                                                userMessage = emptyList(),
-                                                runtimeConfig = config,
-                                            )
-                                            navController.navigate(Screen.GroupChat(id = convId.toString()))
-                                        }
-                                        showModeDialog = false
-                                    },
-                                    modifier = Modifier.fillMaxWidth(),
-                                ) {
-                                    Text("🎯 AI辩论（正反方交锋）")
+                                    Text("💬 开始群聊")
                                 }
                             }
                         },
@@ -864,7 +844,7 @@ private fun SeatCard(
                                 onUpdateOverrides { overrides ->
                                     overrides.copy(
                                         searchEnabled = true,
-                                        searchMode = 2,
+                                        searchMode = me.rerere.rikkahub.data.model.AssistantSearchMode.Provider(index),
                                     )
                                 }
                             },

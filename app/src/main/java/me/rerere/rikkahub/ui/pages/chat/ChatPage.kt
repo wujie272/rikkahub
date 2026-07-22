@@ -85,6 +85,7 @@ import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.ui.components.ai.ChatInput
+import me.rerere.rikkahub.ui.components.ai.ChatInputUiMode
 import me.rerere.rikkahub.ui.components.ai.FilesPicker
 import me.rerere.rikkahub.ui.components.ai.completion.WorkspaceCompletionProvider
 import me.rerere.rikkahub.ui.components.ai.useCropLauncher
@@ -312,6 +313,8 @@ private fun ChatPageContent(
         }.orEmpty()
     }
 
+    // 群聊检测
+    val isGroupChat = conversation.groupChatTemplateId != null
     // 群聊消息发送者颜色映射：根据 senderName 生成确定性颜色
     // @Name 提及消歧义状态
     TTSAutoPlay(vm = vm, setting = setting, conversation = conversation)
@@ -350,7 +353,8 @@ private fun ChatPageContent(
                     onCancelClick = {
                         vm.stopGeneration()
                     },
-                    enableSearch = enableWebSearch,
+                    enableSearch = if (isGroupChat) false else enableWebSearch,
+                    uiMode = if (isGroupChat) ChatInputUiMode.GroupChat else ChatInputUiMode.Normal,
                     onToggleSearch = {
                         val current = setting.getCurrentAssistant()
                         vm.updateSettings(
@@ -366,7 +370,7 @@ private fun ChatPageContent(
                         )
                     },
                     onSendClick = {
-                        if (currentChatModel == null) {
+                        if (currentChatModel == null && !isGroupChat) {
                             toaster.show(
                                 context.getString(R.string.chat_select_model_first),
                                 type = ToastType.Error,
@@ -381,7 +385,6 @@ private fun ChatPageContent(
                             inputState.clearInput()
                             return@ChatInput
                         }
-                        // 群聊 @Name 检测
                         vm.handleMessageSend(inputState.getContents())
                         scope.launch {
                             chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
@@ -397,7 +400,6 @@ private fun ChatPageContent(
                             inputState.clearInput()
                             return@ChatInput
                         }
-                        // 群聊 @Name 检测
                         vm.handleMessageSend(content = inputState.getContents(), answer = false)
                         scope.launch {
                             chatListState.requestScrollToItem(conversation.currentMessages.size + 5)

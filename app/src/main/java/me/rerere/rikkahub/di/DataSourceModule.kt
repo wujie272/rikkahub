@@ -15,8 +15,7 @@ import me.rerere.ai.provider.ProviderManager
 import me.rerere.common.http.AcceptLanguageBuilder
 import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.AppScope
-import me.rerere.rikkahub.data.ai.AIRequestInterceptor
-import me.rerere.rikkahub.data.ai.RequestLoggingInterceptor
+import me.rerere.rikkahub.data.ai.requestlog.AIRequestLogManager
 import me.rerere.rikkahub.data.ai.transformers.AssistantTemplateLoader
 import me.rerere.rikkahub.data.ai.GenerationHandler
 import me.rerere.rikkahub.data.ai.transformers.TemplateTransformer
@@ -42,6 +41,7 @@ import me.rerere.rikkahub.data.db.migrations.Migration_29_30
 import me.rerere.rikkahub.data.db.migrations.Migration_30_31
 import me.rerere.rikkahub.data.db.migrations.Migration_31_32
 import me.rerere.rikkahub.data.db.migrations.Migration_32_33
+import me.rerere.rikkahub.data.db.migrations.MIGRATION_34_35
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.agentrun.AgentRunBootRecovery
 import me.rerere.rikkahub.data.agentrun.AgentRunRepository
@@ -75,6 +75,7 @@ val dataSourceModule = module {
                 Migration_30_31,
                 Migration_31_32,
                 Migration_32_33,
+                MIGRATION_34_35,
             )
             .addCallback(object : RoomDatabase.Callback() {
                 override fun onOpen(db: SupportSQLiteDatabase) {
@@ -159,6 +160,17 @@ val dataSourceModule = module {
     }
 
     single {
+        get<AppDatabase>().aiRequestLogDao()
+    }
+
+    single {
+        AIRequestLogManager(get())
+    }
+
+    // 初始化 OkHttp 拦截器的日志管理器引用
+    // 已移除：日志改为 AI 层直接写入 Room
+
+    single {
         MessageFtsManager(get())
     }
 
@@ -178,6 +190,7 @@ val dataSourceModule = module {
             json = get(),
             memoryRepo = get(),
             aiLoggingManager = get(),
+            requestLogManager = get(),
             systemPromptBuilder = get(),
         )
     }
@@ -222,8 +235,7 @@ val dataSourceModule = module {
                     chain.proceed(request)
                 }
             }
-            .addNetworkInterceptor(RequestLoggingInterceptor())
-            .addInterceptor(AIRequestInterceptor())
+            // 请求日志已迁移至 AI 层（GenerationHandler → AIRequestLogManager），不再走 HTTP 拦截器
             .apply {
                 // HEADERS-level logging prints Authorization: Bearer <api-key> to logcat.
                 // Debug-only so release builds never leak provider keys to logcat.

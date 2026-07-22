@@ -3,10 +3,10 @@ package me.rerere.rikkahub.ui.pages.knowledge
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,28 +17,29 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LargeFlexibleTopAppBar
+import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SecondaryTabRow
-import androidx.compose.material3.Tab
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -46,25 +47,26 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Add01
-import me.rerere.hugeicons.stroke.AlertCircle
 import me.rerere.hugeicons.stroke.Delete01
-import me.rerere.hugeicons.stroke.Edit01
 import me.rerere.hugeicons.stroke.File02
 import me.rerere.hugeicons.stroke.Folder01
 import me.rerere.hugeicons.stroke.GlobalSearch
-import me.rerere.hugeicons.stroke.Tick01
-import me.rerere.hugeicons.stroke.Upload02
+import me.rerere.hugeicons.stroke.Link01
+import me.rerere.hugeicons.stroke.Settings02
+import me.rerere.hugeicons.stroke.Search01
+import me.rerere.hugeicons.stroke.Refresh01
+import me.rerere.hugeicons.stroke.BookOpen01
 import me.rerere.rikkahub.data.knowledge.SearchResult
 import androidx.compose.ui.res.stringResource
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.ui.components.nav.BackButton
@@ -77,6 +79,8 @@ import me.rerere.rikkahub.ui.components.settings.FailedImportBanner
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.theme.CustomColors
 import org.koin.androidx.compose.koinViewModel
+import androidx.compose.foundation.background
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun KnowledgeBaseDetailPage(
@@ -88,14 +92,18 @@ fun KnowledgeBaseDetailPage(
     val searchResults by vm.searchResults.collectAsStateWithLifecycle()
     val searchQuery by vm.searchQuery.collectAsStateWithLifecycle()
     val isSearching by vm.isSearching.collectAsStateWithLifecycle()
-    val availableModels by vm.availableModels.collectAsStateWithLifecycle()
-    val modelNameMap = remember(availableModels) { availableModels.associate { it.id to it.displayName } }
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
-    var tabIndex by remember { mutableIntStateOf(0) }
+    val importProgress by vm.importProgress.collectAsStateWithLifecycle()
+    val failedItems by vm.failedItems.collectAsStateWithLifecycle()
     val navController = LocalNavController.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    // 导入状态由 VM 管理（ImportProgressState + FailedImportItem）
+
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+
+    var showMenu by remember { mutableStateOf(false) }
+    var showBottomSheet by remember { mutableStateOf(false) }
+    var searchText by remember(searchQuery) { mutableStateOf(searchQuery) }
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     LaunchedEffect(kbId) {
         vm.selectKnowledgeBase(kbId)
@@ -110,7 +118,6 @@ fun KnowledgeBaseDetailPage(
         "application/epub+zip",
     )
 
-    // 多文件选择器 — 直接调 VM 的 importFiles
     val multiFileLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenMultipleDocuments()
     ) { uris: List<Uri> ->
@@ -134,7 +141,6 @@ fun KnowledgeBaseDetailPage(
         }
     }
 
-    // 目录选择器（递归扫描子目录）— 流式导入，不攒内存
     val dirPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
     ) { treeUri: Uri? ->
@@ -143,17 +149,63 @@ fun KnowledgeBaseDetailPage(
         }
     }
 
+    // 底部添加数据源 Sheet
+    if (showBottomSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showBottomSheet = false },
+            sheetState = sheetState,
+        ) {
+            AddDataSourceSheet(
+                onPickFile = { showBottomSheet = false; multiFileLauncher.launch(supportedMimeTypes) },
+                onPickDir = { showBottomSheet = false; dirPickerLauncher.launch(null) },
+            )
+        }
+    }
+
     Scaffold(
         topBar = {
-            LargeFlexibleTopAppBar(
+            LargeTopAppBar(
                 title = { Text(kb?.name ?: stringResource(R.string.kb_detail)) },
                 navigationIcon = { BackButton() },
                 actions = {
-                    IconButton(onClick = {
-                        vm.initEditForm(kb ?: return@IconButton)
-                        navController.navigate(Screen.KnowledgeBaseEdit(kbId))
-                    }) {
-                        Icon(HugeIcons.Edit01, stringResource(R.string.kb_edit))
+                    // "+" 添加按钮
+                    IconButton(onClick = { showBottomSheet = true }) {
+                        Icon(HugeIcons.Add01, stringResource(R.string.kb_import_doc))
+                    }
+                    // "..." 菜单按钮
+                    Box {
+                        IconButton(onClick = { showMenu = true }) {
+                            Icon(HugeIcons.Settings02, "更多")
+                        }
+                        DropdownMenu(
+                            expanded = showMenu,
+                            onDismissRequest = { showMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("库设置") },
+                                onClick = {
+                                    showMenu = false
+                                    vm.initEditForm(kb ?: return@DropdownMenuItem)
+                                    navController.navigate(Screen.KnowledgeBaseEdit(kbId))
+                                },
+                                leadingIcon = { Icon(HugeIcons.Settings02, null, modifier = Modifier.size(18.dp)) }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("搜索测试") },
+                                onClick = { showMenu = false },
+                                leadingIcon = { Icon(HugeIcons.Search01, null, modifier = Modifier.size(18.dp)) }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("重建索引") },
+                                onClick = { showMenu = false },
+                                leadingIcon = { Icon(HugeIcons.Refresh01, null, modifier = Modifier.size(18.dp)) }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("回收站") },
+                                onClick = { showMenu = false },
+                                leadingIcon = { Icon(HugeIcons.Delete01, null, modifier = Modifier.size(18.dp)) }
+                            )
+                        }
                     }
                 },
                 scrollBehavior = scrollBehavior,
@@ -163,163 +215,98 @@ fun KnowledgeBaseDetailPage(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         containerColor = CustomColors.topBarColors.containerColor
     ) { innerPadding ->
-        Column(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
-            // Info chips
-            kb?.let { k ->
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    InfoChip(stringResource(R.string.kb_embedding_model), modelNameMap[k.modelId] ?: k.modelId.take(12) + "...")
-                    InfoChip(stringResource(R.string.kb_dimensions, k.dimensions).split(":").firstOrNull()?.trim() ?: "维度", k.dimensions.toString())
-                }
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+        ) {
+            // 搜索栏 + 条目数
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                OutlinedTextField(
+                    value = searchText,
+                    onValueChange = { searchText = it },
+                    modifier = Modifier.weight(1f),
+                    placeholder = { Text("关键词搜索") },
+                    trailingIcon = {
+                        if (searchText.isNotBlank()) {
+                            IconButton(onClick = {
+                                vm.search(kbId, searchText)
+                            }) {
+                                Icon(HugeIcons.GlobalSearch, "搜索")
+                            }
+                        }
+                    },
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
+                )
+                Text(
+                    text = "条目 (${fileList.size})",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
 
-            // Tabs
-            SecondaryTabRow(selectedTabIndex = tabIndex) {
-                Tab(selected = tabIndex == 0, onClick = { tabIndex = 0 },
-                    text = { Text(stringResource(R.string.kb_doc_tab)) },
-                    icon = { Icon(HugeIcons.File02, null, modifier = Modifier.size(16.dp)) }
-                )
-                Tab(selected = tabIndex == 1, onClick = { tabIndex = 1 },
-                    text = { Text(stringResource(R.string.kb_search_tab)) },
-                    icon = { Icon(HugeIcons.GlobalSearch, null, modifier = Modifier.size(16.dp)) }
-                )
-            }
+            // 导入进度
+            ImportProgressPanel(
+                progress = importProgress,
+                onCancel = { vm.cancelImport() },
+                modifier = Modifier.padding(horizontal = 16.dp),
+            )
+            FailedImportBanner(
+                failedItems = failedItems,
+                onRetry = { itemId -> vm.retryFailedItem(kbId, itemId) },
+                onDismiss = { itemId -> vm.dismissFailedItem(itemId) },
+                onClearAll = { vm.clearAllFailedItems() },
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+            )
 
-            when (tabIndex) {
-                0 -> DocumentTab(
-                    fileList = fileList,
-                    vm = vm,
-                    kbId = kbId,
-                    onPickFile = { multiFileLauncher.launch(supportedMimeTypes) },
-                    onPickDir = { dirPickerLauncher.launch(null) },
-                    onDeleteFile = { filePath -> vm.deleteFile(kbId, filePath) },
-                    onViewChunks = { filePath ->
-                        vm.loadChunks(kbId, filePath)
-                        navController.navigate(Screen.KnowledgeBaseChunks(kbId, Uri.encode(filePath)))
-                    }
-                )
-                1 -> SearchTab(
-                    query = searchQuery,
+            // 搜索结果 / 文件列表
+            if (searchQuery.isNotBlank() || isSearching) {
+                SearchResultsList(
                     results = searchResults,
                     isSearching = isSearching,
-                    onSearch = { query -> vm.search(kbId, query) },
-                    onSearchWithTag = { query, tag -> vm.search(kbId, query, tagFilter = tag) },
-                    onClear = { vm.clearSearch() },
+                    query = searchQuery,
+                    onClear = { vm.clearSearch(); searchText = "" },
                     onViewChunk = { result ->
                         vm.loadChunks(kbId, result.filePath)
                         navController.navigate(Screen.KnowledgeBaseChunks(kbId, Uri.encode(result.filePath)))
                     }
                 )
-            }
-        }
-    }
-}
-
-@Composable
-private fun InfoChip(label: String, value: String) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(label, style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value, style = MaterialTheme.typography.bodySmall,
-            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
-    }
-}
-
-@Composable
-private fun DocumentTab(
-    fileList: List<KnowledgeVM.FileInfo>,
-    vm: KnowledgeVM,
-    kbId: String,
-    onPickFile: () -> Unit,
-    onPickDir: () -> Unit,
-    onDeleteFile: (String) -> Unit,
-    onViewChunks: (String) -> Unit,
-) {
-    val importProgress by vm.importProgress.collectAsStateWithLifecycle()
-    val failedItems by vm.failedItems.collectAsStateWithLifecycle()
-
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilledTonalButton(
-                onClick = onPickFile,
-                modifier = Modifier.weight(1f),
-                enabled = !importProgress.active
-            ) {
-                Icon(HugeIcons.Upload02, null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text(stringResource(R.string.kb_import_docs))
-            }
-            FilledTonalButton(
-                onClick = onPickDir,
-                modifier = Modifier.weight(1f),
-                enabled = !importProgress.active
-            ) {
-                Icon(HugeIcons.Folder01, null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text(stringResource(R.string.kb_import_dir))
-            }
-        }
-
-        // 细化进度面板（含取消按钮）
-        ImportProgressPanel(
-            progress = importProgress,
-            onCancel = { vm.cancelImport() },
-            modifier = Modifier.padding(vertical = 8.dp),
-        )
-
-        // 失败重试面板
-        FailedImportBanner(
-            failedItems = failedItems,
-            onRetry = { itemId -> vm.retryFailedItem(kbId, itemId) },
-            onDismiss = { itemId -> vm.dismissFailedItem(itemId) },
-            onClearAll = { vm.clearAllFailedItems() },
-            modifier = Modifier.padding(bottom = 8.dp),
-        )
-
-        Spacer(Modifier.height(16.dp))
-
-        if (fileList.isEmpty()) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(HugeIcons.File02, null, modifier = Modifier.size(48.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
-                    Spacer(Modifier.height(8.dp))
-                    Text(stringResource(R.string.kb_no_docs), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(stringResource(R.string.kb_no_docs_hint),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+            } else if (fileList.isEmpty()) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(HugeIcons.File02, null, modifier = Modifier.size(48.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
+                        Spacer(Modifier.height(8.dp))
+                        Text(stringResource(R.string.kb_no_docs), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(stringResource(R.string.kb_no_docs_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
+                    }
                 }
-            }
-        } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(fileList, key = { it.filePath }) { file ->
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = CustomColors.listItemColors.containerColor),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            Icon(HugeIcons.File02, null, tint = MaterialTheme.colorScheme.primary)
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(file.fileName, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                                    style = MaterialTheme.typography.bodyLarge)
-                                Text(stringResource(R.string.kb_chunks_label, file.chunkCount),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                            OutlinedButton(onClick = { onViewChunks(file.filePath) }) {
-                                Text(stringResource(R.string.kb_view_chunks))
-                            }
-                            IconButton(onClick = { onDeleteFile(file.filePath) }) {
-                                Icon(HugeIcons.Delete01, stringResource(R.string.kb_delete),
-                                    tint = MaterialTheme.colorScheme.error)
-                            }
-                        }
+            } else {
+                LazyColumn(
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                        horizontal = 16.dp, vertical = 8.dp
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(fileList, key = { it.filePath }) { file ->
+                        FileListItem(
+                            fileName = file.fileName,
+                            chunkCount = file.chunkCount,
+                            onViewChunks = {
+                                vm.loadChunks(kbId, file.filePath)
+                                navController.navigate(Screen.KnowledgeBaseChunks(kbId, Uri.encode(file.filePath)))
+                            },
+                            onDelete = { vm.deleteFile(kbId, file.filePath) }
+                        )
                     }
                 }
             }
@@ -328,90 +315,140 @@ private fun DocumentTab(
 }
 
 @Composable
-private fun SearchTab(
-    query: String,
+private fun FileListItem(
+    fileName: String,
+    chunkCount: Int,
+    onViewChunks: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = CustomColors.listItemColors.containerColor),
+        shape = RoundedCornerShape(12.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onViewChunks() }
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // 文件图标
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(MaterialTheme.colorScheme.primaryContainer),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    HugeIcons.File02,
+                    null,
+                    modifier = Modifier.size(20.dp),
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+            }
+
+            // 文件名 + 标签
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = fileName,
+                    style = MaterialTheme.typography.bodyLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.height(4.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        tonalElevation = 0.dp,
+                    ) {
+                        Text("工作区", modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                            style = MaterialTheme.typography.labelSmall)
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        tonalElevation = 0.dp,
+                    ) {
+                        Text("就绪", modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                            style = MaterialTheme.typography.labelSmall)
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        tonalElevation = 0.dp,
+                    ) {
+                        Text("刚刚", modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                            style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            }
+
+            // 删除按钮
+            IconButton(onClick = onDelete) {
+                Icon(
+                    HugeIcons.Delete01,
+                    stringResource(R.string.kb_delete),
+                    tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SearchResultsList(
     results: List<SearchResult>,
     isSearching: Boolean,
-    onSearch: (String) -> Unit,
-    onSearchWithTag: (String, String?) -> Unit = { query, _ -> onSearch(query) },
+    query: String,
     onClear: () -> Unit,
     onViewChunk: (SearchResult) -> Unit,
 ) {
-    var searchText by remember(query) { mutableStateOf(query) }
-    var showDebug by remember { mutableStateOf(false) }
-    var tagFilter by remember { mutableStateOf("") }
-
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        OutlinedTextField(
-            value = searchText,
-            onValueChange = { searchText = it },
-            modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text(stringResource(R.string.kb_search_placeholder)) },
-            trailingIcon = {
-                if (searchText.isNotBlank()) {
-                    IconButton(onClick = { onSearchWithTag(searchText, tagFilter.ifBlank { null }) }) {
-                        Icon(HugeIcons.GlobalSearch, stringResource(R.string.kb_search_tab))
-                    }
-                }
-            },
-            singleLine = true,
-        )
-
-        // 标签过滤 + 调试模式
+    Column(modifier = Modifier.fillMaxSize()) {
+        // 搜索结果头部
         Row(
-            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            OutlinedTextField(
-                value = tagFilter,
-                onValueChange = { tagFilter = it },
-                modifier = Modifier.weight(1f),
-                placeholder = { Text("标签过滤（可选）") },
-                singleLine = true,
-                trailingIcon = {
-                    if (tagFilter.isNotBlank()) {
-                        IconButton(onClick = {
-                            tagFilter = ""
-                            onSearchWithTag(searchText, null)
-                        }) {
-                            Icon(HugeIcons.AlertCircle, null, modifier = Modifier.size(16.dp))
-                        }
-                    }
-                },
+            Text(
+                text = "搜索结果 (${results.size})",
+                style = MaterialTheme.typography.titleSmall,
             )
-            me.rerere.rikkahub.ui.components.ui.ToggleSurface(
-                checked = showDebug,
-                onClick = { showDebug = !showDebug },
-            ) {
-                Text("调试", style = MaterialTheme.typography.labelSmall)
+            androidx.compose.material3.TextButton(onClick = onClear) {
+                Text("清除")
             }
         }
-
-        Spacer(Modifier.height(8.dp))
 
         if (isSearching) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator()
             }
-        } else if (results.isEmpty() && query.isNotBlank()) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(stringResource(R.string.kb_search_no_results), color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
         } else if (results.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(HugeIcons.GlobalSearch, null, modifier = Modifier.size(48.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
-                    Spacer(Modifier.height(8.dp))
-                    Text(stringResource(R.string.kb_search_hint),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
+                Text(
+                    stringResource(R.string.kb_search_no_results),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            LazyColumn(
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                    horizontal = 16.dp, vertical = 4.dp
+                ),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 items(results, key = { it.documentId }) { result ->
-                    SearchResultCard(result = result, onClick = { onViewChunk(result) }, showDebug = showDebug)
+                    SearchResultItem(
+                        result = result,
+                        onClick = { onViewChunk(result) },
+                    )
                 }
             }
         }
@@ -419,17 +456,18 @@ private fun SearchTab(
 }
 
 @Composable
-private fun SearchResultCard(
+private fun SearchResultItem(
     result: SearchResult,
     onClick: () -> Unit,
-    showDebug: Boolean = false,
 ) {
     Card(
         onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = CustomColors.listItemColors.containerColor),
-        modifier = Modifier.fillMaxWidth()
+        shape = RoundedCornerShape(12.dp),
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
+            // 分数 + 文件名
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -445,28 +483,19 @@ private fun SearchResultCard(
                         color = MaterialTheme.colorScheme.primary,
                         trackColor = MaterialTheme.colorScheme.surfaceVariant,
                     )
-                    Text("${(result.score * 100).toInt()}%", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                    Text(
+                        "${(result.score * 100).toInt()}%",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
                 }
-                Text(result.fileName, style = MaterialTheme.typography.labelSmall,
+                Text(
+                    result.fileName,
+                    style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-
-            // 调试模式：显示详细分数和标签
-            if (showDebug) {
-                Spacer(Modifier.height(4.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    ScoreBadge("语义", result.semanticScore, MaterialTheme.colorScheme.primary)
-                    ScoreBadge("BM25", result.bm25Score, MaterialTheme.colorScheme.tertiary)
-                    if (result.tags.isNotBlank()) {
-                        me.rerere.rikkahub.ui.components.ui.Tag(
-                            type = me.rerere.rikkahub.ui.components.ui.TagType.INFO
-                        ) { Text(result.tags.take(20), style = MaterialTheme.typography.labelSmall) }
-                    }
-                }
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
 
             Spacer(Modifier.height(4.dp))
@@ -492,21 +521,99 @@ private fun SearchResultCard(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ScoreBadge(label: String, score: Float, color: androidx.compose.ui.graphics.Color) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text("${(score * 100).toInt()}%", style = MaterialTheme.typography.labelSmall,
-            color = color, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+private fun AddDataSourceSheet(
+    onPickFile: () -> Unit,
+    onPickDir: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp)
+            .padding(bottom = 32.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Text(
+            text = "添加数据源",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+        )
+
+        // 笔记
+        DataSourceOption(
+            icon = HugeIcons.BookOpen01,
+            title = "笔记",
+            subtitle = "从笔记中选择，提取笔记内容",
+            onClick = { /* 笔记选择器 */ }
+        )
+
+        // 文件
+        DataSourceOption(
+            icon = HugeIcons.File02,
+            title = "文件",
+            subtitle = "支持 txt / md / html / docx / pdf / pptx / xlsx / epub，云端解码后支持 doc / ppt / xls 等更多格式",
+            onClick = onPickFile,
+        )
+
+        // 网址
+        DataSourceOption(
+            icon = HugeIcons.Link01,
+            title = "网址",
+            subtitle = "获取网页内容与截图",
+            onClick = { /* 网址输入 */ }
+        )
+
+        // 文件夹 / 目录
+        DataSourceOption(
+            icon = HugeIcons.Folder01,
+            title = "文件夹 / 目录",
+            subtitle = "选择文件夹或工作区，批量提取其中的文本文件",
+            onClick = onPickDir,
+        )
     }
 }
 
-/**
- * 读取文档内容（支持 PDF、DOCX、PPTX、EPUB、纯文本）
- */
-/**
- * 从 content:// URI 中提取文件名
- */
+@Composable
+private fun DataSourceOption(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(icon, null, modifier = Modifier.size(22.dp), tint = MaterialTheme.colorScheme.primary)
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+// ============ 工具函数 ============
+
 private fun getFileNameFromUri(context: android.content.Context, uri: android.net.Uri): String? {
     var name: String? = null
     if (uri.scheme == "content") {
@@ -514,25 +621,15 @@ private fun getFileNameFromUri(context: android.content.Context, uri: android.ne
         cursor?.use {
             if (it.moveToFirst()) {
                 val nameIndex = it.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
-                if (nameIndex >= 0) {
-                    name = it.getString(nameIndex)
-                }
+                if (nameIndex >= 0) name = it.getString(nameIndex)
             }
         }
     }
-    if (name == null) {
-        name = uri.lastPathSegment
-    }
-    // 确保有扩展名
-    if (name != null && !name.contains(".")) {
-        name = "$name.md"
-    }
+    if (name == null) name = uri.lastPathSegment
+    if (name != null && !name.contains(".")) name = "$name.md"
     return name
 }
 
-/**
- * 根据 MIME 类型获取文件扩展名
- */
 private fun getExtension(mimeType: String): String = when {
     mimeType.contains("pdf") -> ".pdf"
     mimeType.contains("word") || mimeType.contains("document") -> ".docx"
@@ -547,45 +644,30 @@ fun readDocumentContent(
     uri: android.net.Uri,
     mimeType: String,
 ): String {
-    // 先复制到临时文件（解析器需要 File）
     val tempFile = kotlinx.coroutines.runBlocking {
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             val cacheDir = java.io.File(context.cacheDir, "kb_import")
             cacheDir.mkdirs()
             val tmp = java.io.File.createTempFile("import_", getExtension(mimeType), cacheDir)
             val inputStream = context.contentResolver.openInputStream(uri)
-            if (inputStream == null) {
-                return@withContext tmp
-            }
-            inputStream.use { input ->
-                tmp.outputStream().use { output -> input.copyTo(output) }
-            }
+            if (inputStream == null) return@withContext tmp
+            inputStream.use { input -> tmp.outputStream().use { output -> input.copyTo(output) } }
             tmp
         }
     }
-
     return runCatching {
         when {
             mimeType == "application/pdf" || mimeType.contains("pdf") ->
                 PdfParser.parserPdf(tempFile)
-            mimeType == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
-                mimeType.contains("word") || tempFile.name.endsWith(".docx") ->
+            mimeType.contains("word") || tempFile.name.endsWith(".docx") ->
                 DocxParser.parse(tempFile)
-            mimeType == "application/vnd.openxmlformats-officedocument.presentationml.presentation" ||
-                mimeType.contains("presentation") || tempFile.name.endsWith(".pptx") ->
+            mimeType.contains("presentation") || tempFile.name.endsWith(".pptx") ->
                 PptxParser.parse(tempFile)
             mimeType == "application/epub+zip" || tempFile.name.endsWith(".epub") ->
                 EpubParser.parse(tempFile)
             mimeType.startsWith("text/") || tempFile.name.endsWith(".md") ->
                 tempFile.readText()
-            else ->
-                tempFile.readText()
+            else -> tempFile.readText()
         }
-    }.getOrElse {
-        tempFile.readText() // fallback
-    }.also {
-        tempFile.delete()
-    }
+    }.getOrElse { tempFile.readText() }.also { tempFile.delete() }
 }
-
-

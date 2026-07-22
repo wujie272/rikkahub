@@ -26,6 +26,7 @@ val knowledgeModule = module {
         EmbeddingService(
             providerManager = get(),
             settingsStore = get(),
+            requestLogManager = get(),
         )
     }
 
@@ -45,5 +46,5 @@ val knowledgeModule = module {
         )
     }
 
-    viewModel { KnowledgeVM(androidContext() as android.app.Application, get<me.rerere.rikkahub.data.knowledge.KnowledgeService>(), get<me.rerere.rikkahub.data.datastore.SettingsStore>()) }
+    viewModel { KnowledgeVM(androidContext() as android.app.Application, get<me.rerere.rikkahub.data.knowledge.KnowledgeService>(), get<me.rerere.rikkahub.data.datastore.SettingsStore>(), get<me.rerere.rikkahub.data.knowledge.EmbeddingService>()) }
 }

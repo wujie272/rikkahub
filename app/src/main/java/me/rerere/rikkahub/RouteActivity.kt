@@ -96,7 +96,6 @@ import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantPromptPage
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantRequestPage
 import me.rerere.rikkahub.ui.pages.backup.BackupPage
 import me.rerere.rikkahub.ui.pages.chat.ChatPage
-import me.rerere.rikkahub.ui.pages.groupchat.GroupChatPage
 import me.rerere.rikkahub.ui.pages.debug.DebugPage
 import me.rerere.rikkahub.ui.pages.developer.DeveloperPage
 import me.rerere.rikkahub.ui.pages.extensions.ExtensionsPage
@@ -115,8 +114,10 @@ import me.rerere.rikkahub.ui.pages.favorite.FavoritePage
 import me.rerere.rikkahub.ui.pages.history.HistoryPage
 import me.rerere.rikkahub.ui.pages.imggen.ImageGenPage
 import me.rerere.rikkahub.ui.pages.log.LogPage
+import me.rerere.rikkahub.ui.pages.log.LogDetailPage
 import me.rerere.rikkahub.ui.pages.search.SearchPage
 import me.rerere.rikkahub.ui.pages.setting.SettingAboutPage
+import me.rerere.rikkahub.ui.pages.setting.SettingAdvancedPage
 import me.rerere.rikkahub.ui.pages.setting.SettingAccessibilityPage
 import me.rerere.rikkahub.ui.pages.setting.SettingAndroidIntegrationPage
 import me.rerere.rikkahub.ui.pages.setting.SettingNotificationsPage
@@ -468,8 +469,11 @@ class RouteActivity : ComponentActivity() {
                                 metadata = NavDisplay.transitionSpec { fadeIn() togetherWith fadeOut() }
                                         + NavDisplay.popTransitionSpec { fadeIn() togetherWith fadeOut() }
                             ) { key ->
-                                GroupChatPage(
-                                    id = Uuid.parse(key.id),
+                                // 群聊已集成到 ChatPage 中
+                                ChatPage(
+                                    id = kotlin.uuid.Uuid.parse(key.id),
+                                    text = null,
+                                    files = emptyList(),
                                 )
                             }
 
@@ -605,6 +609,10 @@ class RouteActivity : ComponentActivity() {
                                 SettingSpeechPage()
                             }
 
+                            entry<Screen.SettingAdvanced> {
+                                SettingAdvancedPage()
+                            }
+
                             entry<Screen.SettingMcp> {
                                 SettingMcpPage()
                             }
@@ -695,6 +703,11 @@ class RouteActivity : ComponentActivity() {
                             entry<Screen.Log> {
                                 LogPage()
                             }
+
+                            entry<Screen.LogDetail> { key ->
+                                LogDetailPage(id = key.id)
+                            }
+
 
                             entry<Screen.Extensions> {
                                 ExtensionsPage()
@@ -926,6 +939,8 @@ sealed interface Screen : NavKey {
     data object SettingSpeech : Screen
 
     @Serializable
+    data object SettingAdvanced : Screen
+
     data object SettingMcp : Screen
 
     @Serializable
@@ -989,6 +1004,9 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object Log : Screen
+
+    @Serializable
+    data class LogDetail(val id: Long) : Screen
 
     @Serializable
     data object Extensions : Screen

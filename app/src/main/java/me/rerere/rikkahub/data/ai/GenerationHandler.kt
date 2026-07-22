@@ -8,6 +8,9 @@ import android.util.Log
 import android.widget.Toast
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flow
@@ -61,6 +64,7 @@ import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantMemory
 import me.rerere.rikkahub.data.repository.MemoryRepository
+import me.rerere.rikkahub.data.ai.requestlog.AIRequestLogManager
 import me.rerere.rikkahub.utils.applyPlaceholders
 import java.util.Locale
 import kotlin.time.Clock
@@ -288,6 +292,7 @@ class GenerationHandler(
     private val json: Json,
     private val memoryRepo: MemoryRepository,
     private val aiLoggingManager: AILoggingManager,
+    private val requestLogManager: AIRequestLogManager,
     private val systemPromptBuilder: SystemPromptBuilder,
 ) {
     fun generateText(
@@ -418,15 +423,6 @@ class GenerationHandler(
             if (pendingTools.isEmpty()) {
                 AgentOverlay.updateText("AI 正在思考…")
                 try {
-                    // 设置请求日志上下文
-                    RequestLogContext.set(
-                        RequestLogContext.Context(
-                            source = requestSource,
-                            providerName = provider.name,
-                            modelId = model.modelId,
-                            modelDisplayName = model.displayName,
-                        )
-                    )
                     generateInternal(
                         assistant = assistant,
                         settings = settings,
@@ -466,7 +462,6 @@ class GenerationHandler(
                         workspaceCwd = workspaceCwd,
                         requestSource = requestSource,
                     )
-                    RequestLogContext.clear()
                 } catch (t: Throwable) {
                     // CancellationException is honoured verbatim — stopGeneration has its
                     // own cancelToolByUser path that marks tools cancelled. We only need
@@ -1068,23 +1063,53 @@ class GenerationHandler(
                 addAll(model.customBodies)
             }
         )
-        if (stream) {
-            aiLoggingManager.addLog(
-                AILogging.Generation(
-                    params = params,
-                    messages = messages,
-                    providerSetting = provider,
-                    stream = true,
-                    source = requestSource,
-                )
-            )
-            providerImpl.streamText(
+        // 保存请求消息（API 调用前的输入），用于日志
+        val requestMessages = messages
+        // 轻量内存日志供 DeveloperPage 实时查看
+        aiLoggingManager.addLog(
+            AILogging.Generation(
+                params = params,
+                messages = requestMessages,
                 providerSetting = provider,
-                messages = internalMessages,
-                params = params
-            ).collect {
-                messages = messages.handleMessageChunk(chunk = it, model = model)
-                it.usage?.let { usage ->
+                stream = stream,
+                source = requestSource,
+            )
+        )
+
+        val stepStartMs = System.currentTimeMillis()
+        var stepError: Throwable? = null
+
+        if (stream) {
+            try {
+                providerImpl.streamText(
+                    providerSetting = provider,
+                    messages = internalMessages,
+                    params = params
+                ).collect {
+                    messages = messages.handleMessageChunk(chunk = it, model = model)
+                    it.usage?.let { usage ->
+                        messages = messages.mapIndexed { index, message ->
+                            if (index == messages.lastIndex) {
+                                message.copy(usage = message.usage.merge(usage))
+                            } else {
+                                message
+                            }
+                        }
+                    }
+                    onUpdateMessages(messages)
+                }
+            } catch (e: Throwable) {
+                stepError = e
+            }
+        } else {
+            try {
+                val chunk = providerImpl.generateText(
+                    providerSetting = provider,
+                    messages = internalMessages,
+                    params = params,
+                )
+                messages = messages.handleMessageChunk(chunk = chunk, model = model)
+                chunk.usage?.let { usage ->
                     messages = messages.mapIndexed { index, message ->
                         if (index == messages.lastIndex) {
                             message.copy(usage = message.usage.merge(usage))
@@ -1094,36 +1119,39 @@ class GenerationHandler(
                     }
                 }
                 onUpdateMessages(messages)
+            } catch (e: Throwable) {
+                stepError = e
             }
-        } else {
-            aiLoggingManager.addLog(
-                AILogging.Generation(
-                    params = params,
-                    messages = messages,
-                    providerSetting = provider,
-                    stream = false,
-                    source = requestSource,
-                )
-            )
-            val chunk = providerImpl.generateText(
-                providerSetting = provider,
-                messages = internalMessages,
-                params = params,
-            )
-            messages = messages.handleMessageChunk(chunk = chunk, model = model)
-            chunk.usage?.let { usage ->
-                messages = messages.mapIndexed { index, message ->
-                    if (index == messages.lastIndex) {
-                        message.copy(
-                            usage = message.usage.merge(usage)
-                        )
-                    } else {
-                        message
-                    }
-                }
-            }
-            onUpdateMessages(messages)
         }
+
+        // 完整请求/响应日志写入 Room 数据库（不占内存）
+        val durationMs = System.currentTimeMillis() - stepStartMs
+        val responseText = if (stepError == null) {
+            messages.lastOrNull()?.toText()?.take(5_000) ?: ""
+        } else ""
+        val responseRaw = if (stepError == null) {
+            messages.lastOrNull()?.toText()?.take(120_000) ?: ""
+        } else ""
+        // 使用 AppScope 避免协程泄漏
+        // 注：此处不能直接用 appScope 因为 GenerationHandler 没有注入
+        // 用 fire-and-forget 的 IO 协程，正常情况在 stepError 抛出前完成
+        CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
+            requestLogManager.logTextGeneration(
+                source = requestSource,
+                providerSetting = provider,
+                params = params,
+                requestMessages = requestMessages,
+                responseText = responseText,
+                responseRawText = responseRaw,
+                stream = stream,
+                latencyMs = null,
+                durationMs = durationMs,
+                error = stepError,
+            )
+        }
+
+        // 流式模式下如果发生错误，重新抛出
+        if (stepError != null) throw stepError
     }
 
     private fun maybeTruncateToolOutput(

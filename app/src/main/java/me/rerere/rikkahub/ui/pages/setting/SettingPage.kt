@@ -190,6 +190,12 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         supportingContent = { Text(stringResource(R.string.setting_page_extensions_desc)) },
                         headlineContent = { Text(stringResource(R.string.setting_page_extensions)) },
                     )
+                    item(
+                        onClick = { navController.navigate(Screen.SettingAdvanced) },
+                        leadingContent = { Icon(HugeIcons.Developer, null) },
+                        supportingContent = { Text("超时、重试、工具结果优化等") },
+                        headlineContent = { Text("高级设置") },
+                    )
                 }
             }
 

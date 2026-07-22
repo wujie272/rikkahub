@@ -7,8 +7,9 @@ import me.rerere.rikkahub.ui.pages.chat.ChatDrawerVM
 import me.rerere.rikkahub.ui.pages.chat.ChatVM
 import me.rerere.rikkahub.ui.pages.debug.DebugVM
 import me.rerere.rikkahub.ui.pages.developer.DeveloperVM
+import me.rerere.rikkahub.ui.pages.log.LogDetailVM
+import me.rerere.rikkahub.ui.pages.log.LogVM
 import me.rerere.rikkahub.ui.pages.favorite.FavoriteVM
-import me.rerere.rikkahub.ui.pages.groupchat.GroupChatVM
 import me.rerere.rikkahub.ui.pages.assistant.groupchat.GroupChatTemplateDetailVM
 import me.rerere.rikkahub.ui.pages.search.SearchVM
 import me.rerere.rikkahub.ui.pages.history.HistoryVM
@@ -52,6 +53,13 @@ val viewModelModule = module {
     viewModelOf(::SettingVM)
     viewModelOf(::DebugVM)
     viewModelOf(::DeveloperVM)
+    viewModelOf(::LogVM)
+    viewModel<LogDetailVM> { params ->
+        LogDetailVM(
+            id = params.get(),
+            requestLogManager = get(),
+        )
+    }
     viewModelOf(::HistoryVM)
     viewModelOf(::AssistantVM)
     viewModel<GroupChatTemplateDetailVM> { params ->
@@ -106,15 +114,7 @@ val viewModelModule = module {
     viewModelOf(::SettingBrowserViewModel)
     viewModelOf(::SettingTermuxViewModel)
 
-    viewModel<GroupChatVM> { params ->
-        GroupChatVM(
-            id = params.get(),
-            context = get(),
-            settingsStore = get(),
-            conversationRepo = get(),
-            chatService = get(),
-        )
-    }
+    // 群聊已集成到 ChatPage 中，GroupChatVM 已移除
     // Phase 22A: parameterised by LocalRuntime — one VM instance per provider tile.
     viewModel<SettingLocalLlmViewModel> { params ->
         SettingLocalLlmViewModel(

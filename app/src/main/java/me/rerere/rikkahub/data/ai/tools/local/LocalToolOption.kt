@@ -25,12 +25,7 @@ sealed class LocalToolOption {
     @SerialName("ask_user")
     data object AskUser : LocalToolOption()
 
-    @Serializable @SerialName("battery")        data object Battery        : LocalToolOption()
-    @Serializable @SerialName("audio_info")     data object AudioInfo      : LocalToolOption()
-    @Serializable @SerialName("telephony_info") data object TelephonyInfo  : LocalToolOption()
-    @Serializable @SerialName("wifi_info")      data object WifiInfo       : LocalToolOption()
-    @Serializable @SerialName("sensors")        data object Sensors        : LocalToolOption()
-    @Serializable @SerialName("storage_info")   data object StorageInfo    : LocalToolOption()
+    @Serializable @SerialName("device_info")    data object DeviceInfo     : LocalToolOption()
     @Serializable @SerialName("toast")          data object Toast          : LocalToolOption()
     @Serializable @SerialName("notification")   data object Notification   : LocalToolOption()
     @Serializable @SerialName("share")          data object Share          : LocalToolOption()

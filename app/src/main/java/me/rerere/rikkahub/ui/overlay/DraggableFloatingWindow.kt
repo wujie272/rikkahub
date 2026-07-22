@@ -93,8 +93,10 @@ class DraggableFloatingWindow(
      * @param wrapContent 是否用 ScrollView 包裹内容。
      *        如果内容是 ComposeView（自带 LazyColumn 等滚动容器），应传 false，
      *        避免嵌套滚动冲突。
+     * @param onRootPreAttach root 创建后、addView 前的回调，
+     *        用于设置 ViewTreeLifecycleOwner 等 Compose 所需的属性。
      */
-    fun show(content: View, wrapContent: Boolean = true) {
+    fun show(content: View, wrapContent: Boolean = true, onRootPreAttach: ((View) -> Unit)? = null) {
         if (isShown()) hide()
         val density = context.resources.displayMetrics.density
         val (screenW, screenH) = currentScreenSize()
@@ -102,6 +104,9 @@ class DraggableFloatingWindow(
         val h = (heightDp.coerceAtLeast(MIN_HEIGHT_DP) * density).roundToInt()
 
         val root = buildShell(content, wrapContent)
+
+        // addView 前回调，让调用方有机会在 root 上设置 ViewTree 属性
+        onRootPreAttach?.invoke(root)
 
         val centerX = ((screenW - w) / 2).coerceAtLeast(0)
         val centerY = ((screenH - h) / 2).coerceAtLeast(0)

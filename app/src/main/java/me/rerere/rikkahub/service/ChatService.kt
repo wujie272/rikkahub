@@ -31,6 +31,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.Tool
@@ -42,6 +44,7 @@ import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.ui.ToolApprovalState
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.ui.MessageChunk
 import me.rerere.ai.ui.canResumeToolExecution
 import me.rerere.ai.ui.finishPendingTools
 import me.rerere.ai.ui.finishReasoning
@@ -84,7 +87,8 @@ import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.replaceRegexes
 import me.rerere.rikkahub.data.model.toMessageNode
 import me.rerere.rikkahub.data.model.GroupChatTemplate
-import me.rerere.rikkahub.data.model.GroupChatRuntimeConfig
+import me.rerere.rikkahub.data.model.GroupChatSeat
+import me.rerere.rikkahub.data.model.buildSeatDisplayNames
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.FolderRepository
 import me.rerere.rikkahub.data.repository.MemoryRepository
@@ -216,13 +220,7 @@ class ChatService(
         loadGroupChatMappings()
     }
 
-    // 群聊执行引擎
-    val groupChatRunner: GroupChatRunner = GroupChatRunner(
-        appScope = appScope,
-        settingsStore = settingsStore,
-        chatService = this,
-        providerManager = providerManager,
-    )
+    // 群聊执行引擎（将在后续步骤中集成到 ChatService 内部）
     // 知识库来源缓存（每次发送消息时更新）
     val knowledgeSources: MutableStateFlow<Map<Uuid, List<KnowledgeSource>>> = MutableStateFlow(emptyMap())
 
@@ -468,19 +466,20 @@ class ChatService(
                 else false
 
                 // ── Group chat check ──
-                // If this conversation is linked to a group chat template, delegate to the
-                // GroupChatRunner instead of the normal single-assistant LLM path.
-                // Use groupChatTemplateIds map since Conversation.groupChatTemplateId is not persisted in Room.
+                // If this conversation is linked to a group chat template, handle it
+                // via the group chat engine instead of the normal single-assistant path.
                 val gcTemplateId = groupChatTemplateIds[conversationId]
                 val groupChatHandled = if (answer && !routedHandled && gcTemplateId != null) {
                     val settings = settingsStore.settingsFlow.first()
                     val template = settings.groupChatTemplates.find { it.id == gcTemplateId }
                     if (template != null && template.seats.isNotEmpty()) {
-                        groupChatRunner.start(
+                        handleGroupChatMessageComplete(
                             conversationId = conversationId,
+                            settings = settings,
+                            conversation = withUser,
                             template = template,
-                            userMessage = processedContent,
-                            speakerSeatIdsOverride = groupChatSpeakerSeatIdsOverride,
+                            forcedSpeakerSeatIds = groupChatSpeakerSeatIdsOverride,
+                            baseMessages = withUser.messageNodes.map { it.currentMessage },
                         )
                         true
                     } else false
@@ -1842,7 +1841,6 @@ class ChatService(
     suspend fun startGroupChatConversation(
         templateId: kotlin.uuid.Uuid,
         userMessage: List<UIMessagePart> = emptyList(),
-        runtimeConfig: GroupChatRuntimeConfig = GroupChatRuntimeConfig.roundRobinDefaults(),
     ): kotlin.uuid.Uuid {
         val settings = settingsStore.settingsFlow.first()
         val template = settings.groupChatTemplates.find { it.id == templateId }
@@ -1865,16 +1863,6 @@ class ChatService(
         )
         saveConversation(conversationId, conversation)
 
-        // 如果有用户消息，自动启动群聊
-        if (userMessage.isNotEmpty() && !userMessage.isEmptyInputMessage()) {
-            groupChatRunner.start(
-                conversationId = conversationId,
-                template = template,
-                userMessage = userMessage,
-                runtimeConfig = runtimeConfig,
-            )
-        }
-
         // 生成标题
         launchWithConversationReference(conversationId) {
             generateTitle(conversationId, conversation)
@@ -1883,21 +1871,789 @@ class ChatService(
         return conversationId
     }
 
-    // 停止群聊运行
-    fun stopGroupChat() {
-        groupChatRunner.stop()
+
+    // ════════════════════════════════════════════════════════════════
+    // 群聊执行引擎（移植自 FLIT，增强版：支持工具/记忆/互怼/座位覆写）
+    // ════════════════════════════════════════════════════════════════
+
+    /**
+     * 将座位覆写应用到助手配置上。
+     * 支持：chatModelId、reasoningLevel、maxTokens、searchMode、mcpServers、
+     * memoryEnabled、systemPrompt 等覆写。
+     */
+    private fun applySeatOverrides(
+        assistant: me.rerere.rikkahub.data.model.Assistant,
+        overrides: me.rerere.rikkahub.data.model.GroupChatSeatOverrides,
+        systemPromptSuffix: String? = null,
+    ): me.rerere.rikkahub.data.model.Assistant {
+        val basePrompt = overrides.systemPrompt ?: assistant.systemPrompt
+        val updatedPrompt = systemPromptSuffix?.let { suffix ->
+            if (suffix.isBlank()) basePrompt else basePrompt + suffix
+        } ?: basePrompt
+
+        return assistant.copy(
+            chatModelId = overrides.chatModelId ?: assistant.chatModelId,
+            reasoningLevel = overrides.reasoningLevel ?: assistant.reasoningLevel,
+            maxTokens = overrides.maxTokens ?: assistant.maxTokens,
+            enableWebSearch = overrides.searchEnabled && (overrides.searchMode != me.rerere.rikkahub.data.model.AssistantSearchMode.Off),
+            mcpServers = overrides.mcpServerIds,
+            enableMemory = overrides.memoryEnabled && assistant.enableMemory,
+            systemPrompt = updatedPrompt,
+        )
+    }
+
+    /**
+     * 群聊消息完成处理（增强版：支持工具调用、记忆注入、座位覆写、互怼）
+     *
+     * 当用户向群聊对话发送消息时，由 sendMessage 检测到 gcTemplateId 后调用此方法。
+     * 确定发言人 → 逐一生成回复（带工具支持）→ 座位间互怼 → 添加到对话中。
+     */
+    private suspend fun handleGroupChatMessageComplete(
+        conversationId: Uuid,
+        settings: Settings,
+        conversation: Conversation,
+        template: GroupChatTemplate,
+        forcedSpeakerSeatIds: List<Uuid>? = null,
+        baseMessages: List<UIMessage>,
+    ) {
+        if (template.seats.isEmpty()) return
+        val seatsById = template.seats.associateBy { it.id }
+
+        val lastUserText = baseMessages
+            .lastOrNull { it.role == MessageRole.USER }
+            ?.parts
+            ?.filterIsInstance<UIMessagePart.Text>()
+            ?.joinToString("\n") { it.text }
+            ?.trim()
+            .orEmpty()
+
+        val recentAssistantMessages = run {
+            val lastUserIndex = baseMessages.indexOfLast { it.role == MessageRole.USER }
+            if (lastUserIndex <= 0) return@run emptyList<UIMessage>()
+            baseMessages
+                .take(lastUserIndex)
+                .asReversed()
+                .filter { message -> message.role == MessageRole.ASSISTANT }
+                .take(2)
+                .reversed()
+        }
+
+        val mentionedSeatIds = resolveMentionedSeatIds(
+            text = lastUserText,
+            settings = settings,
+            template = template,
+        )
+
+        val forcedSeatIds = forcedSpeakerSeatIds
+            ?.filter { seatId -> seatsById.containsKey(seatId) }
+            ?.distinct()
+        val hasExplicitSpeakerOrder = !forcedSeatIds.isNullOrEmpty() || mentionedSeatIds.isNotEmpty()
+        val speakerSeatIds = when {
+            !forcedSeatIds.isNullOrEmpty() -> forcedSeatIds
+            mentionedSeatIds.isNotEmpty() -> mentionedSeatIds
+            else -> routeGroupChatSpeakers(
+                settings = settings,
+                template = template,
+                userText = lastUserText,
+                recentAssistantMessages = recentAssistantMessages,
+            )
+        }
+
+        if (speakerSeatIds.isEmpty()) return
+
+        val resolvedSpeakers = speakerSeatIds
+            .asSequence()
+            .distinct()
+            .mapNotNull { seatId -> seatsById[seatId] }
+            .toList()
+            .let { seats ->
+                if (hasExplicitSpeakerOrder) seats else seats.shuffled()
+            }
+
+        if (resolvedSpeakers.isEmpty()) return
+
+        var runningMessages = baseMessages
+        val speakersGenerated = mutableListOf<GroupChatSeat>()
+
+        // ── 阶段 1：为每个座位生成回复 ──
+        for (seat in resolvedSpeakers) {
+            val assistant = settings.assistants.firstOrNull { it.id == seat.assistantId } ?: continue
+            val model = settings.findModelById(
+                seat.overrides.chatModelId ?: assistant.chatModelId ?: settings.chatModelId
+            ) ?: continue
+            val provider = model.findProvider(settings.providers) ?: continue
+            if (!provider.enabled) continue
+
+            // 应用座位覆写
+            val groupContextSuffix = buildGroupChatContextSystemPromptSuffix(
+                settings = settings,
+                template = template,
+                seat = seat,
+                assistant = assistant,
+            )
+            val seatAssistant = applySeatOverrides(assistant, seat.overrides, groupContextSuffix)
+
+            // 构建座位级记忆
+            val seatMemories = if (seatAssistant.enableMemory) {
+                if (seatAssistant.useGlobalMemory) {
+                    memoryRepository.getGlobalMemories()
+                } else {
+                    memoryRepository.getMemoriesOfAssistant(seatAssistant.id.toString())
+                }
+            } else {
+                null
+            }
+
+            val promptMessages = buildGroupChatPromptMessagesForSeat(
+                messages = runningMessages,
+                settings = settings,
+                template = template,
+                seatId = seat.id,
+                selfAssistantId = assistant.id,
+            )
+
+            val displayName = buildSeatDisplayName(template, seat, settings)
+
+            // 构建座位级工具列表
+            val seatTools = buildList {
+                if (seatAssistant.enableWebSearch) {
+                    addAll(createSearchTools(settings))
+                }
+                // 工作区工具
+                addAll(createWorkspaceToolsIfReady(seatAssistant.workspaceId?.toString(), null))
+                // 技能工具
+                if (seatAssistant.enabledSkills.isNotEmpty()) {
+                    addAll(
+                        createSkillTools(
+                            enabledSkills = seatAssistant.enabledSkills,
+                            allSkills = skillManager.listSkills(),
+                            skillManager = skillManager,
+                        )
+                    )
+                }
+                // MCP 工具（按座位助手过滤）
+                if (seatAssistant.mcpServers.isNotEmpty()) {
+                    mcpManager.getAllAvailableTools().forEach { (serverId, serverName, tool) ->
+                        val serverSlug = serverId.toString().take(8).replace("-", "")
+                        val mcpToolName = "mcp__" + serverSlug + "_" + serverName + "__" + tool.name
+                        add(
+                            Tool(
+                                name = mcpToolName,
+                                description = tool.description ?: "",
+                                parameters = { tool.inputSchema },
+                                needsApproval = { tool.needsApproval },
+                                execute = {
+                                    mcpManager.callTool(serverId, tool.name, it.jsonObject)
+                                },
+                            )
+                        )
+                    }
+                }
+            }
+
+            // 创建空消息占位，后续流式更新
+            val msgId = Uuid.random()
+            updateConversationState(conversationId) { conv ->
+                conv.copy(
+                    messageNodes = conv.messageNodes + UIMessage(
+                        id = msgId,
+                        role = MessageRole.ASSISTANT,
+                        parts = listOf(UIMessagePart.Text("")),
+                    ).toMessageNode().copy(senderName = displayName)
+                )
+            }
+
+            try {
+                // 使用 generationHandler.generateText（支持工具调用、记忆注入、流式输出）
+                generationHandler.generateText(
+                    settings = settings,
+                    model = model,
+                    messages = promptMessages,
+                    assistant = seatAssistant,
+                    memories = seatMemories,
+                    tools = seatTools,
+                    maxSteps = if (seatTools.isNotEmpty()) 32 else 1,
+                    inputTransformers = buildList {
+                        addAll(inputTransformers)
+                        add(templateTransformer)
+                    },
+                    outputTransformers = outputTransformers,
+                    // 群聊中自动批准所有工具（无 UI 交互）
+                    isToolAutoApproved = { true },
+                ).collect { chunk ->
+                    when (chunk) {
+                        is GenerationChunk.Messages -> {
+                            // 提取新增的 assistant 消息文本
+                            val appendedMessages = chunk.messages.drop(promptMessages.size)
+                            val text = appendedMessages
+                                .filter { it.role == MessageRole.ASSISTANT }
+                                .joinToString("\n") { it.toText() }
+                                .trim()
+
+                            if (text.isNotEmpty()) {
+                                updateConversationState(conversationId) { conv ->
+                                    conv.copy(
+                                        messageNodes = conv.messageNodes.map { node ->
+                                            if (node.currentMessage.id == msgId) {
+                                                node.copy(
+                                                    messages = node.messages.map { msg ->
+                                                        if (msg.id == msgId) {
+                                                            msg.copy(parts = listOf(UIMessagePart.Text(text)))
+                                                        } else msg
+                                                    }
+                                                )
+                                            } else node
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 生成完成，获取最终文本
+                val finalText = getConversationFlow(conversationId).value
+                    .messageNodes
+                    .lastOrNull { it.currentMessage.id == msgId }
+                    ?.currentMessage
+                    ?.toText()
+                    ?.trim()
+                    .orEmpty()
+
+                if (finalText.isNotBlank() && finalText != "[生成失败]") {
+                    // 更新 runningMessages 供后续座位参考（嵌入发言人信息）
+                    runningMessages = runningMessages + UIMessage(
+                        role = MessageRole.USER,
+                        parts = listOf(UIMessagePart.Text(
+                            "[$displayName]\n$finalText"
+                        )),
+                    )
+                    speakersGenerated.add(seat)
+                }
+            } catch (e: CancellationException) {
+                // 清理空消息
+                updateConversationState(conversationId) { conv ->
+                    conv.copy(
+                        messageNodes = conv.messageNodes.filterNot { it.currentMessage.id == msgId }
+                    )
+                }
+                throw e
+            } catch (e: Exception) {
+                Log.e(TAG, "Group chat seat ${displayName} failed", e)
+                // 标记失败并继续
+                updateConversationState(conversationId) { conv ->
+                    conv.copy(
+                        messageNodes = conv.messageNodes.map { node ->
+                            if (node.currentMessage.id == msgId) {
+                                node.copy(
+                                    messages = node.messages.map { msg ->
+                                        if (msg.id == msgId) {
+                                            msg.copy(parts = listOf(UIMessagePart.Text("[生成失败]")))
+                                        } else msg
+                                    }
+                                )
+                            } else node
+                        }
+                    )
+                }
+            }
+        }
+
+        // ── 阶段 2：座位间互怼 ──
+        // 仅当有 2 个以上座位生成过回复时才触发互怼
+        if (speakersGenerated.size >= 2) {
+            val speakerIndexBySeatId = speakersGenerated
+                .mapIndexed { index, seat -> seat.id to index }
+                .toMap()
+
+            val speakerPrimaryTextBySeatId = speakersGenerated.associate { seat ->
+                val primaryMessage = runningMessages.lastOrNull { message ->
+                    message.role == MessageRole.USER && message.toText().contains("[${buildSeatDisplayName(template, seat, settings)}]")
+                }
+                seat.id to (primaryMessage?.toText().orEmpty())
+            }
+
+            val disagreementMarkers = listOf(
+                "我不同意", "不同意", "不认同", "反对", "有误", "不对", "错误", "不准确",
+                "i disagree", "disagree with", "that's wrong", "that's incorrect",
+                "incorrect", "not correct",
+            )
+            val otherAssistantReferenceMarkers = listOf(
+                "上面", "前面", "上一位", "前一个", "刚才", "其他助手", "另一位助手",
+                "another assistant", "other assistant", "previous assistant", "above",
+            )
+
+            fun hasExplicitDisagreement(text: String): Boolean {
+                val normalized = text.lowercase(java.util.Locale.ROOT)
+                return disagreementMarkers.any { marker -> normalized.contains(marker) }
+            }
+
+            fun shouldInterReplyToPreviousSpeaker(
+                text: String,
+                previousSeat: GroupChatSeat,
+                mentionedSeatIds: Set<Uuid>,
+            ): Boolean {
+                if (!hasExplicitDisagreement(text)) return false
+                if (previousSeat.id in mentionedSeatIds) return true
+                val previousName = settings.getAssistantById(previousSeat.assistantId)?.name?.trim().orEmpty()
+                val normalized = text.lowercase(java.util.Locale.ROOT)
+                if (previousName.isNotBlank() && normalized.contains(previousName.lowercase(java.util.Locale.ROOT))) return true
+                if (otherAssistantReferenceMarkers.any { marker -> normalized.contains(marker) }) return true
+                return false
+            }
+
+            val interReplyPairs = buildList {
+                val usedPairKeys = mutableSetOf<Pair<Uuid, Uuid>>()
+                val usedReplySpeakerSeatIds = mutableSetOf<Uuid>()
+
+                // 1) @Name 提及：如果某个助手显式 @ 了另一个，被提及者回复
+                for (index in speakersGenerated.indices) {
+                    if (size >= 3) break
+                    val replyToSeat = speakersGenerated[index]
+                    val replyToText = speakerPrimaryTextBySeatId[replyToSeat.id].orEmpty()
+                    if (replyToText.isBlank()) continue
+
+                    val mentionedSeatIds = resolveMentionedSeatIds(
+                        text = replyToText,
+                        settings = settings,
+                        template = template,
+                    ).filter { seatId -> seatId != replyToSeat.id && seatsById.containsKey(seatId) }
+                        .distinct()
+
+                    mentionedSeatIds.forEach { mentionedSeatId ->
+                        if (size >= 3) return@forEach
+                        val speakerSeat = seatsById[mentionedSeatId] ?: return@forEach
+                        val key = speakerSeat.id to replyToSeat.id
+                        if (key in usedPairKeys) return@forEach
+                        if (speakerSeat.id in usedReplySpeakerSeatIds) return@forEach
+                        add(speakerSeat to replyToSeat)
+                        usedPairKeys.add(key)
+                        usedReplySpeakerSeatIds.add(speakerSeat.id)
+                    }
+                }
+
+                // 2) 明确分歧：前一个发言被后一个反驳时，前一个回复
+                for (index in 1 until speakersGenerated.size) {
+                    if (size >= 3) break
+                    val currentSeat = speakersGenerated[index]
+                    val previousSeat = speakersGenerated[index - 1]
+                    val currentText = speakerPrimaryTextBySeatId[currentSeat.id].orEmpty()
+                    if (currentText.isBlank()) continue
+
+                    val mentionedSeatIds = resolveMentionedSeatIds(
+                        text = currentText,
+                        settings = settings,
+                        template = template,
+                    ).toSet()
+
+                    if (!shouldInterReplyToPreviousSpeaker(currentText, previousSeat, mentionedSeatIds)) continue
+
+                    val speakerSeat = seatsById[previousSeat.id] ?: continue
+                    val key = speakerSeat.id to currentSeat.id
+                    if (key in usedPairKeys) continue
+                    if (speakerSeat.id in usedReplySpeakerSeatIds) continue
+                    add(speakerSeat to currentSeat)
+                    usedPairKeys.add(key)
+                    usedReplySpeakerSeatIds.add(speakerSeat.id)
+                }
+            }
+
+            var remainingInterReplies = 3
+            for ((speaker, replyTo) in interReplyPairs) {
+                if (remainingInterReplies <= 0) break
+
+                val speakerAssistant = settings.assistants.firstOrNull { it.id == speaker.assistantId } ?: continue
+                val replyToAssistant = settings.assistants.firstOrNull { it.id == replyTo.assistantId }
+
+                val speakerModel = settings.findModelById(
+                    speaker.overrides.chatModelId ?: speakerAssistant.chatModelId ?: settings.chatModelId
+                ) ?: continue
+
+                val replyToName = replyToAssistant?.name?.ifBlank { "another assistant" } ?: "another assistant"
+                val systemPromptSuffix = buildString {
+                    append("\n\n")
+                    append("You are now replying to ")
+                    append(replyToName)
+                    append(". Do not address the user. Keep it concise.")
+                }
+
+                val interGroupContextSuffix = buildGroupChatContextSystemPromptSuffix(
+                    settings = settings,
+                    template = template,
+                    seat = speaker,
+                    assistant = speakerAssistant,
+                )
+                val interSeatAssistant = applySeatOverrides(speakerAssistant, speaker.overrides, interGroupContextSuffix + systemPromptSuffix)
+
+                val interMemories = if (interSeatAssistant.enableMemory) {
+                    if (interSeatAssistant.useGlobalMemory) {
+                        memoryRepository.getGlobalMemories()
+                    } else {
+                        memoryRepository.getMemoriesOfAssistant(interSeatAssistant.id.toString())
+                    }
+                } else {
+                    null
+                }
+
+                val interPromptMessages = buildGroupChatPromptMessagesForSeat(
+                    messages = runningMessages,
+                    settings = settings,
+                    template = template,
+                    seatId = speaker.id,
+                    selfAssistantId = speakerAssistant.id,
+                )
+
+                val interDisplayName = buildSeatDisplayName(template, speaker, settings)
+
+                val interMsgId = Uuid.random()
+                updateConversationState(conversationId) { conv ->
+                    conv.copy(
+                        messageNodes = conv.messageNodes + UIMessage(
+                            id = interMsgId,
+                            role = MessageRole.ASSISTANT,
+                            parts = listOf(UIMessagePart.Text("")),
+                        ).toMessageNode().copy(senderName = interDisplayName)
+                    )
+                }
+
+                try {
+                    generationHandler.generateText(
+                        settings = settings,
+                        model = speakerModel,
+                        messages = interPromptMessages,
+                        assistant = interSeatAssistant,
+                        memories = interMemories,
+                        tools = emptyList(),
+                        maxSteps = 1,
+                        inputTransformers = buildList {
+                            addAll(inputTransformers)
+                            add(templateTransformer)
+                        },
+                        outputTransformers = outputTransformers,
+                        isToolAutoApproved = { true },
+                    ).collect { chunk ->
+                        when (chunk) {
+                            is GenerationChunk.Messages -> {
+                                val appendedMessages = chunk.messages.drop(interPromptMessages.size)
+                                val text = appendedMessages
+                                    .filter { it.role == MessageRole.ASSISTANT }
+                                    .joinToString("\n") { it.toText() }
+                                    .trim()
+                                if (text.isNotEmpty()) {
+                                    updateConversationState(conversationId) { conv ->
+                                        conv.copy(
+                                            messageNodes = conv.messageNodes.map { node ->
+                                                if (node.currentMessage.id == interMsgId) {
+                                                    node.copy(
+                                                        messages = node.messages.map { msg ->
+                                                            if (msg.id == interMsgId) {
+                                                                msg.copy(parts = listOf(UIMessagePart.Text(text)))
+                                                            } else msg
+                                                        }
+                                                    )
+                                                } else node
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    val interFinalText = getConversationFlow(conversationId).value
+                        .messageNodes
+                        .lastOrNull { it.currentMessage.id == interMsgId }
+                        ?.currentMessage
+                        ?.toText()
+                        ?.trim()
+                        .orEmpty()
+
+                    if (interFinalText.isNotBlank()) {
+                        runningMessages = runningMessages + UIMessage(
+                            role = MessageRole.USER,
+                            parts = listOf(UIMessagePart.Text(
+                                "[$interDisplayName]\n$interFinalText"
+                            )),
+                        )
+                        remainingInterReplies -= 1
+                    }
+                } catch (e: CancellationException) {
+                    updateConversationState(conversationId) { conv ->
+                        conv.copy(
+                            messageNodes = conv.messageNodes.filterNot { it.currentMessage.id == interMsgId }
+                        )
+                    }
+                    throw e
+                } catch (e: Exception) {
+                    Log.e(TAG, "Group chat inter-reply ${interDisplayName} failed", e)
+                }
+            }
+        }
+
+        // 保存对话
+        saveConversation(conversationId, getConversationFlow(conversationId).value)
+    }
+
+    /**
+     * 构建群聊上下文的系统提示后缀
+     */
+    private fun buildGroupChatContextSystemPromptSuffix(
+        settings: Settings,
+        template: GroupChatTemplate,
+        seat: GroupChatSeat,
+        assistant: me.rerere.rikkahub.data.model.Assistant,
+    ): String {
+        val templateName = template.name.trim().ifBlank { "Group Chat" }
+        val assistantsById = settings.assistants.associateBy { it.id }
+        val seatDisplayNames = template.buildSeatDisplayNames(
+            assistantsById = assistantsById,
+            defaultName = "Assistant",
+        )
+        val memberNames = template.seats.mapNotNull { memberSeat ->
+            seatDisplayNames[memberSeat.id]?.trim()?.takeIf { it.isNotBlank() }
+        }
+
+        val membersLine = when {
+            memberNames.isEmpty() -> "unknown"
+            else -> memberNames.joinToString(", ")
+        }
+
+        val selfName = seatDisplayNames[seat.id]
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?: assistant.name.trim().ifBlank { "Assistant" }
+        val seatIndex = template.seats.indexOfFirst { it.id == seat.id }.takeIf { it >= 0 }?.plus(1)
+        val seatLabel = seatIndex?.let { index -> "Seat $index" } ?: "Seat"
+
+        return buildString {
+            append("\n\n")
+            appendLine("You are in a group chat.")
+            appendLine("Group: $templateName")
+            template.intro.trim()
+                .takeIf { it.isNotBlank() }
+                ?.let { intro ->
+                    appendLine("Group intro: $intro")
+                }
+            appendLine("Members: $membersLine")
+            appendLine("You are $selfName ($seatLabel).")
+            appendLine("Keep your own style/persona; do not imitate other assistants.")
+            appendLine("You can call out other assistants with @Name or @Name#2 when truly needed (no # means #1), but do it sparingly.")
+            appendLine("Messages from the human user are provided as USER messages prefixed with [Message from ... (user)].")
+            appendLine("Messages from other assistants may be provided as USER messages prefixed with [Message from ... (assistant)]. They are NOT from the human user; treat them as context only.")
+            appendLine("When generating a normal reply, address the human user (unless later instructions explicitly tell you to reply to another assistant).")
+        }
+    }
+
+    /**
+     * 构建群聊座位的提示消息列表
+     */
+    private fun buildGroupChatPromptMessagesForSeat(
+        messages: List<UIMessage>,
+        settings: Settings,
+        template: GroupChatTemplate,
+        seatId: Uuid,
+        selfAssistantId: Uuid,
+    ): List<UIMessage> {
+        val assistantsById = settings.assistants.associateBy { it.id }
+        val seatDisplayNames = template.buildSeatDisplayNames(
+            assistantsById = assistantsById,
+            defaultName = "Assistant",
+        )
+
+        return messages.map { message ->
+            when (message.role) {
+                MessageRole.USER -> {
+                    // 检查是否是群聊中其他助手的消息
+                    val speakerName = resolveGroupChatMessageSpeakerName(
+                        message = message,
+                        seatDisplayNames = seatDisplayNames,
+                        assistantsById = assistantsById,
+                    )
+                    if (speakerName != null) {
+                        UIMessage(
+                            role = MessageRole.USER,
+                            parts = listOf(UIMessagePart.Text(
+                                "[Message from $speakerName (assistant)]\n${message.toText()}"
+                            )),
+                        )
+                    } else {
+                        message
+                    }
+                }
+                MessageRole.ASSISTANT -> message
+                else -> message
+            }
+        }
+    }
+
+    /**
+     * 解析消息中的发言人名称
+     */
+    private fun resolveGroupChatMessageSpeakerName(
+        message: UIMessage,
+        seatDisplayNames: Map<Uuid, String>,
+        assistantsById: Map<Uuid, me.rerere.rikkahub.data.model.Assistant>,
+    ): String? {
+        val text = message.toText()
+        return seatDisplayNames.entries.firstOrNull { (_, name) ->
+            text.contains("[$name]")
+        }?.value
+    }
+
+    /**
+     * 构建座位显示名称
+     */
+    private fun buildSeatDisplayName(
+        template: GroupChatTemplate,
+        seat: GroupChatSeat,
+        settings: Settings,
+    ): String {
+        val assistant = settings.assistants.firstOrNull { it.id == seat.assistantId }
+        val baseName = assistant?.name?.ifBlank { null } ?: "Assistant"
+        return if (seat.instanceNumber > 1) "$baseName#${seat.instanceNumber}" else baseName
+    }
+
+    /**
+     * 路由群聊发言人
+     * 使用路由模型决定哪几个座位应该发言
+     */
+    private suspend fun routeGroupChatSpeakers(
+        settings: Settings,
+        template: GroupChatTemplate,
+        userText: String,
+        recentAssistantMessages: List<UIMessage>,
+    ): List<Uuid> {
+        val enabledSeats = template.seats.filter { it.defaultEnabled }
+        if (enabledSeats.isEmpty()) return emptyList()
+
+        // 没有路由模型则返回前 3 个座位
+        val hostModelId = template.hostModelId ?: return enabledSeats.take(3).map { it.id }
+        val hostModel = settings.findModelById(hostModelId) ?: return enabledSeats.take(3).map { it.id }
+        val hostProvider = hostModel.findProvider(settings.providers) ?: return enabledSeats.take(3).map { it.id }
+        if (!hostProvider.enabled) return enabledSeats.take(3).map { it.id }
+
+        val assistantsById = settings.assistants.associateBy { it.id }
+        val seatDisplayNames = template.buildSeatDisplayNames(
+            assistantsById = assistantsById,
+            defaultName = "Assistant",
+        )
+
+        val seatLines = enabledSeats.mapNotNull { seat ->
+            val assistant = assistantsById[seat.assistantId] ?: return@mapNotNull null
+            val name = seatDisplayNames[seat.id]?.trim().orEmpty()
+                .ifBlank { assistant.name.ifBlank { "Assistant" } }
+            "- ${seat.id}: $name"
+        }
+
+        val recentHistory = recentAssistantMessages
+            .map { it.toText().take(200) }
+            .joinToString("\n")
+
+        val routerPrompt = buildString {
+            appendLine("You are the group chat router. You ONLY output JSON, do not reply to the user.")
+            appendLine()
+            appendLine("Rules:")
+            appendLine("- Select 1 to 3 most relevant speakers from the seat list")
+            appendLine("- Avoid selecting the same person repeatedly")
+            appendLine("""Output format: {"speakers":["<seatId>", ...]}""")
+            appendLine()
+            appendLine("Available seats:")
+            seatLines.forEach { appendLine(it) }
+            appendLine()
+            if (recentHistory.isNotBlank()) {
+                appendLine("Recent messages:")
+                appendLine(recentHistory)
+                appendLine()
+            }
+            appendLine("User message:")
+            appendLine(userText.take(2000))
+        }
+
+        return try {
+            val providerHandler = providerManager.getProviderByType(hostProvider)
+            val result = providerHandler.generateText(
+                providerSetting = hostProvider,
+                messages = listOf(UIMessage.user(routerPrompt)),
+                params = TextGenerationParams(model = hostModel),
+            )
+
+            val text = result.choices.firstOrNull()?.message?.toText()?.trim() ?: ""
+            if (text.isBlank()) return enabledSeats.take(3).map { it.id }
+
+            val jsonStart = text.indexOf('{')
+            val jsonEnd = text.lastIndexOf('}')
+            if (jsonStart < 0 || jsonEnd < 0) return enabledSeats.take(3).map { it.id }
+
+            val jsonStr = text.substring(jsonStart, jsonEnd + 1)
+            val json = kotlinx.serialization.json.Json.parseToJsonElement(jsonStr).jsonObject
+            val speakerIdStrings = json["speakers"]?.jsonArray?.map { element ->
+                element.jsonPrimitive.content
+            }.orEmpty()
+            val speakerIds = speakerIdStrings.mapNotNull { raw ->
+                runCatching { Uuid.parse(raw) }.getOrNull()
+            }.filter { id ->
+                enabledSeats.any { it.id == id }
+            }.takeIf { it.isNotEmpty() } ?: enabledSeats.take(3).map { it.id }
+
+            speakerIds.take(3)
+        } catch (e: Exception) {
+            Log.w(TAG, "routeGroupChatSpeakers failed", e)
+            enabledSeats.take(3).map { it.id }
+        }
+    }
+
+    /**
+     * 解析文本中的 @Name 提及
+     */
+    private fun resolveMentionedSeatIds(
+        text: String,
+        settings: Settings,
+        template: GroupChatTemplate,
+    ): List<Uuid> {
+        if (text.isBlank() || !text.contains('@')) return emptyList()
+
+        val assistantsById = settings.assistants.associateBy { it.id }
+        val seatDisplayNames = template.buildSeatDisplayNames(
+            assistantsById = assistantsById,
+            defaultName = "Assistant",
+        )
+
+        val keyToSeatIds = mutableMapOf<String, MutableList<Uuid>>()
+        template.seats.forEach { seat ->
+            val key = seatDisplayNames[seat.id]?.trim()?.takeIf { it.isNotBlank() } ?: return@forEach
+            val normalized = key.lowercase(java.util.Locale.ROOT)
+            keyToSeatIds.getOrPut(normalized) { mutableListOf() }.add(seat.id)
+        }
+
+        if (keyToSeatIds.isEmpty()) return emptyList()
+
+        val sortedKeys = keyToSeatIds.keys.sortedByDescending { it.length }
+        val result = mutableListOf<Uuid>()
+        val lowerText = text.lowercase(java.util.Locale.ROOT)
+
+        var cursor = 0
+        while (true) {
+            val atIndex = lowerText.indexOf('@', startIndex = cursor)
+            if (atIndex < 0) break
+
+            val after = lowerText.substring(atIndex + 1)
+            val matchedKey = sortedKeys.firstOrNull { after.startsWith(it) }
+            if (matchedKey != null) {
+                keyToSeatIds[matchedKey]?.forEach { seatId ->
+                    if (seatId !in result) result.add(seatId)
+                }
+                cursor = atIndex + 1 + matchedKey.length
+            } else {
+                cursor = atIndex + 1
+            }
+        }
+
+        return result
     }
 
     // 停止当前会话生成任务（不清理会话缓存）
     suspend fun stopGeneration(conversationId: Uuid) {
-        // 🐛 FIX: 群聊的 engineJob 独立于 session 管理，
-        // session.generationJob 在 sendMessage 委托给 groupChatRunner 后马上就完成了，
-        // 所以 stopGeneration 只 cancel session job 对群聊完全无效。
-        // 必须同时停掉 GroupChatRunner。
-        if (groupChatTemplateIds.containsKey(conversationId) && groupChatRunner.isRunning) {
-            Log.i(TAG, "stopGeneration: stopping group chat runner for conversation $conversationId")
-            groupChatRunner.stop()
-        }
+        // 群聊的停止逻辑将在 Step 3 中集成到 session 管理中
 
         val convMutex = mutexFor(conversationId)
         // cancelAndJoin BEFORE the mutex so the cancelled coroutine can drain its own

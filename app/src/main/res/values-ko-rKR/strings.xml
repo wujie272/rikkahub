@@ -1134,10 +1134,6 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="assistant_page_fast_path_router_desc">“배터리 얼마야”, “지금 몇 시야”, “워크플로 목록” 같은 높은 신뢰도의 요청에서는 LLM을 건너뜁니다. 일치하는 도구가 직접 실행되어 즉시 답을 얻습니다. 보수적 — 모호한 것은 모두 모델로 갑니다. logcat에 기록됨(태그: FastPathRouter).</string>
   <string name="assistant_page_local_tools_app_launcher_desc">패키지 이름으로 설치된 앱(예: Termux, 설정)을 열고 사용 가능한 앱을 나열합니다. 화면 자동화와 함께 사용하면 완전한 UI 제어가 가능합니다.</string>
   <string name="assistant_page_local_tools_app_launcher_title">앱 실행기</string>
-  <string name="assistant_page_local_tools_audio_info_desc">벨소리 모드, 음악 재생 상태, 헤드폰 연결, 출력 장치를 읽습니다.</string>
-  <string name="assistant_page_local_tools_audio_info_title">오디오 정보</string>
-  <string name="assistant_page_local_tools_battery_desc">배터리 잔량, 충전 상태, 연결 유형, 온도, 상태를 읽습니다.</string>
-  <string name="assistant_page_local_tools_battery_title">배터리</string>
   <string name="assistant_page_local_tools_brightness_desc">화면 밝기를 읽고 설정합니다. 설정하려면 WRITE_SETTINGS 권한이 필요합니다.</string>
   <string name="assistant_page_local_tools_brightness_title">밝기</string>
   <string name="assistant_page_local_tools_browser_desc">AI 기반 웹 브라우저. 개별적으로 켜고 끌 수 있는 17개의 도구 — 설정 → 브라우저 에서 읽기/쓰기 액세스를 구성하세요.</string>
@@ -1197,8 +1193,6 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="assistant_page_local_tools_section_output">출력</string>
   <string name="assistant_page_local_tools_section_personal_data">개인 데이터</string>
   <string name="assistant_page_local_tools_section_screen_automation">화면 자동화</string>
-  <string name="assistant_page_local_tools_sensors_desc">기기 센서를 나열하고 짧은 샘플을 읽습니다(가속도계, 자이로스코프, 조도 등).</string>
-  <string name="assistant_page_local_tools_sensors_title">센서</string>
   <string name="assistant_page_local_tools_share_desc">시스템 공유 시트를 열어 텍스트나 URL을 다른 앱으로 보냅니다.</string>
   <string name="assistant_page_local_tools_share_title">공유</string>
   <string name="assistant_page_local_tools_skill_import_desc">어시스턴트가 URL에서, 또는 이미 가지고 있는 텍스트(예: 인증이 필요한 서버에서 SSH / curl / MCP로 가져온 것)에서 스킬을 설치할 수 있습니다. 네이티브, openclaw, Hermes 형식. 모든 설치마다 호출별 승인이 필요합니다(항상 허용은 비활성화 — 매번 출처를 검토합니다).</string>
@@ -1209,14 +1203,10 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="assistant_page_local_tools_speech_to_text_title">음성을 텍스트로</string>
   <string name="assistant_page_local_tools_ssh_desc">어시스턴트가 SSH/SFTP를 통해 원격 머신에서 셸 명령을 실행하고 파일을 전송할 수 있습니다. 저장된 호스트, 비밀번호 또는 개인 키 인증, accept-new 호스트 키 검사를 지원합니다.</string>
   <string name="assistant_page_local_tools_ssh_title">SSH</string>
-  <string name="assistant_page_local_tools_storage_desc">내부 및 외부 볼륨의 전체/여유/사용 중인 저장 공간을 읽습니다.</string>
-  <string name="assistant_page_local_tools_storage_title">저장공간 정보</string>
   <string name="assistant_page_local_tools_sub_agents_desc">어시스턴트가 집중된 하위 작업(조사, 다단계 작업)을 독립적인 LLM 실행으로 백그라운드에서 디스패치할 수 있습니다. 각 실행은 승인제이며 상한이 있고(어시스턴트당 기본 동시 3개, 전역 16개), 내부에서도 HARDLINE이 적용됩니다.</string>
   <string name="assistant_page_local_tools_sub_agents_title">서브 에이전트</string>
   <string name="assistant_page_local_tools_system_intents_desc">어시스턴트가 최종 확정용으로 시스템 앱을 미리 채울 수 있습니다: 캘린더 일정, 새 연락처, 이메일 작성, SMS 작성, WiFi 설정, 지도. 대상 앱에서 탭하지 않으면 아무것도 저장되거나 전송되지 않습니다.</string>
   <string name="assistant_page_local_tools_system_intents_title">시스템 인텐트</string>
-          <string name="assistant_page_local_tools_telephony_desc">SIM 및 네트워크 정보(이동통신사, 네트워크 유형)를 읽습니다. READ_PHONE_STATE가 필요합니다.</string>
-  <string name="assistant_page_local_tools_telephony_title">전화 정보</string>
   <string name="assistant_page_local_tools_termux_postgrant_command">mkdir -p ~/.termux &amp;&amp; echo \'allow-external-apps=true\' &gt;&gt; ~/.termux/termux.properties</string>
   <string name="assistant_page_local_tools_termux_postgrant_copied">명령이 복사되었습니다 — Termux에 붙여넣으세요.</string>
   <string name="assistant_page_local_tools_termux_postgrant_copy">명령 복사</string>
@@ -1241,8 +1231,6 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="assistant_page_local_tools_vibrate_title">진동</string>
   <string name="assistant_page_local_tools_volume_desc">오디오 스트림 볼륨을 읽고 설정합니다. 벨소리/알림 스트림에는 방해 금지 액세스가 필요합니다.</string>
   <string name="assistant_page_local_tools_volume_title">볼륨</string>
-  <string name="assistant_page_local_tools_wifi_desc">현재 Wi-Fi 연결(SSID, IP, 신호)을 읽습니다. SSID에는 위치 권한이 필요합니다.</string>
-  <string name="assistant_page_local_tools_wifi_title">Wi-Fi 정보</string>
   <string name="assistant_page_local_tools_workflows_desc">어시스턴트가 트리거로 실행되는 자동화를 만들 수 있습니다 — WiFi 연결, 일정, 지오펜스, 알림 도착 등.</string>
   <string name="assistant_page_local_tools_workflows_hint_message">워크플로가 활성화되었습니다. 일부 트리거 유형은 토글이 요청할 수 없는 권한이 필요합니다:\n\n• 지오펜스(어딘가에 도착): 설정 → 앱 → RikkaHub → 권한 → 위치 → 항상 허용.\n• 알림 도착: 설정 → 앱 → 특수 액세스 → 알림 액세스 → RikkaHub 활성화.\n• 앱 실행/종료: 설정 → 접근성 → RikkaHub 활성화.\n• Bluetooth 연결/해제: 시스템이 물어볼 때 BLUETOOTH_CONNECT 부여.\n\n일정, WiFi, 헤드폰, 전원, 화면 켜짐/꺼짐, 배터리 트리거는 바로 작동합니다. 추가 설정이 필요한 워크플로를 작성하는 순간 어시스턴트가 알려줍니다.</string>
   <string name="assistant_page_local_tools_workflows_hint_title">워크플로에는 추가 설정이 필요합니다</string>

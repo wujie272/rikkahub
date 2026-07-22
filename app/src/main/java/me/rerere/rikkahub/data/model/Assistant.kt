@@ -94,6 +94,43 @@ data class AssistantMemory(
 )
 
 @Serializable
+sealed class AssistantSearchMode {
+    @Serializable
+    @SerialName("off")
+    data object Off : AssistantSearchMode()
+
+    @Serializable
+    @SerialName("builtin")
+    data object BuiltIn : AssistantSearchMode()
+
+    @Serializable
+    @SerialName("provider")
+    data class Provider(val index: Int) : AssistantSearchMode()
+
+    @Serializable
+    @SerialName("multi_provider")
+    data class MultiProvider(val indices: List<Int>) : AssistantSearchMode()
+}
+
+fun buildAssistantProviderSearchMode(
+    indices: List<Int>,
+): AssistantSearchMode {
+    val sanitized = indices
+        .asSequence()
+        .distinct()
+        .sorted()
+        .toList()
+
+    return when (sanitized.size) {
+        0 -> AssistantSearchMode.Off
+        1 -> AssistantSearchMode.Provider(sanitized.first())
+        else -> AssistantSearchMode.MultiProvider(sanitized)
+    }
+}
+
+
+
+@Serializable
 enum class AssistantAffectScope {
     USER,
     ASSISTANT,

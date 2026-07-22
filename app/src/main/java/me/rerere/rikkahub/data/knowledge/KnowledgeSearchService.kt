@@ -45,6 +45,12 @@ class KnowledgeSearchService(
         private const val CONTEXT_CHUNK_MAX = 600
         /** Reranking：关键词匹配加分上限 */
         private const val RERANK_MAX_BONUS = 0.2f
+        /** 多样性控制：两个结果内容相似度超过此值则过滤 */
+        private const val DIVERSITY_THRESHOLD = 0.85f
+        /** 动态阈值降级步长 */
+        private const val THRESHOLD_STEP = 0.1f
+        /** 最小允许阈值 */
+        private const val MIN_THRESHOLD = 0.1f
     }
 
     /** BM25 索引缓存（懒加载） */
@@ -119,8 +125,8 @@ class KnowledgeSearchService(
             emptyMap()
         }
 
-        // 6. 融合分数
-        val effectiveThreshold = minScore
+        // 6. 融合分数（带动态阈值降级）
+        val effectiveThreshold = findEffectiveThreshold(minScore, semanticScores, bm25Scores)
         val merged = candidates.mapNotNull { doc ->
             val semanticScore = semanticScores[doc.id] ?: 0f
             val bm25Score = bm25Scores[doc.id] ?: 0f
@@ -156,12 +162,12 @@ class KnowledgeSearchService(
             .sortedByDescending { it.score }
             .take(limit * 2) // 多取一些用于去重
 
-        // 7. 去重：同一文件只保留最高分 chunk
-        val deduped = deduplicateByFile(merged).take(limit * 2)
+        // 7. 去重：同一文件只保留最高分 chunk + 多样性控制
+        val deduped = deduplicateByFile(merged).let { diversityFilter(it) }.take(limit * 2)
 
         // 8. Reranking：用原 query 对展开上下文做关键词匹配加分
         if (enableRerank && deduped.size > 1) {
-            val queryTerms = query.lowercase().split(Regex("\\s+")).filter { it.length > 1 }.toSet()
+            val queryTerms = tokenizeQuery(query)
             if (queryTerms.isNotEmpty()) {
                 return deduped.map { result ->
                     val context = (result.expandedContext + " " + result.content).lowercase()
@@ -273,5 +279,77 @@ class KnowledgeSearchService(
         return results.filter { seen.add(it.filePath) }
     }
 
-    // 辅助：获取知识库的模型 ID
+    /**
+     * 动态阈值降级：如果当前阈值搜不到结果，逐步降低阈值
+     * 直到有结果或达到最小阈值
+     *
+     * 直接复用 Step 5 已算好的 bm25Scores，避免重复建索引
+     */
+    private fun findEffectiveThreshold(
+        requestedThreshold: Float,
+        semanticScores: Map<String, Float>,
+        bm25Scores: Map<String, Float>,
+    ): Float {
+        if (semanticScores.isEmpty()) return requestedThreshold
+
+        var threshold = requestedThreshold
+        while (threshold >= MIN_THRESHOLD) {
+            val hasResult = semanticScores.any { (id, score) ->
+                score >= threshold || (bm25Scores[id] ?: 0f) >= threshold
+            }
+            if (hasResult) return threshold
+            threshold -= THRESHOLD_STEP
+        }
+        return MIN_THRESHOLD
+    }
+
+    /**
+     * 多样性过滤：确保返回的结果内容不高度重复
+     * 基于文本 Jaccard 相似度，避免同一话题的多个片段扎堆
+     */
+    private fun diversityFilter(results: List<SearchResult>): List<SearchResult> {
+        if (results.size <= 1) return results
+
+        val filtered = mutableListOf<SearchResult>()
+        for (result in results) {
+            val isDuplicate = filtered.any { existing ->
+                val sim = textJaccardSimilarity(result.content, existing.content)
+                sim > DIVERSITY_THRESHOLD
+            }
+            if (!isDuplicate) {
+                filtered.add(result)
+            }
+        }
+        return filtered
+    }
+
+    /**
+     * 对查询文本进行分词，同时支持中文和英文
+     * - 中文：字符 bigram（2-gram），兼顾匹配精度和召回
+     * - 英文：按空格分词
+     */
+    private fun tokenizeQuery(query: String): Set<String> {
+        val text = query.lowercase()
+        val hasChinese = text.any { it in '\u4e00'..'\u9fff' }
+        return if (hasChinese) {
+            text.windowed(2, 1)
+                .filter { it.any { c -> c.isLetterOrDigit() } }
+                .toSet()
+        } else {
+            text.split(Regex("\\s+")).filter { it.length > 1 }.toSet()
+        }
+    }
+
+    /**
+     * 计算两个文本的 Jaccard 相似度
+     * 复用 tokenizeQuery 的分词逻辑，同时支持中文 bigram 和英文空格分词
+     */
+    private fun textJaccardSimilarity(a: String, b: String): Float {
+        val setA = tokenizeQuery(a)
+        val setB = tokenizeQuery(b)
+        if (setA.isEmpty() || setB.isEmpty()) return 0f
+        val intersection = setA.intersect(setB).size.toFloat()
+        val union = setA.union(setB).size.toFloat()
+        return intersection / union
+    }
 }

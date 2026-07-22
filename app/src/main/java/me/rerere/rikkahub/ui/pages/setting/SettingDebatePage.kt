@@ -30,7 +30,6 @@ import me.rerere.hugeicons.stroke.Play
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.model.DEBATE_TOPICS
-import me.rerere.rikkahub.data.model.GroupChatRuntimeConfig
 import me.rerere.rikkahub.data.model.GroupChatSeat
 import me.rerere.rikkahub.data.model.GroupChatSeatOverrides
 import me.rerere.rikkahub.data.model.GroupChatTemplate
@@ -308,7 +307,7 @@ fun SettingDebatePage() {
                                     templateId = template.id,
                                     userMessage = listOf(me.rerere.ai.ui.UIMessagePart.Text(selectedTopic)),
                                 )
-                                navController.navigate(Screen.GroupChat(id = convId.toString()))
+                                navController.navigate(Screen.Chat(id = convId.toString()))
                             }
                         }
                         showTopicDialog = false
@@ -386,7 +385,7 @@ private fun DebateTemplateList(
                                 listOf(me.rerere.ai.ui.UIMessagePart.Text(topic))
                             } else emptyList(),
                         )
-                        navController.navigate(Screen.GroupChat(id = convId.toString()))
+                        navController.navigate(Screen.Chat(id = convId.toString()))
                     }
                 },
                 onEdit = { navController.navigate(Screen.GroupChatTemplateDetail(id = template.id.toString())) },

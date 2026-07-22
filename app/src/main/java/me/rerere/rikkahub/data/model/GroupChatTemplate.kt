@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.data.model
 
 import kotlinx.serialization.Serializable
+import me.rerere.ai.core.ReasoningLevel
 import kotlin.uuid.Uuid
 
 /**
@@ -55,11 +56,11 @@ data class GroupChatSeat(
 data class GroupChatSeatOverrides(
     val chatModelId: Uuid? = null,
     val systemPrompt: String? = null,
-    val thinkingBudget: Int? = null,
+    val reasoningLevel: ReasoningLevel? = null,
     val maxTokens: Int? = null,
     val searchEnabled: Boolean = false,
     val memoryEnabled: Boolean = false,
-    val searchMode: Int = 0, // 0=Off, 1=BuiltIn, 2=Provider
+    val searchMode: AssistantSearchMode = AssistantSearchMode.Off,
     val preferBuiltInSearch: Boolean = false,
     val mcpServerIds: Set<Uuid> = emptySet(),
 )

@@ -20,6 +20,11 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.Transient
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.decodeFromJsonElement
 import me.rerere.ai.core.MessageRole
@@ -91,6 +96,40 @@ private fun decodeProvidersTolerant(raw: String): List<ProviderSetting> {
             Log.w(TAG, "Skipping unrecognised provider entry during decode: ${e.message}")
             null
         }
+    }
+}
+
+private fun migrateSearchModeForGroupChatTemplates(raw: String): String {
+    return try {
+        val element = JsonInstant.parseToJsonElement(raw)
+        val transformed = transformSearchModeValues(element)
+        JsonInstant.encodeToString(JsonElement.serializer(), transformed)
+    } catch (e: Exception) {
+        raw
+    }
+}
+
+private fun transformSearchModeValues(element: JsonElement): JsonElement {
+    return when (element) {
+        is JsonObject -> {
+            val mutable = element.toMutableMap()
+            mutable["searchMode"]?.let { searchMode ->
+                if (searchMode is JsonPrimitive) {
+                    val intValue = searchMode.content.toIntOrNull()
+                    if (intValue != null) {
+                        mutable["searchMode"] = when (intValue) {
+                            0 -> buildJsonObject { put("type", JsonPrimitive("off")) }
+                            1 -> buildJsonObject { put("type", JsonPrimitive("builtin")) }
+                            2 -> buildJsonObject { put("type", JsonPrimitive("provider")); put("index", JsonPrimitive(0)) }
+                            else -> buildJsonObject { put("type", JsonPrimitive("off")) }
+                        }
+                    }
+                }
+            }
+            JsonObject(mutable.mapValues { transformSearchModeValues(it.value) })
+        }
+        is JsonArray -> JsonArray(element.map { transformSearchModeValues(it) })
+        else -> element
     }
 }
 
@@ -288,9 +327,11 @@ class SettingsStore(
                 lorebooks = preferences[LOREBOOKS]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: emptyList(),
-                groupChatTemplates = preferences[GROUP_CHAT_TEMPLATES]?.let {
-                    JsonInstant.decodeFromString(it)
+                groupChatTemplates = preferences[GROUP_CHAT_TEMPLATES]?.let { raw ->
+                    val migrated = migrateSearchModeForGroupChatTemplates(raw)
+                    JsonInstant.decodeFromString(migrated)
                 } ?: emptyList(),
+
 
                 quickMessages = preferences[QUICK_MESSAGES]?.let {
                     JsonInstant.decodeFromString(it)
@@ -651,6 +692,96 @@ class SettingsStore(
 }
 
 @Serializable
+enum class AiLogLevel(val preferenceName: String) {
+    @SerialName("off")
+    OFF("off"),
+    @SerialName("info")
+    INFO("info"),
+    @SerialName("debug")
+    DEBUG("debug");
+
+    companion object {
+        fun fromPreference(value: String?): AiLogLevel = entries.firstOrNull { it.preferenceName == value } ?: INFO
+    }
+}
+
+@Serializable
+enum class ChatFontFamily {
+    @SerialName("default")
+    DEFAULT,
+    @SerialName("serif")
+    SERIF,
+    @SerialName("monospace")
+    MONOSPACE,
+
+    @SerialName("custom")
+    CUSTOM,
+}
+
+@Serializable
+enum class ToolResultHistoryMode {
+    @SerialName("keep_all")
+    KEEP_ALL,
+    @SerialName("discard")
+    DISCARD,
+}
+
+const val TOOL_RESULT_KEEP_USER_MESSAGES_MIN = 1
+const val TOOL_RESULT_KEEP_USER_MESSAGES_MAX = 50
+
+fun DisplaySetting.getToolResultKeepUserMessages(): Int =
+    toolResultKeepUserMessages.coerceIn(TOOL_RESULT_KEEP_USER_MESSAGES_MIN, TOOL_RESULT_KEEP_USER_MESSAGES_MAX)
+
+@Serializable
+data class DisplaySetting(
+    val userAvatar: Avatar = Avatar.Dummy,
+    val userNickname: String = "",
+    val useAppIconStyleLoadingIndicator: Boolean = true,
+    val showUserAvatar: Boolean = true,
+    val showAssistantBubble: Boolean = false,
+    val bubbleOpacity: Float = 1.0f,
+    val showModelIcon: Boolean = true,
+    val showModelName: Boolean = true,
+    val showDateTimeInMessage: Boolean = false,
+    val showTokenUsage: Boolean = true,
+    val showThinkingContent: Boolean = true,
+    val autoCloseThinking: Boolean = true,
+    val showUpdates: Boolean = true,
+    val showMessageJumper: Boolean = true,
+    val messageJumperOnLeft: Boolean = false,
+    val fontSizeRatio: Float = 1.0f,
+    val enableMessageGenerationHapticEffect: Boolean = false,
+    val skipCropImage: Boolean = true,
+    val enableNotificationOnMessageGeneration: Boolean = false,
+    val enableLiveUpdateNotification: Boolean = false,
+    val codeBlockAutoWrap: Boolean = false,
+    val codeBlockAutoCollapse: Boolean = false,
+    val showLineNumbers: Boolean = false,
+    val ttsOnlyReadQuoted: Boolean = false,
+    val ttsOnlyReadOutsideBrackets: Boolean = false,
+    val autoPlayTTSAfterGeneration: Boolean = false,
+    val pasteLongTextAsFile: Boolean = false,
+    val pasteLongTextThreshold: Int = 1000,
+    val sendOnEnter: Boolean = false,
+    val enableAutoScroll: Boolean = true,
+    val enableLatexRendering: Boolean = true,
+    val enableBlurEffect: Boolean = false,
+    val chatFontFamily: ChatFontFamily = ChatFontFamily.DEFAULT,
+    val chatCustomFontPath: String = "",
+    val chatCustomFontName: String = "",
+    val enableVolumeKeyScroll: Boolean = false,
+    val hideStatusBar: Boolean = false,
+    val embeddingRetrievalTimeoutSeconds: Int = 30,
+    val mcpToolCallTimeoutSeconds: Int = 60,
+    val httpRetryMaxRetries: Int = 3,
+    val httpRetryDelaySeconds: Int = 5,
+    val toolResultHistoryMode: ToolResultHistoryMode = ToolResultHistoryMode.KEEP_ALL,
+    val toolResultKeepUserMessages: Int = 5,
+    val useLastTurnMemoryOnSkip: Boolean = false,
+    val volumeKeyScrollRatio: Float = 1.0f,
+)
+
+@Serializable
 data class Settings(
     @Transient
     val init: Boolean = false,
@@ -724,75 +855,6 @@ data class Settings(
         fun dummy() = Settings(init = true)
     }
 }
-
-@Serializable
-enum class AiLogLevel(val preferenceName: String) {
-    @SerialName("off")
-    OFF("off"),
-    @SerialName("info")
-    INFO("info"),
-    @SerialName("debug")
-    DEBUG("debug");
-
-    companion object {
-        fun fromPreference(value: String?): AiLogLevel = entries.firstOrNull { it.preferenceName == value } ?: INFO
-    }
-}
-
-@Serializable
-enum class ChatFontFamily {
-    @SerialName("default")
-    DEFAULT,
-    @SerialName("serif")
-    SERIF,
-    @SerialName("monospace")
-    MONOSPACE,
-
-    @SerialName("custom")
-    CUSTOM,
-}
-
-@Serializable
-data class DisplaySetting(
-    val userAvatar: Avatar = Avatar.Dummy,
-    val userNickname: String = "",
-    val useAppIconStyleLoadingIndicator: Boolean = true,
-    val showUserAvatar: Boolean = true,
-    val showAssistantBubble: Boolean = false,
-    val bubbleOpacity: Float = 1.0f,
-    val showModelIcon: Boolean = true,
-    val showModelName: Boolean = true,
-    val showDateTimeInMessage: Boolean = false,
-    val showTokenUsage: Boolean = true,
-    val showThinkingContent: Boolean = true,
-    val autoCloseThinking: Boolean = true,
-    val showUpdates: Boolean = true,
-    val showMessageJumper: Boolean = true,
-    val messageJumperOnLeft: Boolean = false,
-    val fontSizeRatio: Float = 1.0f,
-    val enableMessageGenerationHapticEffect: Boolean = false,
-    val skipCropImage: Boolean = true,
-    val enableNotificationOnMessageGeneration: Boolean = false,
-    val enableLiveUpdateNotification: Boolean = false,
-    val codeBlockAutoWrap: Boolean = false,
-    val codeBlockAutoCollapse: Boolean = false,
-    val showLineNumbers: Boolean = false,
-    val ttsOnlyReadQuoted: Boolean = false,
-    val ttsOnlyReadOutsideBrackets: Boolean = false,
-    val autoPlayTTSAfterGeneration: Boolean = false,
-    val pasteLongTextAsFile: Boolean = false,
-    val pasteLongTextThreshold: Int = 1000,
-    val sendOnEnter: Boolean = false,
-    val enableAutoScroll: Boolean = true,
-    val enableLatexRendering: Boolean = true,
-    val enableBlurEffect: Boolean = false,
-    val chatFontFamily: ChatFontFamily = ChatFontFamily.DEFAULT,
-    val chatCustomFontPath: String = "",
-    val chatCustomFontName: String = "",
-    val enableVolumeKeyScroll: Boolean = false,
-    val hideStatusBar: Boolean = false,
-    val volumeKeyScrollRatio: Float = 1.0f,
-)
 
 @Serializable
 data class WebDavConfig(

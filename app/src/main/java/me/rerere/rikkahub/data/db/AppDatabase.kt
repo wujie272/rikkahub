@@ -33,6 +33,8 @@ import me.rerere.rikkahub.data.db.entity.SshHostEntity
 
 
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
+import me.rerere.rikkahub.data.ai.requestlog.AIRequestLogEntity
+import me.rerere.rikkahub.data.ai.requestlog.AIRequestLogDao
 import me.rerere.rikkahub.data.db.migrations.Migration_16_17
 import me.rerere.rikkahub.data.db.migrations.Migration_20_21
 import me.rerere.rikkahub.data.db.migrations.Migration_21_22
@@ -40,6 +42,7 @@ import me.rerere.rikkahub.data.db.migrations.Migration_22_23
 import me.rerere.rikkahub.data.db.migrations.Migration_29_30
 import me.rerere.rikkahub.data.db.migrations.Migration_30_31
 import me.rerere.rikkahub.data.db.migrations.Migration_8_9
+import me.rerere.rikkahub.data.db.migrations.MIGRATION_34_35
 import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.rikkahub.workflow.db.WorkflowDao
 import me.rerere.rikkahub.workflow.db.WorkflowEntity
@@ -63,8 +66,9 @@ import me.rerere.rikkahub.workflow.db.WorkflowRunEntity
 
         WorkspaceEntity::class,
         FolderEntity::class,
+        AIRequestLogEntity::class,
     ],
-    version = 34,
+    version = 35,
     autoMigrations = [
         // v1→v23: Using auto-migrations for early versions (no manual migrations overlap)
         AutoMigration(from = 1, to = 2),
@@ -119,6 +123,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun workspaceDao(): WorkspaceDAO
 
     abstract fun folderDao(): FolderDAO
+
+    abstract fun aiRequestLogDao(): AIRequestLogDao
 }
 
 object TokenUsageConverter {
