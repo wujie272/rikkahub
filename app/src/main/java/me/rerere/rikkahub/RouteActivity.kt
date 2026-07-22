@@ -115,6 +115,7 @@ import me.rerere.rikkahub.ui.pages.favorite.FavoritePage
 import me.rerere.rikkahub.ui.pages.history.HistoryPage
 import me.rerere.rikkahub.ui.pages.imggen.ImageGenPage
 import me.rerere.rikkahub.ui.pages.log.LogPage
+import me.rerere.rikkahub.ui.pages.log.LogDetailPage
 import me.rerere.rikkahub.ui.pages.search.SearchPage
 import me.rerere.rikkahub.ui.pages.setting.SettingAboutPage
 import me.rerere.rikkahub.ui.pages.setting.SettingAdvancedPage
@@ -701,6 +702,11 @@ class RouteActivity : ComponentActivity() {
                                 LogPage()
                             }
 
+                            entry<Screen.LogDetail> { key ->
+                                LogDetailPage(id = key.id)
+                            }
+
+
                             entry<Screen.Extensions> {
                                 ExtensionsPage()
                             }
@@ -996,6 +1002,9 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object Log : Screen
+
+    @Serializable
+    data class LogDetail(val id: Long) : Screen
 
     @Serializable
     data object Extensions : Screen

@@ -38,6 +38,19 @@ class LogVM(
     private val _errorOnly = MutableStateFlow(false)
     val errorOnly: StateFlow<Boolean> = _errorOnly.asStateFlow()
 
+    val availableSources: StateFlow<List<AIRequestSource>> = rawLogs
+        .map { logs ->
+            logs.mapNotNull { log ->
+                runCatching { AIRequestSource.valueOf(log.source) }.getOrNull()
+            }.distinct().sortedBy { it.ordinal }
+        }
+        .distinctUntilChanged()
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = emptyList(),
+        )
+
     val logs: StateFlow<List<AIRequestLogEntity>> = combine(rawLogs, _selectedSource, _errorOnly) { logs, filter, errOnly ->
         var result = logs
         if (filter != null) result = result.filter { it.source == filter.name }
