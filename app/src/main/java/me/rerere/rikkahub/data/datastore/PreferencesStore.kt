@@ -651,6 +651,68 @@ class SettingsStore(
 }
 
 @Serializable
+enum class ToolResultHistoryMode {
+    @SerialName("keep_all")
+    KEEP_ALL,
+    @SerialName("discard")
+    DISCARD,
+}
+
+const val TOOL_RESULT_KEEP_USER_MESSAGES_MIN = 1
+const val TOOL_RESULT_KEEP_USER_MESSAGES_MAX = 50
+
+fun DisplaySetting.getToolResultKeepUserMessages(): Int =
+    toolResultKeepUserMessages.coerceIn(TOOL_RESULT_KEEP_USER_MESSAGES_MIN, TOOL_RESULT_KEEP_USER_MESSAGES_MAX)
+
+data class DisplaySetting(
+    val userAvatar: Avatar = Avatar.Dummy,
+    val userNickname: String = "",
+    val useAppIconStyleLoadingIndicator: Boolean = true,
+    val showUserAvatar: Boolean = true,
+    val showAssistantBubble: Boolean = false,
+    val bubbleOpacity: Float = 1.0f,
+    val showModelIcon: Boolean = true,
+    val showModelName: Boolean = true,
+    val showDateTimeInMessage: Boolean = false,
+    val showTokenUsage: Boolean = true,
+    val showThinkingContent: Boolean = true,
+    val autoCloseThinking: Boolean = true,
+    val showUpdates: Boolean = true,
+    val showMessageJumper: Boolean = true,
+    val messageJumperOnLeft: Boolean = false,
+    val fontSizeRatio: Float = 1.0f,
+    val enableMessageGenerationHapticEffect: Boolean = false,
+    val skipCropImage: Boolean = true,
+    val enableNotificationOnMessageGeneration: Boolean = false,
+    val enableLiveUpdateNotification: Boolean = false,
+    val codeBlockAutoWrap: Boolean = false,
+    val codeBlockAutoCollapse: Boolean = false,
+    val showLineNumbers: Boolean = false,
+    val ttsOnlyReadQuoted: Boolean = false,
+    val ttsOnlyReadOutsideBrackets: Boolean = false,
+    val autoPlayTTSAfterGeneration: Boolean = false,
+    val pasteLongTextAsFile: Boolean = false,
+    val pasteLongTextThreshold: Int = 1000,
+    val sendOnEnter: Boolean = false,
+    val enableAutoScroll: Boolean = true,
+    val enableLatexRendering: Boolean = true,
+    val enableBlurEffect: Boolean = false,
+    val chatFontFamily: ChatFontFamily = ChatFontFamily.DEFAULT,
+    val chatCustomFontPath: String = "",
+    val chatCustomFontName: String = "",
+    val enableVolumeKeyScroll: Boolean = false,
+    val hideStatusBar: Boolean = false,
+    val embeddingRetrievalTimeoutSeconds: Int = 30,
+    val mcpToolCallTimeoutSeconds: Int = 60,
+    val httpRetryMaxRetries: Int = 3,
+    val httpRetryDelaySeconds: Int = 5,
+    val toolResultHistoryMode: ToolResultHistoryMode = ToolResultHistoryMode.KEEP_ALL,
+    val toolResultKeepUserMessages: Int = 5,
+    val useLastTurnMemoryOnSkip: Boolean = false,
+    val volumeKeyScrollRatio: Float = 1.0f,
+)
+
+@Serializable
 data class Settings(
     @Transient
     val init: Boolean = false,
@@ -751,68 +813,6 @@ enum class ChatFontFamily {
     @SerialName("custom")
     CUSTOM,
 }
-
-@Serializable
-enum class ToolResultHistoryMode {
-    @SerialName("keep_all")
-    KEEP_ALL,
-    @SerialName("discard")
-    DISCARD,
-}
-
-const val TOOL_RESULT_KEEP_USER_MESSAGES_MIN = 1
-const val TOOL_RESULT_KEEP_USER_MESSAGES_MAX = 50
-
-fun DisplaySetting.getToolResultKeepUserMessages(): Int =
-    toolResultKeepUserMessages.coerceIn(TOOL_RESULT_KEEP_USER_MESSAGES_MIN, TOOL_RESULT_KEEP_USER_MESSAGES_MAX)
-
-data class DisplaySetting(
-    val userAvatar: Avatar = Avatar.Dummy,
-    val userNickname: String = "",
-    val useAppIconStyleLoadingIndicator: Boolean = true,
-    val showUserAvatar: Boolean = true,
-    val showAssistantBubble: Boolean = false,
-    val bubbleOpacity: Float = 1.0f,
-    val showModelIcon: Boolean = true,
-    val showModelName: Boolean = true,
-    val showDateTimeInMessage: Boolean = false,
-    val showTokenUsage: Boolean = true,
-    val showThinkingContent: Boolean = true,
-    val autoCloseThinking: Boolean = true,
-    val showUpdates: Boolean = true,
-    val showMessageJumper: Boolean = true,
-    val messageJumperOnLeft: Boolean = false,
-    val fontSizeRatio: Float = 1.0f,
-    val enableMessageGenerationHapticEffect: Boolean = false,
-    val skipCropImage: Boolean = true,
-    val enableNotificationOnMessageGeneration: Boolean = false,
-    val enableLiveUpdateNotification: Boolean = false,
-    val codeBlockAutoWrap: Boolean = false,
-    val codeBlockAutoCollapse: Boolean = false,
-    val showLineNumbers: Boolean = false,
-    val ttsOnlyReadQuoted: Boolean = false,
-    val ttsOnlyReadOutsideBrackets: Boolean = false,
-    val autoPlayTTSAfterGeneration: Boolean = false,
-    val pasteLongTextAsFile: Boolean = false,
-    val pasteLongTextThreshold: Int = 1000,
-    val sendOnEnter: Boolean = false,
-    val enableAutoScroll: Boolean = true,
-    val enableLatexRendering: Boolean = true,
-    val enableBlurEffect: Boolean = false,
-    val chatFontFamily: ChatFontFamily = ChatFontFamily.DEFAULT,
-    val chatCustomFontPath: String = "",
-    val chatCustomFontName: String = "",
-    val enableVolumeKeyScroll: Boolean = false,
-    val hideStatusBar: Boolean = false,
-    val embeddingRetrievalTimeoutSeconds: Int = 30,
-    val mcpToolCallTimeoutSeconds: Int = 60,
-    val httpRetryMaxRetries: Int = 3,
-    val httpRetryDelaySeconds: Int = 5,
-    val toolResultHistoryMode: ToolResultHistoryMode = ToolResultHistoryMode.KEEP_ALL,
-    val toolResultKeepUserMessages: Int = 5,
-    val useLastTurnMemoryOnSkip: Boolean = false,
-    val volumeKeyScrollRatio: Float = 1.0f,
-)
 
 @Serializable
 data class WebDavConfig(
