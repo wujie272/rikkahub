@@ -651,6 +651,33 @@ class SettingsStore(
 }
 
 @Serializable
+enum class AiLogLevel(val preferenceName: String) {
+    @SerialName("off")
+    OFF("off"),
+    @SerialName("info")
+    INFO("info"),
+    @SerialName("debug")
+    DEBUG("debug");
+
+    companion object {
+        fun fromPreference(value: String?): AiLogLevel = entries.firstOrNull { it.preferenceName == value } ?: INFO
+    }
+}
+
+@Serializable
+enum class ChatFontFamily {
+    @SerialName("default")
+    DEFAULT,
+    @SerialName("serif")
+    SERIF,
+    @SerialName("monospace")
+    MONOSPACE,
+
+    @SerialName("custom")
+    CUSTOM,
+}
+
+@Serializable
 enum class ToolResultHistoryMode {
     @SerialName("keep_all")
     KEEP_ALL,
@@ -664,6 +691,7 @@ const val TOOL_RESULT_KEEP_USER_MESSAGES_MAX = 50
 fun DisplaySetting.getToolResultKeepUserMessages(): Int =
     toolResultKeepUserMessages.coerceIn(TOOL_RESULT_KEEP_USER_MESSAGES_MIN, TOOL_RESULT_KEEP_USER_MESSAGES_MAX)
 
+@Serializable
 data class DisplaySetting(
     val userAvatar: Avatar = Avatar.Dummy,
     val userNickname: String = "",
@@ -785,33 +813,6 @@ data class Settings(
         // 构造一个用于初始化的settings, 但它不能用于保存，防止使用初始值存储
         fun dummy() = Settings(init = true)
     }
-}
-
-@Serializable
-enum class AiLogLevel(val preferenceName: String) {
-    @SerialName("off")
-    OFF("off"),
-    @SerialName("info")
-    INFO("info"),
-    @SerialName("debug")
-    DEBUG("debug");
-
-    companion object {
-        fun fromPreference(value: String?): AiLogLevel = entries.firstOrNull { it.preferenceName == value } ?: INFO
-    }
-}
-
-@Serializable
-enum class ChatFontFamily {
-    @SerialName("default")
-    DEFAULT,
-    @SerialName("serif")
-    SERIF,
-    @SerialName("monospace")
-    MONOSPACE,
-
-    @SerialName("custom")
-    CUSTOM,
 }
 
 @Serializable
