@@ -42,7 +42,7 @@ private object Capability {
     )
     val FineLocation: Set<LocalToolOption> = setOf(
         LocalToolOption.Location,            // get_location, geocode tools
-        LocalToolOption.WifiInfo,            // SSID/BSSID on Android 10+
+        LocalToolOption.DeviceInfo,         // SSID/BSSID on Android 10+
         LocalToolOption.Workflows,           // geofence_enter / geofence_exit triggers
     )
     val NotificationListener: Set<LocalToolOption> = setOf(
@@ -88,7 +88,7 @@ private object Capability {
         LocalToolOption.Workflows,           // workflow Bluetooth triggers read paired-device state
     )
     val NearbyWifi: Set<LocalToolOption> = setOf(
-        LocalToolOption.WifiInfo,            // WiFi scan/info on Android 13+
+        LocalToolOption.DeviceInfo,         // WiFi scan/info on Android 13+
     )
     val BackgroundLocation: Set<LocalToolOption> = setOf(
         LocalToolOption.Workflows,           // geofence triggers fire while the app is closed
@@ -98,7 +98,7 @@ private object Capability {
 /** Friendly name for the row's "needed by:" subtitle. */
 private fun LocalToolOption.shortName(): String = when (this) {
     LocalToolOption.Location -> "定位"
-    LocalToolOption.WifiInfo -> "WiFi信息"
+    LocalToolOption.DeviceInfo -> "设备信息"
     LocalToolOption.NotificationListener -> "通知监听"
     LocalToolOption.ScreenAutomation -> "屏幕自动化"
     LocalToolOption.Termux -> "Termux"

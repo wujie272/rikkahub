@@ -24,8 +24,8 @@ import me.rerere.rikkahub.data.ai.tools.local.BiometricResultBuffer
 import me.rerere.rikkahub.data.ai.tools.local.CameraResultBuffer
 import me.rerere.rikkahub.data.ai.tools.local.InteractiveToolStreamer
 import me.rerere.rikkahub.data.ai.tools.local.AppDataBridge
-import me.rerere.rikkahub.data.ai.tools.local.audioInfoTool
-import me.rerere.rikkahub.data.ai.tools.local.batteryTool
+import me.rerere.rikkahub.data.ai.tools.local.getDeviceInfoTool
+import me.rerere.rikkahub.data.ai.tools.local.readSensorTool
 import me.rerere.rikkahub.data.ai.tools.local.callLogTool
 import me.rerere.rikkahub.data.ai.tools.local.cameraPhotoTool
 import me.rerere.rikkahub.data.ai.tools.local.clickNodeTool
@@ -36,7 +36,6 @@ import me.rerere.rikkahub.data.ai.tools.local.getBrightnessTool
 import me.rerere.rikkahub.data.ai.tools.local.getVolumeTool
 import me.rerere.rikkahub.data.ai.tools.local.globalActionTool
 import me.rerere.rikkahub.data.ai.tools.local.listContactsTool
-import me.rerere.rikkahub.data.ai.tools.local.listSensorsTool
 import me.rerere.rikkahub.data.ai.tools.local.listSmsInboxTool
 import me.rerere.rikkahub.data.ai.tools.local.locationTool
 import me.rerere.rikkahub.data.ai.tools.local.longPressTool
@@ -58,15 +57,12 @@ import me.rerere.rikkahub.data.ai.tools.local.setVolumeTool
 import me.rerere.rikkahub.data.ai.tools.local.shareTool
 import me.rerere.rikkahub.data.ai.tools.local.speechToTextTool
 import me.rerere.rikkahub.data.ai.tools.local.stopMediaTool
-import me.rerere.rikkahub.data.ai.tools.local.storageTool
 import me.rerere.rikkahub.data.ai.tools.local.swipeTool
 import me.rerere.rikkahub.data.ai.tools.local.takeScreenshotTool
 import me.rerere.rikkahub.data.ai.tools.local.tapTool
-import me.rerere.rikkahub.data.ai.tools.local.telephonyInfoTool
 import me.rerere.rikkahub.data.ai.tools.local.toastTool
 import me.rerere.rikkahub.data.ai.tools.local.torchTool
 import me.rerere.rikkahub.data.ai.tools.local.vibrateTool
-import me.rerere.rikkahub.data.ai.tools.local.wifiInfoTool
 import me.rerere.rikkahub.data.ai.tools.local.deleteSshHostTool
 import me.rerere.rikkahub.data.ai.tools.local.forgetSshHostKeyTool
 import me.rerere.rikkahub.data.ai.tools.local.listSshHostsTool
@@ -121,13 +117,7 @@ import java.util.Locale
 // LocalToolOption moved to local/LocalToolOption.kt
 
 private val TOP_TOOL_EXAMPLES: Map<String, String> = mapOf(
-    "get_battery_status" to "get_battery_status()",
-    "get_audio_info" to "get_audio_info()",
-    "get_telephony_info" to "get_telephony_info()",
-    "get_wifi_info" to "get_wifi_info()",
-    "list_sensors" to "list_sensors()",
-    "read_sensor" to "read_sensor(type=\"accelerometer\", duration_ms=500)",
-    "get_storage_info" to "get_storage_info()",
+    "get_device_info" to "get_device_info(type=\"battery\")",
     "show_toast" to "show_toast(text=\"Done\")",
     "post_notification" to "post_notification(title=\"Reminder\", body=\"Take a break\")",
     "share" to "share(text=\"Hello\")",
@@ -302,24 +292,9 @@ class LocalTools(
         if (options.contains(LocalToolOption.AskUser)) {
             tools.add(askUserTool)
         }
-        if (options.contains(LocalToolOption.Battery)) {
-            tools.add(batteryTool(context))
-        }
-        if (options.contains(LocalToolOption.AudioInfo)) {
-            tools.add(audioInfoTool(context))
-        }
-        if (options.contains(LocalToolOption.TelephonyInfo)) {
-            tools.add(telephonyInfoTool(context))
-        }
-        if (options.contains(LocalToolOption.WifiInfo)) {
-            tools.add(wifiInfoTool(context))
-        }
-        if (options.contains(LocalToolOption.Sensors)) {
-            tools.add(listSensorsTool(context))
+        if (options.contains(LocalToolOption.DeviceInfo)) {
+            tools.add(getDeviceInfoTool(context))
             tools.add(readSensorTool(context))
-        }
-        if (options.contains(LocalToolOption.StorageInfo)) {
-            tools.add(storageTool(context))
         }
         if (options.contains(LocalToolOption.Toast)) {
             tools.add(toastTool(context, invocationContext, interactiveToolStreamer))
