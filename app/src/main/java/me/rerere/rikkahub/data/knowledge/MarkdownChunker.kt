@@ -33,6 +33,12 @@ object MarkdownChunker {
     private val flavour = GFMFlavourDescriptor()
     private val parser = MarkdownParser(flavour)
 
+    /** 匹配 Markdown 图片语法 ![alt](src) */
+    private val imagePattern = Regex("""!\[([^\]]*)\]\([^)]*\)""")
+
+    /** 匹配代码块，提取alt文本前先移除避免误匹配 */
+    private val codeBlockPattern = Regex("""```[\s\S]*?```""")
+
     /**
      * 按 Markdown 标题结构分块，返回带元数据的分块。
      *
@@ -68,27 +74,30 @@ object MarkdownChunker {
             }
         }
 
-        // Phase 3: 注入标题路径上下文
-        if (injectHeadingPath) {
-            return result.map { chunk ->
-                if (chunk.headingPath.size <= 1) {
-                    chunk // 没有父级标题或只有自己，不需要注入
+        // Phase 3: 注入标题路径上下文 + 图片alt文本
+        return result.map { chunk ->
+            var text = chunk.text
+
+            // 注入标题路径上下文
+            if (injectHeadingPath && chunk.headingPath.size > 1) {
+                val contextPrefix = chunk.headingPath.dropLast(1).joinToString(" > ") + " > "
+                val firstLine = text.lines().firstOrNull() ?: ""
+                val rest = text.lines().drop(1).joinToString("\n")
+                text = if (rest.isNotBlank()) {
+                    "$contextPrefix$firstLine\n$rest"
                 } else {
-                    val contextPrefix = chunk.headingPath.dropLast(1).joinToString(" > ") + " > "
-                    val firstLine = chunk.text.lines().firstOrNull() ?: ""
-                    val rest = chunk.text.lines().drop(1).joinToString("\n")
-                    chunk.copy(
-                        text = if (rest.isNotBlank()) {
-                            "$contextPrefix$firstLine\n$rest"
-                        } else {
-                            "$contextPrefix$firstLine"
-                        }
-                    )
+                    "$contextPrefix$firstLine"
                 }
             }
-        }
 
-        return result
+            // 注入图片alt文本，让图片语义也能被搜索命中
+            val alts = extractImageAlts(text)
+            if (alts.isNotEmpty()) {
+                text = text + "\n\n> 🖼️ " + alts.joinToString(", ")
+            }
+
+            chunk.copy(text = text)
+        }
     }
 
     /**
@@ -317,6 +326,20 @@ object MarkdownChunker {
 
     /** 从 AST 节点提取文本（与 Markdown.kt 中一致的方法） */
     private fun ASTNode.getTextInNode(text: String): String {
+
         return text.substring(startOffset, endOffset)
+    }
+
+    /**
+     * 从文本中提取所有图片的alt文本。
+     * 先移除代码块避免 ``` 内 `![...](...)` 被误匹配。
+     */
+    private fun extractImageAlts(text: String): List<String> {
+        val withoutCode = text.replace(codeBlockPattern, "")
+        return imagePattern.findAll(withoutCode)
+            .map { it.groupValues[1].trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .toList()
     }
 }

@@ -163,19 +163,6 @@ fun KnowledgeBaseContent(
         modifier = modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        // "不启用" 选项
-        item {
-            ListItem(
-                headlineContent = { Text(stringResource(R.string.kb_disable)) },
-                trailingContent = {
-                    Switch(
-                        checked = currentKbId == null,
-                        onCheckedChange = { if (it) onSelect(null) }
-                    )
-                },
-                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-            )
-        }
         items(knowledgeBases, key = { it.id }) { kb ->
             ListItem(
                 headlineContent = { Text(kb.name) },
@@ -192,7 +179,7 @@ fun KnowledgeBaseContent(
                     Switch(
                         checked = kb.id == currentKbId,
                         onCheckedChange = { checked ->
-                            if (checked) onSelect(kb.id)
+                            if (checked) onSelect(kb.id) else onSelect(null)
                         }
                     )
                 },
