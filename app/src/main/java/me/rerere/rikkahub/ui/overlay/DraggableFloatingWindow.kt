@@ -228,6 +228,8 @@ class DraggableFloatingWindow(
     fun setWindowFocusable(focusable: Boolean) {
         val v = rootView ?: return
         val params = layoutParams ?: return
+        val currentlyFocusable = params.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE == 0
+        if (currentlyFocusable == focusable) return
         if (focusable) {
             params.flags = params.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()
         } else {

@@ -6,6 +6,8 @@ import android.provider.Settings
 import android.util.Log
 import android.view.View
 import android.view.ViewGroup
+import android.graphics.Rect
+import android.view.ViewTreeObserver
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -31,6 +33,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -40,9 +43,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -135,8 +141,40 @@ object FloatingChatWindow {
     @Composable
     private fun FloatingChatContent() {
         val context = LocalContext.current
+        val view = LocalView.current
+        val density = LocalDensity.current
         val listState = rememberLazyListState()
         var inputText by remember { mutableStateOf("") }
+
+        // ── 输入法焦点管理 ──
+        // 当 TextField 聚焦时窗口必须可聚焦（移除 FLAG_NOT_FOCUSABLE），
+        // 否则 IME 连不上，键盘弹不出来。
+        // 失焦时恢复 non-focusable，让悬浮窗不抢系统焦点。
+        fun onImeFocusChanged(focused: Boolean) {
+            if (focused) {
+                floatingWindow?.setWindowFocusable(true)
+            } else {
+                floatingWindow?.setWindowFocusable(false)
+            }
+        }
+
+        // 用 GlobalLayoutListener 兜底：键盘收起时自动切回 non-focusable
+        // （用户按键盘背键时 TextField 可能没有失焦）
+        DisposableEffect(view) {
+            val listener = ViewTreeObserver.OnGlobalLayoutListener {
+                val rect = Rect()
+                view.getWindowVisibleDisplayFrame(rect)
+                val heightDiff = view.rootView.height - (rect.bottom - rect.top)
+                val keyboardVisible = with(density) { heightDiff > 100.dp.toPx() }
+                if (!keyboardVisible) {
+                    floatingWindow?.setWindowFocusable(false)
+                }
+            }
+            view.viewTreeObserver.addOnGlobalLayoutListener(listener)
+            onDispose {
+                view.viewTreeObserver.removeOnGlobalLayoutListener(listener)
+            }
+        }
 
         // 新消息时自动滚动到底部
         val msgCount = _messages.size
@@ -214,7 +252,11 @@ object FloatingChatWindow {
                     textStyle = MaterialTheme.typography.bodySmall.copy(
                         color = Color.White
                     ),
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .onFocusChanged { focusState ->
+                            onImeFocusChanged(focusState.isFocused)
+                        },
                     maxLines = 3,
                     singleLine = false,
                     shape = RoundedCornerShape(8.dp),
@@ -232,6 +274,7 @@ object FloatingChatWindow {
                             if (text.isNotEmpty()) {
                                 addMessage(text, isUser = true)
                                 inputText = ""
+                                onImeFocusChanged(false)
                                 openMainChat(context, text)
                             }
                         }
@@ -247,6 +290,7 @@ object FloatingChatWindow {
                         if (text.isNotEmpty()) {
                             addMessage(text, isUser = true)
                             inputText = ""
+                            onImeFocusChanged(false)
                             openMainChat(context, text)
                         }
                     },

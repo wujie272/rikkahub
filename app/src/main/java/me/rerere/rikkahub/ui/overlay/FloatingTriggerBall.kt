@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.ui.overlay
 
 import android.annotation.SuppressLint
+import android.util.Log
 import android.content.Context
 import android.graphics.PixelFormat
 import android.os.Build
@@ -132,22 +133,33 @@ class FloatingTriggerBall(
         val containerW = (size * 1.3f).toInt()
         val containerH = (size * 1.4f).toInt()
 
-        val iv = ImageView(context).apply {
-            setImageResource(android.R.drawable.ic_dialog_info)
-            imageTintList = android.content.res.ColorStateList.valueOf(0xFFFFFFFF.toInt())
-            val pad = (size * 0.18f).toInt()
-            setPadding(pad, pad, pad, pad)
-        }
-        iconView = iv
-
         val container = LiquidFloatingContainer(context).apply {
             fillColor = this@FloatingTriggerBall.color
             strokeColor = 0xFFFFFFFF.toInt()
             strokeWidthPx = 2f * density
             ballRadius = size / 2f
-            addView(iv, FrameLayout.LayoutParams(size, size, Gravity.CENTER))
         }
         liquidView = container
+
+        // 根据当前 mode 创建初始内容，而不是硬编码图标
+        when (mode) {
+            Mode.ICON -> {
+                val iv = ImageView(context).apply {
+                    setImageResource(android.R.drawable.ic_dialog_info)
+                    imageTintList = android.content.res.ColorStateList.valueOf(0xFFFFFFFF.toInt())
+                    val pad = (size * 0.18f).toInt()
+                    setPadding(pad, pad, pad, pad)
+                }
+                iconView = iv
+                container.addView(iv, FrameLayout.LayoutParams(size, size, Gravity.CENTER))
+            }
+            Mode.LIVE2D -> {
+                val renderer = Live2DRenderer(context)
+                live2DRenderer = renderer
+                container.addView(renderer.surfaceView, FrameLayout.LayoutParams(size, size, Gravity.CENTER))
+                iconView = null
+            }
+        }
 
         val (screenW, screenH) = currentScreenSize()
         val params = WindowManager.LayoutParams(
@@ -180,7 +192,11 @@ class FloatingTriggerBall(
             true
         }
 
-        wm.addView(container, params)
+        runCatching { wm.addView(container, params) }
+            .onFailure { e ->
+                Log.e("FloatingTriggerBall", "Failed to add overlay view", e)
+                return
+            }
         view = container
         layoutParams = params
 
@@ -192,6 +208,9 @@ class FloatingTriggerBall(
         dismissArcMenu(restorePosition = false)
         snapAnimX?.cancel(); snapAnimX = null
         snapAnimY?.cancel(); snapAnimY = null
+        // 释放 Live2D 渲染器，防止内存泄漏
+        live2DRenderer?.release()
+        live2DRenderer = null
         iconView = null
         liquidView = null
         layoutParams?.let { initialX = it.x; initialY = it.y }

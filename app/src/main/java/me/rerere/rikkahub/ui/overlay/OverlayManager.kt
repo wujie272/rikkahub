@@ -120,23 +120,39 @@ class OverlayManager(private val context: Context) {
         if (triggerBall.isShown()) triggerBall.onConfigurationChanged()
     }
 
+    /** 防止 show/hide 竞态：show 协程跑完前被 hide 取消 */
+    @Volatile
+    private var showPending = false
+
     /** 显示/隐藏触发球 */
     fun showBall() {
+        if (!android.provider.Settings.canDrawOverlays(context)) {
+            Log.w(TAG, "SYSTEM_ALERT_WINDOW not granted, cannot show ball")
+            return
+        }
+        if (showPending) return
+        showPending = true
         ioScope.launch {
             // 先加载配置再显示
             val config = loadBallConfig()
             withContext(Dispatchers.Main) {
+                if (!showPending) {
+                    // 被 hideBall() 取消了，不显示
+                    return@withContext
+                }
                 triggerBall.sizeDp = config.sizeDp
                 triggerBall.snapToEdge = config.snapToEdge
                 triggerBall.autoDock = config.autoDock
                 triggerBall.dockInsetPx = config.dockInsetPx
                 restoreBallPosition()
                 triggerBall.show()
+                showPending = false
             }
         }
     }
 
     fun hideBall() {
+        showPending = false
         triggerBall.hide()
     }
 
