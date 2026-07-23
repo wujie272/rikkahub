@@ -39,7 +39,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowDown01
 import me.rerere.hugeicons.stroke.ArrowUp01
-import me.rerere.hugeicons.stroke.Refresh01
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.context.LocalNavController
@@ -71,10 +70,11 @@ fun KnowledgeEditPage(
         }
     }
 
-    // Load KB data if editing
+    // Load KB data if editing — 仅在表单未初始化时加载
     val selectedKb = vm.selectedKb.value
+    val formName = form.name
     LaunchedEffect(kbId, selectedKb) {
-        if (kbId != null && selectedKb != null && selectedKb.id == kbId) {
+        if (kbId != null && selectedKb != null && selectedKb.id == kbId && formName.isBlank()) {
             vm.initEditForm(selectedKb)
         }
     }
@@ -97,7 +97,7 @@ fun KnowledgeEditPage(
                 .padding(innerPadding)
                 .padding(horizontal = 16.dp)
                 .verticalScroll(rememberScrollState())
-                .padding(bottom = 100.dp),
+                .padding(bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Spacer(Modifier.height(8.dp))

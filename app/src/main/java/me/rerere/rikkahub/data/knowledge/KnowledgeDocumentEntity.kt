@@ -48,6 +48,9 @@ data class KnowledgeDocumentEntity(
     val vector: String? = null,
     /** 是否启用（参与搜索） */
     val enabled: Boolean = true,
+    /** 软删除时间戳，null = 未删除 */
+    @ColumnInfo(name = "deleted_at")
+    val deletedAt: Long? = null,
     @ColumnInfo(name = "created_at")
     val createdAt: Long = System.currentTimeMillis(),
     @ColumnInfo(name = "updated_at")

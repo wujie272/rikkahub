@@ -199,7 +199,7 @@ class KnowledgeVM(
                         chunkStrategy = form.chunkStrategy,
                         threshold = form.threshold,
                     )
-                    _snackbar.value = context.getString(R.string.kb_updated)
+                    _snackbar.value = context.getString(R.string.kb_updated_with_rebuild_hint)
                 } else {
                     knowledgeService.createKnowledgeBase(
                         name = form.name,
@@ -433,7 +433,120 @@ class KnowledgeVM(
         }
     }
 
+    // ============ 网址导入 ============
+
+    private val _isImportingUrl = MutableStateFlow(false)
+    val isImportingUrl: StateFlow<Boolean> = _isImportingUrl.asStateFlow()
+
+    fun importFromUrl(kbId: String, url: String) {
+        if (url.isBlank() || _isImportingUrl.value) return
+
+        viewModelScope.launch {
+            _isImportingUrl.value = true
+
+            val result = knowledgeService.importFromUrl(kbId, url.trim())
+
+            result.onSuccess { count ->
+                _snackbar.value = context.getString(R.string.kb_url_import_success, count)
+                selectKnowledgeBase(kbId)
+            }.onFailure { e ->
+                _snackbar.value = context.getString(R.string.kb_url_import_failed, e.message ?: "")
+            }
+
+            _isImportingUrl.value = false
+        }
+    }
+
+    // ============ 回收站 ============
+
+    private val _deletedFiles = MutableStateFlow<List<KnowledgeVM.FileInfo>>(emptyList())
+    val deletedFiles: StateFlow<List<KnowledgeVM.FileInfo>> = _deletedFiles.asStateFlow()
+
+    fun loadDeletedFiles(kbId: String) {
+        viewModelScope.launch {
+            val deleted = knowledgeService.getDeletedFiles(kbId)
+            val files = deleted.map { file ->
+                val chunks = knowledgeService.getDeletedChunks(kbId, file.file_path)
+                KnowledgeVM.FileInfo(
+                    filePath = file.file_path,
+                    fileName = file.file_name.ifBlank { file.file_path },
+                    chunkCount = chunks.size,
+                )
+            }
+            _deletedFiles.value = files
+        }
+    }
+
+    fun restoreFile(kbId: String, filePath: String) {
+        viewModelScope.launch {
+            knowledgeService.restoreFile(kbId, filePath)
+            _snackbar.value = context.getString(R.string.kb_trash_restored)
+            loadDeletedFiles(kbId)
+            selectKnowledgeBase(kbId)
+        }
+    }
+
+    fun permanentlyDeleteFile(kbId: String, filePath: String) {
+        viewModelScope.launch {
+            knowledgeService.permanentlyDeleteFile(kbId, filePath)
+            _snackbar.value = context.getString(R.string.kb_trash_permanently_deleted)
+            loadDeletedFiles(kbId)
+            selectKnowledgeBase(kbId)
+        }
+    }
+
+    fun emptyTrash(kbId: String) {
+        viewModelScope.launch {
+            knowledgeService.emptyTrash(kbId)
+            _snackbar.value = context.getString(R.string.kb_trash_emptied)
+            _deletedFiles.value = emptyList()
+            selectKnowledgeBase(kbId)
+        }
+    }
+
     // ============ 搜索 ============
+
+    // ============ 重建索引 ============
+
+    private val _isRebuilding = MutableStateFlow(false)
+    val isRebuilding: StateFlow<Boolean> = _isRebuilding.asStateFlow()
+
+    private val _rebuildProgress = MutableStateFlow(0)
+    val rebuildProgress: StateFlow<Int> = _rebuildProgress.asStateFlow()
+
+    private val _rebuildTotal = MutableStateFlow(0)
+    val rebuildTotal: StateFlow<Int> = _rebuildTotal.asStateFlow()
+
+    /**
+     * 重建索引：重新计算所有分块的嵌入向量。
+     * 场景：切换 embedding 模型后调用。
+     */
+    fun rebuildIndex(kbId: String) {
+        if (_isRebuilding.value) return
+
+        viewModelScope.launch {
+            _isRebuilding.value = true
+            _rebuildProgress.value = 0
+            _rebuildTotal.value = 0
+
+            // 先查总数用于进度显示
+            val stats = knowledgeService.getStats(kbId)
+            _rebuildTotal.value = stats.chunkCount
+
+            val result = knowledgeService.rebuildIndex(kbId) { current, total ->
+                _rebuildProgress.value = current
+                _rebuildTotal.value = total
+            }
+
+            result.onSuccess { count ->
+                _snackbar.value = context.getString(R.string.kb_rebuild_success, count)
+            }.onFailure { e ->
+                _snackbar.value = context.getString(R.string.kb_rebuild_failed, e.message ?: "")
+            }
+
+            _isRebuilding.value = false
+        }
+    }
     fun search(kbId: String, query: String, tagFilter: String? = null) {
         if (query.isBlank()) return
         viewModelScope.launch {

@@ -2173,6 +2173,7 @@
   <string name="kb_created">知识库已创建</string>
   <string name="kb_save_failed">保存失败: %s</string>
   <string name="kb_deleted">知识库已删除</string>
+    <string name="kb_updated_with_rebuild_hint">已保存。如果更改了分块参数或模型，请重建索引</string>
   <string name="kb_added_chunks">添加成功，共 %d 个块</string>
   <string name="kb_add_failed">添加失败: %s</string>
   <string name="kb_file_deleted">文件已删除</string>
@@ -2228,6 +2229,36 @@
     <string name="kb_import_notification_starting">准备中…</string>
     <string name="kb_import_notification_done">导入完成</string>
     <string name="kb_chunks_label">共 %d 个块</string>
+
+    <!-- 重建索引 -->
+    <string name="kb_rebuild_confirm_title">重建索引</string>
+    <string name="kb_rebuild_confirm_body">将用当前嵌入模型重新计算所有分块的向量。\n\n如果更改了分块参数（大小、重叠、策略），请重新导入文档，重建索引不会重新分块。</string>
+    <string name="kb_rebuild_confirm_continue">开始重建</string>
+    <string name="kb_rebuild_success">索引重建完成，已更新 %d 个分块</string>
+    <string name="kb_rebuild_failed">索引重建失败: %s</string>
+    <string name="kb_rebuild_in_progress">正在重建索引 (%d/%d)</string>
+
+    <!-- 网址导入 -->
+    <string name="kb_url_import_title">从网址导入</string>
+    <string name="kb_url_import_hint">输入网页链接</string>
+    <string name="kb_url_import_placeholder">https://example.com</string>
+    <string name="kb_url_import_btn">导入</string>
+    <string name="kb_url_import_success">网址导入成功，共 %d 个分块</string>
+    <string name="kb_url_import_failed">网址导入失败: %s</string>
+
+    <!-- 回收站 -->
+    <string name="kb_trash_title">回收站</string>
+    <string name="kb_trash_empty">回收站是空的</string>
+    <string name="kb_trash_restore">恢复</string>
+    <string name="kb_trash_permanently_delete">永久删除</string>
+    <string name="kb_trash_empty_trash">清空回收站</string>
+    <string name="kb_trash_restored">已恢复</string>
+    <string name="kb_trash_permanently_deleted">已永久删除</string>
+    <string name="kb_trash_emptied">回收站已清空</string>
+    <string name="kb_trash_confirm_empty_title">确认清空</string>
+    <string name="kb_trash_confirm_empty_body">将永久删除回收站中的所有文件，此操作不可撤销。</string>
+    <string name="kb_trash_confirm_delete_title">确认永久删除</string>
+    <string name="kb_trash_confirm_delete_body">将永久删除该文件，此操作不可撤销。</string>
 
     <!-- AppDataBridge plugin management page -->
     <string name="setting_app_data_bridge_title">External Data Sources</string>

@@ -28,6 +28,10 @@ import java.io.File
 
 import java.util.concurrent.ConcurrentLinkedQueue
 
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import java.util.concurrent.TimeUnit
+
 
 /**
  * 文件解析中间结果，用于批量嵌入
@@ -574,15 +578,175 @@ class KnowledgeService(
     suspend fun setChunkEnabled(chunkId: String, enabled: Boolean) =
         documentDao.setEnabled(chunkId, enabled)
 
-    suspend fun deleteChunk(chunkId: String) = documentDao.deleteById(chunkId)
+    suspend fun deleteChunk(chunkId: String) = documentDao.softDeleteById(chunkId)
 
     suspend fun renameFile(kbId: String, filePath: String, newName: String) =
         documentDao.renameFile(kbId, filePath, newName)
 
     suspend fun deleteFile(kbId: String, filePath: String) =
-        documentDao.deleteByFilePath(kbId, filePath)
+        documentDao.softDeleteByFilePath(kbId, filePath)
+
+    // ============ 回收站 ============
+
+    /** 获取已删除文件的列表 */
+    suspend fun getDeletedFiles(kbId: String): List<FilePathAndName> =
+        documentDao.getDeletedFiles(kbId)
+
+    /** 获取已删除文件的分块详情 */
+    suspend fun getDeletedChunks(kbId: String, filePath: String): List<KnowledgeDocumentEntity> =
+        documentDao.getDeleted(kbId).filter { it.filePath == filePath }
+
+    /** 恢复文件 */
+    suspend fun restoreFile(kbId: String, filePath: String) =
+        documentDao.restoreByFilePath(kbId, filePath)
+
+    /** 恢复单个分块 */
+    suspend fun restoreChunk(chunkId: String) =
+        documentDao.restoreById(chunkId)
+
+    /** 永久删除文件 */
+    suspend fun permanentlyDeleteFile(kbId: String, filePath: String) =
+        documentDao.permanentlyDeleteByFilePath(kbId, filePath)
+
+    /** 永久删除单个分块 */
+    suspend fun permanentlyDeleteChunk(chunkId: String) =
+        documentDao.permanentlyDeleteById(chunkId)
+
+    /** 清空回收站 */
+    suspend fun emptyTrash(kbId: String) =
+        documentDao.permanentlyDeleteAllDeleted(kbId)
+
+    /** 获取回收站条目数 */
+    suspend fun getTrashCount(kbId: String): Int =
+        documentDao.countDeleted(kbId)
 
     // ============ 搜索 ============
+
+    // ============ 重建索引 ============
+
+    /**
+     * 重建索引：重新计算所有启用分块的嵌入向量。
+     *
+     * 场景：用户切换了 embedding 模型后，需要让所有已有分块用新模型重新生成向量。
+     * 注意：如果只是改了分块参数（chunkSize/chunkOverlap/chunkStrategy），
+     * 需要重新导入文档，因为原始全文未持久化。
+     *
+     * @param kbId 知识库 ID
+     * @param onProgress 进度回调 (current, total)
+     * @return Result 包含成功重新向量化的分块数量
+     */
+    suspend fun rebuildIndex(
+        kbId: String,
+        onProgress: (current: Int, total: Int) -> Unit = { _, _ -> },
+    ): Result<Int> {
+        val kb = knowledgeBaseDao.getById(kbId) ?: return Result.failure(Exception("知识库不存在"))
+        val allDocuments = documentDao.getByKnowledgeBase(kbId)
+        if (allDocuments.isEmpty()) return Result.success(0)
+
+        // 只重新嵌入启用的分块
+        val chunksToEmbed = allDocuments.filter { it.enabled }
+        if (chunksToEmbed.isEmpty()) return Result.success(0)
+
+        val texts = chunksToEmbed.map { it.chunkText }
+
+        // 批量重新嵌入
+        val vectors = try {
+            embeddingService.embedBatch(texts, kb.modelId, kb.dimensions)
+        } catch (e: Exception) {
+            return Result.failure(Exception("嵌入向量计算失败: ${e.message}"))
+        }
+
+        // 逐条更新向量
+        var updated = 0
+        for ((index, doc) in chunksToEmbed.withIndex()) {
+            if (index < vectors.size) {
+                documentDao.updateVector(doc.id, VectorUtils.vectorToJson(vectors[index]))
+                updated++
+                onProgress(updated, chunksToEmbed.size)
+            }
+        }
+
+        return Result.success(updated)
+    }
+
+    // ============ 网址导入 ============
+
+    companion object {
+        private val webClient = OkHttpClient.Builder()
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .followRedirects(true)
+            .build()
+
+        /** 简单 HTML 标签去除，提取纯文本 */
+        private fun stripHtml(html: String): String {
+            return html
+                .replace(Regex("(?s)<script[^>]*>.*?</script>"), "")  // 移除 script
+                .replace(Regex("(?s)<style[^>]*>.*?</style>"), "")   // 移除 style
+                .replace(Regex("(?s)<!--.*?-->"), "")                 // 移除注释
+                .replace(Regex("<[^>]+>"), "")                       // 移除 HTML 标签
+                .replace(Regex("&nbsp;"), " ")
+                .replace(Regex("&[a-zA-Z]+;"), "")                   // 移除 HTML 实体
+                .replace(Regex("\\s+"), " ")
+                .trim()
+        }
+    }
+
+    /**
+     * 从 URL 导入网页内容到知识库。
+     * 使用 OkHttp 获取网页，提取纯文本后导入。
+     */
+    suspend fun importFromUrl(
+        kbId: String,
+        url: String,
+    ): Result<Int> {
+        val kb = knowledgeBaseDao.getById(kbId) ?: return Result.failure(Exception("知识库不存在"))
+
+        // 0. 检查是否已导入过该 URL
+        val existingPaths = getExistingFilePaths(kbId)
+        if (url in existingPaths) {
+            return Result.failure(Exception("该网址已导入过"))
+        }
+
+        // 1. 获取网页内容
+        val html: String
+        try {
+            val request = Request.Builder()
+                .url(url)
+                .header("User-Agent", "Mozilla/5.0 (Linux; Android 14) RikkaHub/1.0")
+                .build()
+            val response = kotlinx.coroutines.withContext(Dispatchers.IO) {
+                webClient.newCall(request).execute()
+            }
+            if (!response.isSuccessful) {
+                return Result.failure(Exception("HTTP ${response.code}: ${response.message}"))
+            }
+            html = response.body?.string() ?: return Result.failure(Exception("响应内容为空"))
+        } catch (e: Exception) {
+            return Result.failure(Exception("网页请求失败: ${e.message}"))
+        }
+
+        // 2. 提取纯文本
+        val text = stripHtml(html)
+        if (text.length < 20) {
+            return Result.failure(Exception("网页内容太少（${text.length} 字符），可能无法正常解析"))
+        }
+
+        // 3. 从 URL 提取文件名
+        val fileName = url.removePrefix("https://").removePrefix("http://")
+            .substringBefore("?").substringBefore("#")
+            .trimEnd('/')
+            .let { it.substringAfterLast('/') }
+            .ifBlank { url.hashCode().toString() } + ".md"
+
+        // 4. 导入文档
+        return addDocument(
+            kbId = kbId,
+            content = text,
+            filePath = url,
+            fileName = "[网页] $fileName",
+        )
+    }
 
     /**
      * 语义搜索知识库

@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -31,6 +32,8 @@ import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -62,7 +65,6 @@ import me.rerere.hugeicons.stroke.Folder01
 import me.rerere.hugeicons.stroke.GlobalSearch
 import me.rerere.hugeicons.stroke.Link01
 import me.rerere.hugeicons.stroke.Settings02
-import me.rerere.hugeicons.stroke.Search01
 import me.rerere.hugeicons.stroke.Refresh01
 import me.rerere.hugeicons.stroke.BookOpen01
 import me.rerere.rikkahub.data.knowledge.SearchResult
@@ -105,6 +107,162 @@ fun KnowledgeBaseDetailPage(
     var searchText by remember(searchQuery) { mutableStateOf(searchQuery) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
+    // Snackbar / Toast 提示
+    val snackbar by vm.snackbar.collectAsStateWithLifecycle()
+    val toaster = me.rerere.rikkahub.ui.context.LocalToaster.current
+    LaunchedEffect(snackbar) {
+        snackbar?.let { msg ->
+            toaster.show(message = msg, type = com.dokar.sonner.ToastType.Success)
+            vm.dismissSnackbar()
+        }
+    }
+
+    // 重建索引状态
+    val isRebuilding by vm.isRebuilding.collectAsStateWithLifecycle()
+    val rebuildProgress by vm.rebuildProgress.collectAsStateWithLifecycle()
+    val rebuildTotal by vm.rebuildTotal.collectAsStateWithLifecycle()
+    var showRebuildConfirm by remember { mutableStateOf(false) }
+    var showUrlDialog by remember { mutableStateOf(false) }
+    var urlInput by remember { mutableStateOf("") }
+    var showTrashDialog by remember { mutableStateOf(false) }
+    val deletedFiles by vm.deletedFiles.collectAsStateWithLifecycle()
+
+    // 加载回收站数据
+    LaunchedEffect(showTrashDialog) {
+        if (showTrashDialog) {
+            vm.loadDeletedFiles(kbId)
+        }
+    }
+
+    // 网址导入对话框
+    if (showUrlDialog) {
+        AlertDialog(
+            onDismissRequest = { showUrlDialog = false },
+            title = { Text(stringResource(R.string.kb_url_import_title)) },
+            text = {
+                Column {
+                    Text(stringResource(R.string.kb_url_import_hint), style = MaterialTheme.typography.bodySmall)
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = urlInput,
+                        onValueChange = { urlInput = it },
+                        placeholder = { Text(stringResource(R.string.kb_url_import_placeholder)) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    if (vm.isImportingUrl.collectAsStateWithLifecycle().value) {
+                        Spacer(Modifier.height(8.dp))
+                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        vm.importFromUrl(kbId, urlInput)
+                        showUrlDialog = false
+                        urlInput = ""
+                    },
+                    enabled = urlInput.isNotBlank() && !vm.isImportingUrl.collectAsStateWithLifecycle().value
+                ) {
+                    Text(stringResource(R.string.kb_url_import_btn))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showUrlDialog = false; urlInput = "" }) {
+                    Text(stringResource(android.R.string.cancel))
+                }
+            }
+        )
+    }
+
+    // 回收站对话框
+    if (showTrashDialog) {
+        AlertDialog(
+            onDismissRequest = { showTrashDialog = false },
+            title = {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(stringResource(R.string.kb_trash_title))
+                    if (deletedFiles.isNotEmpty()) {
+                        TextButton(onClick = {
+                            showTrashDialog = false
+                            vm.emptyTrash(kbId)
+                        }) {
+                            Text(stringResource(R.string.kb_trash_empty_trash),
+                                color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                }
+            },
+            text = {
+                if (deletedFiles.isEmpty()) {
+                    Text(stringResource(R.string.kb_trash_empty))
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth().heightIn(max = 400.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(deletedFiles, key = { it.filePath }) { file ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(file.fileName, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text("${file.chunkCount} 个分块",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                TextButton(onClick = { vm.restoreFile(kbId, file.filePath) }) {
+                                    Text(stringResource(R.string.kb_trash_restore))
+                                }
+                                TextButton(onClick = { vm.permanentlyDeleteFile(kbId, file.filePath) }) {
+                                    Text(stringResource(R.string.kb_trash_permanently_delete),
+                                        color = MaterialTheme.colorScheme.error)
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showTrashDialog = false }) {
+                    Text(stringResource(android.R.string.ok))
+                }
+            }
+        )
+    }
+
+    // 重建索引确认弹窗
+    if (showRebuildConfirm) {
+        AlertDialog(
+            onDismissRequest = { showRebuildConfirm = false },
+            title = { Text(stringResource(R.string.kb_rebuild_confirm_title)) },
+            text = { Text(stringResource(R.string.kb_rebuild_confirm_body)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showRebuildConfirm = false
+                        vm.rebuildIndex(kbId)
+                    }
+                ) {
+                    Text(stringResource(R.string.kb_rebuild_confirm_continue))
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showRebuildConfirm = false }
+                ) {
+                    Text(stringResource(android.R.string.cancel))
+                }
+            }
+        )
+    }
+
     LaunchedEffect(kbId) {
         vm.selectKnowledgeBase(kbId)
     }
@@ -117,6 +275,32 @@ fun KnowledgeBaseDetailPage(
         "application/vnd.openxmlformats-officedocument.presentationml.presentation",
         "application/epub+zip",
     )
+
+    // 笔记专用：只选 Markdown/文本文件
+    val noteMimeTypes = arrayOf("text/markdown", "text/plain", "text/*", "application/octet-stream")
+
+    val noteFileLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris: List<Uri> ->
+        if (uris.isNotEmpty()) {
+            scope.launch {
+                val fileContents = mutableListOf<Triple<String, String, String>>()
+                for (uri in uris) {
+                    try {
+                        val mimeType = context.contentResolver.getType(uri) ?: "text/plain"
+                        val fileName = getFileNameFromUri(context, uri) ?: "unknown"
+                        val content = readDocumentContent(context, uri, mimeType)
+                        if (content.isNotBlank()) {
+                            fileContents.add(Triple(content, uri.toString(), fileName))
+                        }
+                    } catch (_: Exception) { }
+                }
+                if (fileContents.isNotEmpty()) {
+                    vm.importFiles(kbId, fileContents)
+                }
+            }
+        }
+    }
 
     val multiFileLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenMultipleDocuments()
@@ -190,19 +374,21 @@ fun KnowledgeBaseDetailPage(
                                 },
                                 leadingIcon = { Icon(HugeIcons.Settings02, null, modifier = Modifier.size(18.dp)) }
                             )
-                            DropdownMenuItem(
-                                text = { Text("搜索测试") },
-                                onClick = { showMenu = false },
-                                leadingIcon = { Icon(HugeIcons.Search01, null, modifier = Modifier.size(18.dp)) }
-                            )
+
                             DropdownMenuItem(
                                 text = { Text("重建索引") },
-                                onClick = { showMenu = false },
+                                onClick = {
+                                    showMenu = false
+                                    showRebuildConfirm = true
+                                },
                                 leadingIcon = { Icon(HugeIcons.Refresh01, null, modifier = Modifier.size(18.dp)) }
                             )
                             DropdownMenuItem(
                                 text = { Text("回收站") },
-                                onClick = { showMenu = false },
+                                onClick = {
+                                    showMenu = false
+                                    showTrashDialog = true
+                                },
                                 leadingIcon = { Icon(HugeIcons.Delete01, null, modifier = Modifier.size(18.dp)) }
                             )
                         }
@@ -265,6 +451,36 @@ fun KnowledgeBaseDetailPage(
                 onClearAll = { vm.clearAllFailedItems() },
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
             )
+
+            // 重建索引进度条
+            if (isRebuilding) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            text = if (rebuildTotal > 0)
+                                stringResource(R.string.kb_rebuild_in_progress, rebuildProgress, rebuildTotal)
+                            else "正在准备...",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        LinearProgressIndicator(
+                            progress = {
+                                if (rebuildTotal > 0) rebuildProgress.toFloat() / rebuildTotal.toFloat()
+                                else 0f
+                            },
+                            modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
+                        )
+                    }
+                }
+            }
 
             // 搜索结果 / 文件列表
             if (searchQuery.isNotBlank() || isSearching) {
@@ -545,8 +761,8 @@ private fun AddDataSourceSheet(
         DataSourceOption(
             icon = HugeIcons.BookOpen01,
             title = "笔记",
-            subtitle = "从笔记中选择，提取笔记内容",
-            onClick = { /* 笔记选择器 */ }
+            subtitle = "选择 Markdown / 文本笔记文件导入",
+            onClick = { showBottomSheet = false; noteFileLauncher.launch(noteMimeTypes) }
         )
 
         // 文件
@@ -562,7 +778,7 @@ private fun AddDataSourceSheet(
             icon = HugeIcons.Link01,
             title = "网址",
             subtitle = "获取网页内容与截图",
-            onClick = { /* 网址输入 */ }
+            onClick = { showBottomSheet = false; showUrlDialog = true }
         )
 
         // 文件夹 / 目录
