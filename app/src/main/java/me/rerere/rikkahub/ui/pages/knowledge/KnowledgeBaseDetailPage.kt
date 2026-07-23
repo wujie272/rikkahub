@@ -350,7 +350,7 @@ private fun FileListItem(
                 )
             }
 
-            // 文件名 + 标签
+            // 文件名 + 分块信息
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = fileName,
@@ -362,27 +362,28 @@ private fun FileListItem(
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Surface(
                         shape = RoundedCornerShape(4.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        color = MaterialTheme.colorScheme.primaryContainer,
                         tonalElevation = 0.dp,
                     ) {
-                        Text("工作区", modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                            style = MaterialTheme.typography.labelSmall)
+                        Text(
+                            stringResource(R.string.kb_chunks_label, chunkCount),
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        )
                     }
-                    Surface(
-                        shape = RoundedCornerShape(4.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                        tonalElevation = 0.dp,
-                    ) {
-                        Text("就绪", modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                            style = MaterialTheme.typography.labelSmall)
-                    }
-                    Surface(
-                        shape = RoundedCornerShape(4.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                        tonalElevation = 0.dp,
-                    ) {
-                        Text("刚刚", modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                            style = MaterialTheme.typography.labelSmall)
+                    if (chunkCount > 1) {
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            tonalElevation = 0.dp,
+                        ) {
+                            Text(
+                                stringResource(R.string.kb_view_chunks),
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                        }
                     }
                 }
             }

@@ -18,13 +18,13 @@ class EmbeddingService(
     private val settingsStore: SettingsStore,
     private val requestLogManager: AIRequestLogManager,
 ) {
-    suspend fun embed(text: String, modelId: String): List<Float> {
+    suspend fun embed(text: String, modelId: String, dimensions: Int? = null): List<Float> {
         if (text.isBlank()) return emptyList()
-        val results = embedBatch(listOf(text), modelId)
+        val results = embedBatch(listOf(text), modelId, dimensions)
         return results.firstOrNull() ?: emptyList()
     }
 
-    suspend fun embedBatch(texts: List<String>, modelId: String): List<List<Float>> {
+    suspend fun embedBatch(texts: List<String>, modelId: String, dimensions: Int? = null): List<List<Float>> {
         if (texts.isEmpty() || texts.all { it.isBlank() }) return emptyList()
         val settings = settingsStore.settingsFlow.value
         val modelUuid = try { Uuid.parse(modelId) } catch (_: Exception) { return emptyList() }
@@ -42,6 +42,7 @@ class EmbeddingService(
                 params = EmbeddingGenerationParams(
                     model = model,
                     input = texts,
+                    dimensions = dimensions,
                 ),
             )
             embeddingResult = result.embeddings

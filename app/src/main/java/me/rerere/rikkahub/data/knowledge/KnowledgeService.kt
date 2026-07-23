@@ -26,6 +26,19 @@ import me.rerere.rikkahub.ui.components.settings.ImportProgressState
 import me.rerere.rikkahub.ui.components.settings.ProcessingStage
 import java.io.File
 
+import java.util.concurrent.ConcurrentLinkedQueue
+
+
+/**
+ * 文件解析中间结果，用于批量嵌入
+ */
+private data class FileParseResult(
+    val filePath: String,
+    val fileName: String,
+    val chunks: List<String>,
+    val tags: List<String>,
+)
+
 /**
  * 知识库统一服务
  * 数据层对外唯一入口，组合 DAO + Embedding + Chunking
@@ -107,8 +120,14 @@ class KnowledgeService(
     val importProgress: SharedFlow<ImportProgressState> = _importProgress.asSharedFlow()
 
     /**
-     * 流式导入目录：边扫边导，不攒内存，支持取消和去重
-     * 在后台线程执行，通过 [importProgress] 发射进度
+     * 流式导入目录：三阶段批量优化版
+     *
+     * Phase 1 — 并行扫描 + 读取 + 解析 + 分块（每个文件独立，Semaphore 3 并发）
+     * Phase 2 — 批量嵌入：所有文件的分块合并为一次 API 调用
+     * Phase 3 — 批量入库：一次性写入 Room
+     *
+     * 相比逐个文件串行嵌入，API 调用次数从 N 次降为 1 次，DB 写入从 N 次降为 1 次。
+     * 在后台线程执行，通过 [importProgress] 发射进度。
      */
     fun startImportDirectory(
         kbId: String,
@@ -130,13 +149,13 @@ class KnowledgeService(
         contentResolver: ContentResolver,
         treeUri: Uri,
     ) {
+        // ============ Phase 0: 扫描目录 + 去重 ============
         _importProgress.value = ImportProgressState(
             active = true,
             currentStage = ProcessingStage.SCANNING,
             currentFileName = "正在扫描目录...",
         )
 
-        // 1. 扫描目录
         val root = DocumentFile.fromTreeUri(context, treeUri) ?: run {
             _importProgress.value = ImportProgressState()
             return
@@ -150,23 +169,28 @@ class KnowledgeService(
             return
         }
 
-        // 2. 去重
         val existingPaths = getExistingFilePaths(kbId)
         val newUris = uris.filter { it.toString() !in existingPaths }
         val skipped = uris.size - newUris.size
-
-        _importProgress.value = _importProgress.value.copy(
-            totalFiles = newUris.size,
-            currentFileName = if (skipped > 0) "已跳过 $skipped 个重复文件" else "",
-        )
 
         if (newUris.isEmpty()) {
             _importProgress.value = ImportProgressState()
             return
         }
 
-        // 3. 流式处理
+        _importProgress.value = _importProgress.value.copy(
+            totalFiles = newUris.size,
+            currentFileName = if (skipped > 0) "已跳过 $skipped 个重复文件" else "",
+        )
+
+        val kb = knowledgeBaseDao.getById(kbId) ?: run {
+            _importProgress.value = ImportProgressState()
+            return
+        }
+
+        // ============ Phase 1: 并行读取 + 解析 + 分块 ============
         val semaphore = Semaphore(3)
+        val parseResults = ConcurrentLinkedQueue<FileParseResult>()
         var completed = 0
 
         for (uri in newUris) {
@@ -182,13 +206,14 @@ class KnowledgeService(
             semaphore.withPermit {
                 if (!currentCoroutineContext().isActive) return@withPermit
 
+                // 读取文件
                 val mimeType = try {
                     contentResolver.getType(uri) ?: "text/plain"
                 } catch (_: Exception) { "text/plain" }
 
                 _importProgress.value = _importProgress.value.copy(
-                    currentStage = ProcessingStage.EMBEDDING,
-                    currentFileProgress = 0.5f,
+                    currentStage = ProcessingStage.PARSING,
+                    currentFileProgress = 0.3f,
                 )
 
                 val content = readDocumentContent(contentResolver, uri, mimeType)
@@ -198,16 +223,104 @@ class KnowledgeService(
                     return@withPermit
                 }
 
-                val result = addDocument(kbId, content, uri.toString(), fileName)
-                result.onFailure { /* 失败已记录在 failedItems 中 */ }
+                // 处理 frontmatter
+                val (processedContent, displayName, tags) = processMarkdownContent(content, fileName)
+
+                // 分块
+                _importProgress.value = _importProgress.value.copy(
+                    currentStage = ProcessingStage.CHUNKING,
+                    currentFileProgress = 0.6f,
+                )
+
+                val chunks = TextChunker.chunk(
+                    text = processedContent,
+                    chunkSize = kb.chunkSize,
+                    chunkOverlap = kb.chunkOverlap,
+                    strategy = kb.chunkStrategy,
+                    // 语义分块需要 sentence-level embedding，无法批量，只能 inline
+                    semanticEmbedder = if (kb.chunkStrategy == "semantic") {
+                        { text -> runBlocking { embeddingService.embed(text, kb.modelId, kb.dimensions) } }
+                    } else null,
+                )
+
+                if (chunks.isNotEmpty()) {
+                    // 标签注入到第一个 chunk 增强搜索命中
+                    val enrichedChunks = if (tags.isNotEmpty()) {
+                        val tagLine = "[标签: ${tags.joinToString(", ")}]"
+                        chunks.toMutableList().apply {
+                            set(0, "$tagLine\n${this[0]}")
+                        }
+                    } else chunks
+
+                    parseResults.add(FileParseResult(
+                        filePath = uri.toString(),
+                        fileName = displayName,
+                        chunks = enrichedChunks,
+                        tags = tags,
+                    ))
+                }
 
                 completed++
                 _importProgress.value = _importProgress.value.copy(
                     completedFiles = completed,
-                    currentFileProgress = 1f,
+                    currentFileProgress = 0.8f,
                 )
             }
         }
+
+        if (!currentCoroutineContext().isActive) return
+        if (parseResults.isEmpty()) {
+            _importProgress.value = ImportProgressState()
+            return
+        }
+
+        // ============ Phase 2: 批量嵌入（一次 API 调用） ============
+        val allChunks = parseResults.flatMap { it.chunks }
+        _importProgress.value = _importProgress.value.copy(
+            currentStage = ProcessingStage.EMBEDDING,
+            currentFileName = "正在批量生成向量 (${allChunks.size} 个分块)...",
+            currentFileProgress = 0f,
+        )
+
+        val allVectors = try {
+            embeddingService.embedBatch(allChunks, kb.modelId, kb.dimensions)
+        } catch (e: Exception) {
+            _importProgress.value = ImportProgressState()
+            return
+        }
+
+        if (!currentCoroutineContext().isActive) return
+
+        // ============ Phase 3: 批量入库 ============
+        _importProgress.value = _importProgress.value.copy(
+            currentStage = ProcessingStage.SAVING,
+            currentFileName = "正在保存到数据库...",
+            currentFileProgress = 0f,
+        )
+
+        var vectorIdx = 0
+        val entities = mutableListOf<KnowledgeDocumentEntity>()
+        for (result in parseResults) {
+            for ((chunkIndex, chunkText) in result.chunks.withIndex()) {
+                val vector = if (vectorIdx < allVectors.size) {
+                    VectorUtils.vectorToJson(allVectors[vectorIdx])
+                } else null
+                vectorIdx++
+
+                entities.add(KnowledgeDocumentEntity(
+                    id = Uuid.random().toString(),
+                    knowledgeBaseId = kbId,
+                    filePath = result.filePath,
+                    fileName = result.fileName,
+                    chunkIndex = chunkIndex,
+                    chunkText = chunkText,
+                    tags = result.tags.joinToString(","),
+                    vector = vector,
+                    enabled = true,
+                ))
+            }
+        }
+        documentDao.insertAll(entities)
 
         _importProgress.value = ImportProgressState()
     }
@@ -348,7 +461,7 @@ class KnowledgeService(
 
         // 2. 批量生成向量
         val vectors = try {
-            embeddingService.embedBatch(enrichedChunks, kb.modelId)
+            embeddingService.embedBatch(enrichedChunks, kb.modelId, kb.dimensions)
         } catch (e: Exception) {
             return Result.failure(Exception("嵌入向量计算失败: ${e.message}"))
         }
@@ -414,7 +527,7 @@ class KnowledgeService(
 
             // 批量向量化
             val vectors = try {
-                embeddingService.embedBatch(enrichedChunks, kb.modelId)
+                embeddingService.embedBatch(enrichedChunks, kb.modelId, kb.dimensions)
             } catch (_: Exception) {
                 continue
             }
@@ -452,7 +565,7 @@ class KnowledgeService(
         // 重新计算向量
         val kb = knowledgeBaseDao.getById(doc.knowledgeBaseId) ?: return false
         val vector = try {
-            embeddingService.embed(newText, kb.modelId)
+            embeddingService.embed(newText, kb.modelId, kb.dimensions)
         } catch (_: Exception) { return false }
         documentDao.updateVector(chunkId, VectorUtils.vectorToJson(vector))
         return true
