@@ -59,7 +59,7 @@ class KnowledgeImportService : android.app.Service() {
             content = getString(R.string.kb_import_notification_starting),
             progress = 0,
             max = 0,
-        ))
+        ).build())
 
         // 启动导入（KnowledgeService 内部用 AppScope 跑在 IO 线程）
         knowledgeService.startImportDirectory(kbId, contentResolver, treeUri)

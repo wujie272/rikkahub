@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Semaphore
@@ -143,7 +144,7 @@ class KnowledgeService(
         val uris = mutableListOf<Uri>()
         scanDirRecursive(root, uris)
 
-        if (!isActive) return
+        if (!currentCoroutineContext().isActive) return
         if (uris.isEmpty()) {
             _importProgress.value = ImportProgressState()
             return
@@ -169,7 +170,7 @@ class KnowledgeService(
         var completed = 0
 
         for (uri in newUris) {
-            if (!isActive) break
+            if (!currentCoroutineContext().isActive) break
 
             val fileName = getFileNameFromUri(contentResolver, uri) ?: "unknown"
             _importProgress.value = _importProgress.value.copy(
@@ -179,7 +180,7 @@ class KnowledgeService(
             )
 
             semaphore.withPermit {
-                if (!isActive) return@withPermit
+                if (!currentCoroutineContext().isActive) return@withPermit
 
                 val mimeType = try {
                     contentResolver.getType(uri) ?: "text/plain"
@@ -282,7 +283,7 @@ class KnowledgeService(
                 else -> tmp.readText()
             }
         } catch (_: Exception) {
-            tmp.readText()
+            return tmp.readText()
         } finally {
             tmp.delete()
         }
