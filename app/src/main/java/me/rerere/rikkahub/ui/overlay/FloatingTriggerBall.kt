@@ -16,6 +16,8 @@ import androidx.dynamicanimation.animation.SpringAnimation
 import androidx.dynamicanimation.animation.SpringForce
 import kotlin.math.abs
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
@@ -121,6 +123,16 @@ class FloatingTriggerBall(
     }
     private var positionBeforeMenu: Pair<Int, Int>? = null
 
+    // ── 桌面宠物巡逻系统 ──
+    /** 巡逻协程 */
+    private var petPatrolJob: Job? = null
+    /** 是否正在被用户拖拽 */
+    @Volatile private var isBeingDragged = false
+    /** 巡逻动画 X */
+    private var patrolAnimX: SpringAnimation? = null
+    /** 巡逻动画 Y */
+    private var patrolAnimY: SpringAnimation? = null
+
     private val dockSide: DockSide get() = liquidView?.side ?: DockSide.NONE
 
     fun isShown(): Boolean = view != null
@@ -201,13 +213,21 @@ class FloatingTriggerBall(
         layoutParams = params
 
         if (snapToEdge) container.post { snapToEdge() }
+
+        // 桌面宠物模式：启动巡逻
+        if (mode == Mode.LIVE2D) {
+            startPetPatrol()
+        }
     }
 
     fun hide() {
+        stopPetPatrol()
         autoDockHandler.removeCallbacks(autoDockRunnable)
         dismissArcMenu(restorePosition = false)
         snapAnimX?.cancel(); snapAnimX = null
         snapAnimY?.cancel(); snapAnimY = null
+        patrolAnimX?.cancel(); patrolAnimX = null
+        patrolAnimY?.cancel(); patrolAnimY = null
         // 释放 Live2D 渲染器，防止内存泄漏
         live2DRenderer?.release()
         live2DRenderer = null
@@ -287,8 +307,12 @@ class FloatingTriggerBall(
         target.setOnTouchListener { v, ev ->
             when (ev.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
+                    stopPetPatrol()
+                    isBeingDragged = true
                     autoDockHandler.removeCallbacks(autoDockRunnable)
                     snapAnimY?.cancel(); snapAnimX?.cancel()
+                    patrolAnimX?.cancel(); patrolAnimX = null
+                    patrolAnimY?.cancel(); patrolAnimY = null
                     v.animate().cancel()
                     v.alpha = 1.0f
                     downX = ev.rawX
@@ -335,6 +359,11 @@ class FloatingTriggerBall(
                         initialY = params.y
                         persistPosition()
                         if (snapToEdge) snapToEdge()
+                    }
+                    isBeingDragged = false
+                    // 桌面宠物模式：松手后恢复巡逻
+                    if (mode == Mode.LIVE2D && !snapToEdge) {
+                        startPetPatrol()
                     }
                     if (autoDock && snapToEdge) {
                         autoDockHandler.removeCallbacks(autoDockRunnable)
@@ -631,6 +660,76 @@ class FloatingTriggerBall(
             onPositionChanged?.invoke(x, y)
             positionPersistPending = false
         }
+    }
+
+    // ==================== 桌面宠物巡逻 ====================
+
+    /**
+     * 启动巡逻：随机在屏幕上移动
+     */
+    private fun startPetPatrol() {
+        if (petPatrolJob?.isActive == true) return
+        petPatrolJob = ioScope.launch {
+            val rng = java.util.Random()
+            while (true) {
+                if (isBeingDragged || mode != Mode.LIVE2D) {
+                    kotlinx.coroutines.delay(500)
+                    continue
+                }
+                val v = view ?: break
+                val params = layoutParams ?: break
+                val (screenW, screenH) = currentScreenSize()
+                val density = context.resources.displayMetrics.density
+                val safeTop = (40 * density).toInt()
+                val safeBottom = (80 * density).toInt()
+                val margin = (16 * density).toInt()
+
+                // 随机目标位置
+                val targetX = margin + rng.nextInt((screenW - params.width - margin * 2).coerceAtLeast(1))
+                val targetY = safeTop + rng.nextInt((screenH - params.height - safeTop - safeBottom).coerceAtLeast(1))
+
+                // 用 SpringAnimation 平滑移动
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    patrolAnimX?.cancel()
+                    patrolAnimX = SpringAnimation(FloatValueHolder(params.x.toFloat())).apply {
+                        spring = SpringForce(targetX.toFloat()).apply {
+                            dampingRatio = SpringForce.DAMPING_RATIO_LOW_BOUNCY
+                            stiffness = 200f  // 较软，移动更慢更自然
+                        }
+                        addUpdateListener { _, value, _ ->
+                            params.x = value.toInt()
+                            runCatching { wm.updateViewLayout(v, params) }
+                        }
+                        start()
+                    }
+                    patrolAnimY?.cancel()
+                    patrolAnimY = SpringAnimation(FloatValueHolder(params.y.toFloat())).apply {
+                        spring = SpringForce(targetY.toFloat()).apply {
+                            dampingRatio = SpringForce.DAMPING_RATIO_LOW_BOUNCY
+                            stiffness = 200f
+                        }
+                        addUpdateListener { _, value, _ ->
+                            params.y = value.toInt()
+                            runCatching { wm.updateViewLayout(v, params) }
+                        }
+                        start()
+                    }
+                }
+
+                // 等待动画完成 + 随机停留时间
+                kotlinx.coroutines.delay(2000 + rng.nextInt(5000).toLong())
+            }
+        }
+    }
+
+    /**
+     * 停止巡逻
+     */
+    private fun stopPetPatrol() {
+        petPatrolJob?.cancel()
+        petPatrolJob = null
+        patrolAnimX?.cancel(); patrolAnimX = null
+        patrolAnimY?.cancel(); patrolAnimY = null
     }
 
     // ==================== 工具方法 ====================
