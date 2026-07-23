@@ -1201,6 +1201,8 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="assistant_page_local_tools_cron_jobs_desc">让助手安排提示词稍后在后台运行 — 一次性或按间隔重复。任务在应用关闭和重启后仍然有效。</string>
   <string name="assistant_page_local_tools_cron_jobs_title">定时任务</string>
   <string name="assistant_page_local_tools_cron_jobs_toast_hint">注意：定时任务使用你已启用的工具。如果某个任务调用 SSH、Telegram 或任何其他工具，那些开关也必须打开。</string>
+  <string name="assistant_page_local_tools_device_info_desc">一次性查询电池、音频、电话、Wi-Fi、传感器和存储信息。</string>
+  <string name="assistant_page_local_tools_device_info_title">设备信息</string>
   <string name="assistant_page_local_tools_dialog_dismiss">知道了</string>
   <string name="assistant_page_local_tools_download_desc">从网址下载文件到公共下载文件夹，并将文本内容（笔记、转录、笑话、脚本）保存为文件。</string>
   <string name="assistant_page_local_tools_download_title">下载</string>
@@ -1225,6 +1227,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="assistant_page_local_tools_mic_recorder_title">麦克风录音</string>
   <string name="assistant_page_local_tools_notification_desc">代表用户发布 Android 通知。</string>
   <string name="assistant_page_local_tools_notification_title">通知</string>
+    <string name="assistant_page_local_tools_notifications_desc">允许 AI 读取来自其他应用的通知。在设置 → 通知中配置。</string>
     <string name="assistant_page_local_tools_notifications_title">通知感知</string>
   <string name="assistant_page_local_tools_perm_denied_toast">%1$s 权限被拒绝</string>
   <string name="assistant_page_local_tools_perm_needed">需要权限 — 点击授予</string>
