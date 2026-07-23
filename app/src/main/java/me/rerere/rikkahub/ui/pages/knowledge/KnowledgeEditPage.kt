@@ -188,6 +188,30 @@ fun KnowledgeEditPage(
                 }
             }
 
+            // 向量维度（高级设置外，紧跟模型选择）
+            FormItem(
+                label = { Text(stringResource(R.string.kb_dimension_label)) },
+                description = { Text(stringResource(R.string.kb_dimension_desc, form.dimensions)) }
+            ) {
+                Text(
+                    text = "${form.dimensions} 维",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Slider(
+                    value = form.dimensions.toFloat(),
+                    onValueChange = { v ->
+                        // 对齐到 Qwen3 支持的维度值
+                        val supported = listOf(64, 128, 256, 512, 768, 1024, 1536, 2048, 2560, 4096)
+                        val snapped = supported.minBy { kotlin.math.abs(it - v.toInt()) }
+                        vm.updateEditForm { f -> f.copy(dimensions = snapped) }
+                    },
+                    valueRange = 64f..4096f,
+                    steps = 8,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
             // 高级设置折叠
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -247,11 +271,8 @@ fun KnowledgeEditPage(
                         label = { Text(stringResource(R.string.kb_chunk_strategy)) },
                         description = {
                             val desc = when (form.chunkStrategy) {
-                                "fixed" -> "按固定字符数切分"
-                                "paragraph" -> "按段落（空行）切分"
-                                "markdown" -> "按 Markdown 标题层级切分，保留父标题上下文"
-                                "code" -> "按函数/类定义切分，代码友好"
-                                "semantic" -> "按句子语义相似度切分，话题变化处自动断开"
+                                "markdown" -> "按 Markdown 标题层级切分，保留父标题上下文（推荐）"
+                                "fixed" -> "按固定字符数切分，兜底方案"
                                 else -> "如何将文档切分成块"
                             }
                             Text(desc)
@@ -259,11 +280,8 @@ fun KnowledgeEditPage(
                     ) {
                         var strategyDropdownExpanded by remember { mutableStateOf(false) }
                         val strategyOptions = listOf(
-                            "fixed" to stringResource(R.string.kb_strategy_fixed),
-                            "paragraph" to stringResource(R.string.kb_strategy_paragraph),
                             "markdown" to stringResource(R.string.kb_strategy_markdown),
-                            "code" to stringResource(R.string.kb_strategy_code),
-                            "semantic" to stringResource(R.string.kb_strategy_semantic),
+                            "fixed" to stringResource(R.string.kb_strategy_fixed),
                         )
                         val currentLabel = strategyOptions.first { it.first == form.chunkStrategy }.second
                         ExposedDropdownMenuBox(

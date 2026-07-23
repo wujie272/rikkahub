@@ -2127,6 +2127,8 @@
   <string name="kb_model_select">请选择嵌入模型</string>
   <string name="kb_no_embedding_model">没有可用的嵌入模型，请先在设置中添加</string>
   <string name="kb_dimensions">维度: %d</string>
+    <string name="kb_dimension_label">向量维度</string>
+    <string name="kb_dimension_desc">当前维度: %d，较低维度节省存储，较高维度精度更好</string>
   <string name="kb_advanced_settings">展开高级设置</string>
   <string name="kb_advanced_settings_collapse">收起高级设置</string>
   <string name="kb_chunk_size">分块大小</string>
@@ -2136,10 +2138,7 @@
   <string name="kb_chunk_strategy">分块策略</string>
   <string name="kb_chunk_strategy_desc">如何将文档切分成块</string>
   <string name="kb_strategy_fixed">固定大小</string>
-  <string name="kb_strategy_paragraph">按段落</string>
-  <string name="kb_strategy_markdown">Markdown</string>
-  <string name="kb_strategy_code">按代码</string>
-  <string name="kb_strategy_semantic">语义分块</string>
+  <string name="kb_strategy_markdown">Markdown 标题</string>
   <string name="kb_threshold">相似度阈值</string>
   <string name="kb_document_count">返回文档数</string>
   <string name="kb_document_count_desc">每次搜索最多返回 %d 条结果</string>

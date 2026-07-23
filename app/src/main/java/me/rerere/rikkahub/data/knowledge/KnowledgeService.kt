@@ -72,7 +72,8 @@ class KnowledgeService(
         documentCount: Int = 6,
         chunkSize: Int = 1000,
         chunkOverlap: Int = 200,
-        chunkStrategy: String = "fixed",
+        chunkStrategy: String = "markdown",
+        // 默认使用 AST 解析的 Markdown 分块，比 fixed 更智能
         threshold: Float = 0.35f,
     ): KnowledgeBaseEntity {
         val now = System.currentTimeMillis()
@@ -241,10 +242,6 @@ class KnowledgeService(
                     chunkSize = kb.chunkSize,
                     chunkOverlap = kb.chunkOverlap,
                     strategy = kb.chunkStrategy,
-                    // 语义分块需要 sentence-level embedding，无法批量，只能 inline
-                    semanticEmbedder = if (kb.chunkStrategy == "semantic") {
-                        { text -> runBlocking { embeddingService.embed(text, kb.modelId, kb.dimensions) } }
-                    } else null,
                 )
 
                 if (chunks.isNotEmpty()) {
@@ -441,15 +438,12 @@ class KnowledgeService(
         // 处理 markdown frontmatter
         val (processedContent, displayName, tags) = processMarkdownContent(content, fileName)
 
-        // 1. 分块（语义分块需传入 embedder）
+        // 1. 分块
         val chunks = TextChunker.chunk(
             text = processedContent,
             chunkSize = kb.chunkSize,
             chunkOverlap = kb.chunkOverlap,
             strategy = kb.chunkStrategy,
-            semanticEmbedder = if (kb.chunkStrategy == "semantic") {
-                { text -> runBlocking { embeddingService.embed(text, kb.modelId) } }
-            } else null,
         )
         if (chunks.isEmpty()) return Result.success(0)
 
@@ -509,15 +503,12 @@ class KnowledgeService(
             // 处理 markdown frontmatter
             val (processedContent, displayName, tags) = processMarkdownContent(content, fileName)
 
-            // 分块（语义分块需传入 embedder）
+            // 分块
             val chunks = TextChunker.chunk(
                 text = processedContent,
                 chunkSize = kb.chunkSize,
                 chunkOverlap = kb.chunkOverlap,
                 strategy = kb.chunkStrategy,
-                semanticEmbedder = if (kb.chunkStrategy == "semantic") {
-                    { text -> runBlocking { embeddingService.embed(text, kb.modelId) } }
-                } else null,
             )
             if (chunks.isEmpty()) continue
 

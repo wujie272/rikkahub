@@ -29,7 +29,7 @@ data class KnowledgeBaseEntity(
     val chunkOverlap: Int = 200,
     /** 分块策略: fixed / paragraph / markdown / code */
     @ColumnInfo(name = "chunk_strategy")
-    val chunkStrategy: String = "fixed",
+    val chunkStrategy: String = "markdown",
     /** 相似度阈值 0.0~1.0 */
     val threshold: Float = 0.35f,
     @ColumnInfo(name = "created_at")

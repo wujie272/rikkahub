@@ -76,7 +76,7 @@ class KnowledgeVM(
         val documentCount: Int = 6,
         val chunkSize: Int = 1000,
         val chunkOverlap: Int = 200,
-        val chunkStrategy: String = "fixed",
+        val chunkStrategy: String = "markdown",
         val threshold: Float = 0.35f,
     )
     private val _editForm = MutableStateFlow(EditForm())

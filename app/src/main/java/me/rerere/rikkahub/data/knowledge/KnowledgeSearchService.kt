@@ -51,6 +51,11 @@ class KnowledgeSearchService(
         private const val THRESHOLD_STEP = 0.1f
         /** 最小允许阈值 */
         private const val MIN_THRESHOLD = 0.1f
+        /**
+         * 最大候选数量。超过此数量时，先用 BM25 筛选出 topN，
+         * 再对筛选后的子集做语义搜索，避免 OOM。
+         */
+        private const val MAX_CANDIDATES = 500
     }
 
     /** BM25 索引缓存（懒加载） */
@@ -84,12 +89,26 @@ class KnowledgeSearchService(
         if (query.isBlank()) return emptyList()
 
         // 1. 获取候选数据（支持标签过滤）
-        val candidates = if (tagFilter != null && tagFilter.isNotBlank()) {
+        val allCandidates = if (tagFilter != null && tagFilter.isNotBlank()) {
             documentDao.getSearchableByTag(kbId, tagFilter)
         } else {
             documentDao.getSearchable(kbId)
         }
-        if (candidates.isEmpty()) return emptyList()
+        if (allCandidates.isEmpty()) return emptyList()
+
+        // 1.5 候选数量控制：超过 MAX_CANDIDATES 时，先用 BM25 筛选
+        val candidates = if (allCandidates.size > MAX_CANDIDATES) {
+            // 先算 BM25，取 top MAX_CANDIDATES
+            val bm25Pre = computeBm25Scores(query, allCandidates)
+            val topIds = bm25Pre.entries
+                .sortedByDescending { it.value }
+                .take(MAX_CANDIDATES)
+                .map { it.key }
+                .toSet()
+            allCandidates.filter { it.id in topIds }
+        } else {
+            allCandidates
+        }
 
         // 2. 查询扩展（生成多个搜索变体）
         val queries = if (enableQueryExpansion) {
