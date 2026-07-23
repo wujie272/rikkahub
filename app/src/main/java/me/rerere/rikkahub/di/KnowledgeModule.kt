@@ -4,6 +4,7 @@ import me.rerere.rikkahub.data.knowledge.EmbeddingService
 import me.rerere.rikkahub.data.knowledge.KnowledgeDatabase
 import me.rerere.rikkahub.data.knowledge.KnowledgeSearchService
 import me.rerere.rikkahub.data.knowledge.KnowledgeService
+import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.ui.pages.knowledge.KnowledgeVM
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.dsl.viewModel
@@ -44,7 +45,7 @@ val knowledgeModule = module {
             documentDao = get(),
             embeddingService = get(),
             searchService = get(),
-            appScope = get(),
+            appScope = get<AppScope>(),
         )
     }
 

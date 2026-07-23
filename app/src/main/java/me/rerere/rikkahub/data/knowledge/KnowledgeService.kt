@@ -5,7 +5,7 @@ import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.documentfile.provider.DocumentFile
-import kotlinx.coroutines.CoroutineScope
+import me.rerere.rikkahub.AppScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -36,7 +36,7 @@ class KnowledgeService(
     private val documentDao: KnowledgeDocumentDao,
     private val embeddingService: EmbeddingService,
     private val searchService: KnowledgeSearchService,
-    private val appScope: CoroutineScope,
+    private val appScope: AppScope,
 ) {
 
     /** 可观察的知识库列表（Room Flow 自动响应增删改） */
