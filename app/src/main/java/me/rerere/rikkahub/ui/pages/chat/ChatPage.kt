@@ -316,7 +316,16 @@ private fun ChatPageContent(
     // 群聊检测
     val isGroupChat = conversation.groupChatTemplateId != null
     // 群聊消息发送者颜色映射：根据 senderName 生成确定性颜色
-    // @Name 提及消歧义状态
+    val senderColors = remember(conversation.messageNodes, isGroupChat) {
+        if (isGroupChat) {
+            conversation.messageNodes
+                .mapNotNull { it.senderName }
+                .distinct()
+                .associateWith { name -> generateSenderColor(name) }
+        } else {
+            emptyMap()
+        }
+    }
     TTSAutoPlay(vm = vm, setting = setting, conversation = conversation)
 
     Surface(
@@ -437,7 +446,6 @@ private fun ChatPageContent(
             containerColor = Color.Transparent,
         ) { innerPadding ->
             Column(modifier = Modifier.fillMaxSize()) {
-                // 群聊运行进度条（顶部）
                 // 消息列表
                 Box(modifier = Modifier.weight(1f)) {
                     ChatList(
@@ -448,6 +456,7 @@ private fun ChatPageContent(
                         processingStatus = processingStatus,
                         previewMode = previewMode,
                         settings = setting,
+                        senderColors = senderColors,
                         hazeState = hazeState,
                         errors = errors,
                         onDismissError = onDismissError,
@@ -843,3 +852,13 @@ private fun TopBar(
     }
 }
 
+
+/**
+ * 从 senderName 字符串生成确定性颜色，用于群聊中不同成员的颜色区分。
+ * 使用 HSL 色相环保证颜色分布均匀，相同的 name 始终生成相同的颜色。
+ */
+private fun generateSenderColor(name: String): Color {
+    val hash = name.hashCode()
+    val hue = ((hash and 0x7FFFFFFF) % 360).toFloat()
+    return Color.hsl(hue, 0.55f, 0.48f)
+}
