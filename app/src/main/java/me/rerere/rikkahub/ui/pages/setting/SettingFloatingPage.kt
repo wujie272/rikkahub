@@ -349,20 +349,31 @@ fun SettingFloatingPage(vm: SettingVM = koinViewModel()) {
                     contract = ActivityResultContracts.OpenDocument()
                 ) { uri: Uri? ->
                     if (uri != null) {
-                        val takeFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION
-                        context.contentResolver.takePersistableUriPermission(uri, takeFlags)
-                        val success = me.rerere.rikkahub.ui.overlay.Live2DModelManager.importModel(context, uri)
-                        if (success) {
-                            models.value = me.rerere.rikkahub.ui.overlay.Live2DModelManager.scanModels(context)
-                            Toast.makeText(context, "模型导入成功", Toast.LENGTH_SHORT).show()
-                        } else {
-                            importError = "导入失败，请检查文件格式"
+                        // 尝试持久化权限，失败不阻塞导入
+                        runCatching {
+                            context.contentResolver.takePersistableUriPermission(
+                                uri, Intent.FLAG_GRANT_READ_URI_PERMISSION
+                            )
+                        }
+                        // 后台解压，防止 ANR
+                        scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                            val result = me.rerere.rikkahub.ui.overlay.Live2DModelManager.importModel(context, uri)
+                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                if (result != null) {
+                                    models.value = me.rerere.rikkahub.ui.overlay.Live2DModelManager.scanModels(context)
+                                    importError = null
+                                    Toast.makeText(context, "模型导入成功", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    importError = "导入失败：模型文件损坏或格式不支持"
+                                }
+                            }
                         }
                     }
                 }
+                // 预览模式：30秒后自动切回图标（防止用户忘了切回来）
                 if (previewActive && selectedModelPath != null) {
                     LaunchedEffect(selectedModelPath) {
-                        kotlinx.coroutines.delay(5000)
+                        kotlinx.coroutines.delay(30_000)
                         previewActive = false
                         FloatingBallInitializer.getManager()?.triggerBall?.mode = me.rerere.rikkahub.ui.overlay.FloatingTriggerBall.Mode.ICON
                     }
