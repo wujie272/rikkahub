@@ -275,7 +275,7 @@ private fun CreateKnowledgeBaseDialog(
                         onDismissRequest = { modelMenuExpanded = false },
                         modifier = Modifier.fillMaxWidth(0.8f),
                     ) {
-                        models.forEach { model ->
+                        for (model in models) {
                             DropdownMenuItem(
                                 text = { Text("${model.displayName} (${model.providerName})") },
                                 onClick = {
