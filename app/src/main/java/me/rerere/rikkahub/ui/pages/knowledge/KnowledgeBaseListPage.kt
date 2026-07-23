@@ -50,6 +50,8 @@ import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.rememberCoroutineScope
@@ -261,7 +263,7 @@ private fun CreateKnowledgeBaseDialog(
                         value = selectedModel?.let { "${it.displayName} (${it.providerName})" } ?: "",
                         onValueChange = {},
                         modifier = Modifier.fillMaxWidth(),
-                        label = { Text(stringResource(R.string.kb_model)) },
+                        label = { Text(stringResource(R.string.kb_embedding_model)) },
                         readOnly = true,
                         enabled = models.isNotEmpty(),
                         trailingIcon = {
