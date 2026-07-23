@@ -42,8 +42,15 @@ class FloatingTriggerBall(
     @Volatile var mode: Mode = Mode.ICON
         set(value) {
             if (field == value) return
+            val oldMode = field
             field = value
             rebuildContentView()
+            // 桌面宠物模式切换时管理巡逻
+            if (oldMode == Mode.LIVE2D && value == Mode.ICON) {
+                stopPetPatrol()
+            } else if (oldMode == Mode.ICON && value == Mode.LIVE2D && isShown()) {
+                startPetPatrol()
+            }
             onModeChanged?.invoke(value)
         }
     @Volatile var live2DRenderer: me.rerere.rikkahub.ui.overlay.Live2DRenderer? = null
@@ -268,17 +275,25 @@ class FloatingTriggerBall(
         // 更新 LiquidFloatingContainer 的球半径
         liquidView?.ballRadius = newSize / 2f
 
-        // 更新图标大小
-        iconView?.let { iv ->
-            iv.layoutParams = FrameLayout.LayoutParams(newSize, newSize, Gravity.CENTER)
-            val pad = (newSize * 0.18f).toInt()
-            iv.setPadding(pad, pad, pad, pad)
-        }
-
         // 更新窗口尺寸
         lp.width = newContainerW
         lp.height = newContainerH
         runCatching { wm.updateViewLayout(v, lp) }
+
+        // 更新内容视图大小
+        when (mode) {
+            Mode.ICON -> {
+                iconView?.let { iv ->
+                    iv.layoutParams = FrameLayout.LayoutParams(newSize, newSize, Gravity.CENTER)
+                    val pad = (newSize * 0.18f).toInt()
+                    iv.setPadding(pad, pad, pad, pad)
+                }
+            }
+            Mode.LIVE2D -> {
+                live2DRenderer?.surfaceView?.layoutParams =
+                    FrameLayout.LayoutParams(newSize, newSize, Gravity.CENTER)
+            }
+        }
 
         // 重新吸附
         v.post { snapToEdge() }
