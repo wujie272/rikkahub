@@ -342,6 +342,8 @@ fun KnowledgeBaseDetailPage(
             AddDataSourceSheet(
                 onPickFile = { showBottomSheet = false; multiFileLauncher.launch(supportedMimeTypes) },
                 onPickDir = { showBottomSheet = false; dirPickerLauncher.launch(null) },
+                onPickNote = { showBottomSheet = false; noteFileLauncher.launch(noteMimeTypes) },
+                onPickUrl = { showBottomSheet = false; showUrlDialog = true },
             )
         }
     }
@@ -743,6 +745,8 @@ private fun SearchResultItem(
 private fun AddDataSourceSheet(
     onPickFile: () -> Unit,
     onPickDir: () -> Unit,
+    onPickNote: () -> Unit = {},
+    onPickUrl: () -> Unit = {},
 ) {
     Column(
         modifier = Modifier
@@ -762,7 +766,7 @@ private fun AddDataSourceSheet(
             icon = HugeIcons.BookOpen01,
             title = "笔记",
             subtitle = "选择 Markdown / 文本笔记文件导入",
-            onClick = { showBottomSheet = false; noteFileLauncher.launch(noteMimeTypes) }
+            onClick = onPickNote
         )
 
         // 文件
@@ -778,7 +782,7 @@ private fun AddDataSourceSheet(
             icon = HugeIcons.Link01,
             title = "网址",
             subtitle = "获取网页内容与截图",
-            onClick = { showBottomSheet = false; showUrlDialog = true }
+            onClick = onPickUrl
         )
 
         // 文件夹 / 目录
