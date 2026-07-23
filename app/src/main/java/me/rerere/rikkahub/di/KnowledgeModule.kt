@@ -39,7 +39,7 @@ val knowledgeModule = module {
 
     single {
         KnowledgeService(
-            context = get(),
+            context = androidContext(),
             knowledgeBaseDao = get(),
             documentDao = get(),
             embeddingService = get(),
