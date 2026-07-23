@@ -308,116 +308,23 @@ class KnowledgeVM(
         }
     }
 
-    /** 流式导入目录：边扫边导，不攒内存，支持取消和去重 */
+    /** 流式导入目录：启动 Foreground Service 后台执行 */
     fun importDirectory(
         kbId: String,
         androidContext: android.content.Context,
         treeUri: android.net.Uri,
     ) {
+        // 启动前台 Service（在后台运行，切页面不打断，进程存活概率高）
+        me.rerere.rikkahub.service.KnowledgeImportService.start(androidContext, kbId, treeUri)
+
+        // 收集 Service 的进度到 VM 的 StateFlow（供 UI 显示）
         _importJob = viewModelScope.launch {
-            _importProgress.value = me.rerere.rikkahub.ui.components.settings.ImportProgressState(
-                active = true,
-                currentStage = me.rerere.rikkahub.ui.components.settings.ProcessingStage.SCANNING,
-                currentFileName = context.getString(R.string.kb_import_scanning),
-            )
-
-            // 1. 扫描目录（IO 线程）
-            val uris = withContext(Dispatchers.IO) {
-                val root = androidx.documentfile.provider.DocumentFile.fromTreeUri(androidContext, treeUri)
-                    ?: return@withContext emptyList()
-                val result = mutableListOf<android.net.Uri>()
-                scanDirRecursive(root, result)
-                result
-            }
-
-            if (!isActive) return@launch
-            if (uris.isEmpty()) {
-                _importProgress.value = me.rerere.rikkahub.ui.components.settings.ImportProgressState()
-                _snackbar.value = context.getString(R.string.kb_import_no_docs)
-                return@launch
-            }
-
-            // 2. 去重：跳过已导入的文件
-            val existingPaths = knowledgeService.getExistingFilePaths(kbId)
-            val newUris = uris.filter { it.toString() !in existingPaths }
-            val skipped = uris.size - newUris.size
-
-            _importProgress.value = _importProgress.value.copy(
-                totalFiles = newUris.size,
-                currentFileName = if (skipped > 0) "已跳过 $skipped 个重复文件" else "",
-            )
-
-            if (newUris.isEmpty()) {
-                _importProgress.value = me.rerere.rikkahub.ui.components.settings.ImportProgressState()
-                _snackbar.value = "所有文件已导入，无需重复导入"
-                selectKnowledgeBase(kbId)
-                return@launch
-            }
-
-            // 3. 流式处理：每个文件读→分块→嵌入→入库，用 Semaphore 控制并发
-            val semaphore = Semaphore(3) // 最多3个并发嵌入
-            var completed = 0
-            val failed = mutableListOf<me.rerere.rikkahub.ui.components.settings.FailedImportItem>()
-
-            for (uri in newUris) {
-                if (!isActive) break
-
-                val fileName = getFileNameFromUri(androidContext, uri) ?: "unknown"
-                _importProgress.value = _importProgress.value.copy(
-                    currentFileName = fileName,
-                    currentStage = me.rerere.rikkahub.ui.components.settings.ProcessingStage.READING,
-                    currentFileProgress = 0f,
-                )
-
-                // 用 Semaphore 控制并发数，避免打爆 API
-                semaphore.withPermit {
-                    if (!isActive) return@withPermit
-
-                    // 读文件
-                    val mimeType = try {
-                        androidContext.contentResolver.getType(uri) ?: "text/plain"
-                    } catch (_: Exception) { "text/plain" }
-                    val content = readDocumentContent(androidContext, uri, mimeType)
-                    if (content.isBlank()) {
-                        completed++
-                        _importProgress.value = _importProgress.value.copy(completedFiles = completed)
-                        return@withPermit
-                    }
-
-                    _importProgress.value = _importProgress.value.copy(
-                        currentStage = me.rerere.rikkahub.ui.components.settings.ProcessingStage.EMBEDDING,
-                        currentFileProgress = 0.5f,
-                    )
-
-                    // 直接导入单个文件（不攒内存）
-                    val result = knowledgeService.addDocument(
-                        kbId = kbId,
-                        content = content,
-                        filePath = uri.toString(),
-                        fileName = fileName,
-                    )
-
-                    result.onFailure { e ->
-                        failed.add(me.rerere.rikkahub.ui.components.settings.FailedImportItem(
-                            id = uri.toString(),
-                            fileName = fileName,
-                            errorMessage = e.message ?: "Unknown error",
-                        ))
-                    }
-
-                    completed++
-                    _importProgress.value = _importProgress.value.copy(
-                        completedFiles = completed,
-                        currentFileProgress = 1f,
-                    )
+            knowledgeService.importProgress.collect { state ->
+                _importProgress.value = state
+                if (!state.active) {
+                    selectKnowledgeBase(kbId)
                 }
             }
-
-            // 4. 完成
-            _importProgress.value = me.rerere.rikkahub.ui.components.settings.ImportProgressState()
-            _failedItems.value = failed
-            _snackbar.value = context.getString(R.string.kb_added_chunks, completed)
-            selectKnowledgeBase(kbId)
         }
     }
 
@@ -540,93 +447,5 @@ class KnowledgeVM(
     fun clearSearch() {
         _searchQuery.value = ""
         _searchResults.value = emptyList()
-    }
-
-    // ============ 导入辅助函数 ============
-
-    /** 递归扫描目录，收集所有支持的文档 URI（跳过隐藏文件/文件夹） */
-    private fun scanDirRecursive(
-        dir: androidx.documentfile.provider.DocumentFile,
-        result: MutableList<android.net.Uri>,
-    ) {
-        for (child in dir.listFiles()) {
-            val name = child.name ?: continue
-            // 跳过 .开头 的隐藏文件和文件夹（.git, .obsidian, .DS_Store 等）
-            if (name.startsWith(".")) continue
-            when {
-                child.isDirectory -> scanDirRecursive(child, result)
-                child.isFile && isSupportedExtension(name) -> result.add(child.uri)
-            }
-        }
-    }
-
-    /** 判断文件扩展名是否属于支持的文档类型 */
-    private fun isSupportedExtension(fileName: String?): Boolean {
-        if (fileName == null) return false
-        val ext = fileName.substringAfterLast('.', "").lowercase()
-        return ext in listOf("txt", "md", "markdown", "pdf", "docx", "pptx", "epub", "csv", "json", "xml", "yaml", "yml")
-    }
-
-    /** 从 content:// URI 中提取文件名 */
-    private fun getFileNameFromUri(context: android.content.Context, uri: android.net.Uri): String? {
-        var name: String? = null
-        if (uri.scheme == "content") {
-            val cursor = context.contentResolver.query(uri, null, null, null, null)
-            cursor?.use {
-                if (it.moveToFirst()) {
-                    val nameIndex = it.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
-                    if (nameIndex >= 0) name = it.getString(nameIndex)
-                }
-            }
-        }
-        if (name == null) name = uri.lastPathSegment
-        if (name != null && !name.contains(".")) name = "$name.md"
-        return name
-    }
-
-    /** 读取文档内容（支持 PDF、DOCX、PPTX、EPUB、纯文本） */
-    private fun readDocumentContent(
-        context: android.content.Context,
-        uri: android.net.Uri,
-        mimeType: String,
-    ): String {
-        val tempFile = kotlinx.coroutines.runBlocking {
-            withContext(Dispatchers.IO) {
-                val cacheDir = java.io.File(context.cacheDir, "kb_import")
-                cacheDir.mkdirs()
-                val ext = when {
-                    mimeType.contains("pdf") -> ".pdf"
-                    mimeType.contains("word") || mimeType.contains("document") -> ".docx"
-                    mimeType.contains("presentation") -> ".pptx"
-                    mimeType.contains("epub") -> ".epub"
-                    mimeType.contains("markdown") || mimeType.contains("md") -> ".md"
-                    else -> ".txt"
-                }
-                val tmp = java.io.File.createTempFile("import_", ext, cacheDir)
-                try {
-                    val inputStream = context.contentResolver.openInputStream(uri)
-                    if (inputStream != null) {
-                        inputStream.use { input -> tmp.outputStream().use { output -> input.copyTo(output) } }
-                    }
-                } catch (_: Exception) {}
-                tmp
-            }
-        }
-
-        return runCatching {
-            when {
-                mimeType == "application/pdf" || mimeType.contains("pdf") ->
-                    me.rerere.document.PdfParser.parserPdf(tempFile)
-                mimeType.contains("word") || tempFile.name.endsWith(".docx") ->
-                    me.rerere.document.DocxParser.parse(tempFile)
-                mimeType.contains("presentation") || tempFile.name.endsWith(".pptx") ->
-                    me.rerere.document.PptxParser.parse(tempFile)
-                mimeType == "application/epub+zip" || tempFile.name.endsWith(".epub") ->
-                    me.rerere.document.EpubParser.parse(tempFile)
-                mimeType.startsWith("text/") || tempFile.name.endsWith(".md") ->
-                    tempFile.readText()
-                else -> tempFile.readText()
-            }
-        }.getOrElse { tempFile.readText() }.also { tempFile.delete() }
     }
 }

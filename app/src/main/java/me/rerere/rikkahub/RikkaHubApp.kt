@@ -51,6 +51,7 @@ private const val TAG = "RikkaHubApp"
 const val CHAT_COMPLETED_NOTIFICATION_CHANNEL_ID = "chat_completed"
 const val CHAT_LIVE_UPDATE_NOTIFICATION_CHANNEL_ID = "chat_live_update"
 const val WEB_SERVER_NOTIFICATION_CHANNEL_ID = "web_server"
+const val KNOWLEDGE_IMPORT_NOTIFICATION_CHANNEL_ID = "knowledge_import"
 
 class RikkaHubApp : Application() {
     /** 进入前台前悬浮球是否可见，用于后台恢复 */
@@ -473,6 +474,16 @@ class RikkaHubApp : Application() {
             .setVibrationEnabled(false)
             .build()
         notificationManager.createNotificationChannel(chatLiveUpdateChannel)
+
+        val knowledgeImportChannel = NotificationChannelCompat
+            .Builder(
+                KNOWLEDGE_IMPORT_NOTIFICATION_CHANNEL_ID,
+                NotificationManagerCompat.IMPORTANCE_LOW
+            )
+            .setName(getString(R.string.kb_import_notification_channel_name))
+            .setShowBadge(false)
+            .build()
+        notificationManager.createNotificationChannel(knowledgeImportChannel)
 
         val webServerChannel = NotificationChannelCompat
             .Builder(WEB_SERVER_NOTIFICATION_CHANNEL_ID, NotificationManagerCompat.IMPORTANCE_LOW)

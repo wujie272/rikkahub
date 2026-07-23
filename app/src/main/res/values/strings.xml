@@ -2223,6 +2223,10 @@
     <string name="kb_import_progress">[%d/%d] %s</string>
     <string name="kb_import_skip">跳过 %s: %s</string>
     <string name="kb_import_no_docs">所选目录没有支持的文档</string>
+    <string name="kb_import_notification_channel_name">知识库导入</string>
+    <string name="kb_import_notification_title">正在导入知识库…</string>
+    <string name="kb_import_notification_starting">准备中…</string>
+    <string name="kb_import_notification_done">导入完成</string>
     <string name="kb_chunks_label">共 %d 个块</string>
 
     <!-- AppDataBridge plugin management page -->

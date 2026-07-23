@@ -1,18 +1,41 @@
 package me.rerere.rikkahub.data.knowledge
 
+import android.content.ContentResolver
+import android.content.Context
+import android.net.Uri
+import android.provider.OpenableColumns
+import androidx.documentfile.provider.DocumentFile
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlin.uuid.Uuid
+import me.rerere.document.DocxParser
+import me.rerere.document.EpubParser
+import me.rerere.document.PdfParser
+import me.rerere.document.PptxParser
+import me.rerere.rikkahub.ui.components.settings.ImportProgressState
+import me.rerere.rikkahub.ui.components.settings.ProcessingStage
+import java.io.File
 
 /**
  * 知识库统一服务
  * 数据层对外唯一入口，组合 DAO + Embedding + Chunking
  */
 class KnowledgeService(
+    private val context: Context,
     private val knowledgeBaseDao: KnowledgeBaseDao,
     private val documentDao: KnowledgeDocumentDao,
     private val embeddingService: EmbeddingService,
     private val searchService: KnowledgeSearchService,
+    private val appScope: CoroutineScope,
 ) {
 
     /** 可观察的知识库列表（Room Flow 自动响应增删改） */
@@ -75,6 +98,194 @@ class KnowledgeService(
     suspend fun deleteKnowledgeBase(id: String) {
         knowledgeBaseDao.deleteById(id)
         // 级联删除 document（由外键 CASCADE 自动处理）
+    }
+
+    // ============ 后台导入（流式 + 进度） ============
+
+    private val _importProgress = MutableStateFlow(ImportProgressState())
+    val importProgress: SharedFlow<ImportProgressState> = _importProgress.asSharedFlow()
+
+    /**
+     * 流式导入目录：边扫边导，不攒内存，支持取消和去重
+     * 在后台线程执行，通过 [importProgress] 发射进度
+     */
+    fun startImportDirectory(
+        kbId: String,
+        contentResolver: ContentResolver,
+        treeUri: Uri,
+    ) {
+        _importProgress.value = ImportProgressState(
+            active = true,
+            currentStage = ProcessingStage.SCANNING,
+        )
+
+        appScope.launch(Dispatchers.IO) {
+            runImportDirectory(kbId, contentResolver, treeUri)
+        }
+    }
+
+    private suspend fun runImportDirectory(
+        kbId: String,
+        contentResolver: ContentResolver,
+        treeUri: Uri,
+    ) {
+        _importProgress.value = ImportProgressState(
+            active = true,
+            currentStage = ProcessingStage.SCANNING,
+            currentFileName = "正在扫描目录...",
+        )
+
+        // 1. 扫描目录
+        val root = DocumentFile.fromTreeUri(context, treeUri) ?: run {
+            _importProgress.value = ImportProgressState()
+            return
+        }
+        val uris = mutableListOf<Uri>()
+        scanDirRecursive(root, uris)
+
+        if (!isActive) return
+        if (uris.isEmpty()) {
+            _importProgress.value = ImportProgressState()
+            return
+        }
+
+        // 2. 去重
+        val existingPaths = getExistingFilePaths(kbId)
+        val newUris = uris.filter { it.toString() !in existingPaths }
+        val skipped = uris.size - newUris.size
+
+        _importProgress.value = _importProgress.value.copy(
+            totalFiles = newUris.size,
+            currentFileName = if (skipped > 0) "已跳过 $skipped 个重复文件" else "",
+        )
+
+        if (newUris.isEmpty()) {
+            _importProgress.value = ImportProgressState()
+            return
+        }
+
+        // 3. 流式处理
+        val semaphore = Semaphore(3)
+        var completed = 0
+
+        for (uri in newUris) {
+            if (!isActive) break
+
+            val fileName = getFileNameFromUri(contentResolver, uri) ?: "unknown"
+            _importProgress.value = _importProgress.value.copy(
+                currentFileName = fileName,
+                currentStage = ProcessingStage.READING,
+                currentFileProgress = 0f,
+            )
+
+            semaphore.withPermit {
+                if (!isActive) return@withPermit
+
+                val mimeType = try {
+                    contentResolver.getType(uri) ?: "text/plain"
+                } catch (_: Exception) { "text/plain" }
+
+                _importProgress.value = _importProgress.value.copy(
+                    currentStage = ProcessingStage.EMBEDDING,
+                    currentFileProgress = 0.5f,
+                )
+
+                val content = readDocumentContent(contentResolver, uri, mimeType)
+                if (content.isBlank()) {
+                    completed++
+                    _importProgress.value = _importProgress.value.copy(completedFiles = completed)
+                    return@withPermit
+                }
+
+                val result = addDocument(kbId, content, uri.toString(), fileName)
+                result.onFailure { /* 失败已记录在 failedItems 中 */ }
+
+                completed++
+                _importProgress.value = _importProgress.value.copy(
+                    completedFiles = completed,
+                    currentFileProgress = 1f,
+                )
+            }
+        }
+
+        _importProgress.value = ImportProgressState()
+    }
+
+    fun cancelImport() {
+        _importProgress.value = ImportProgressState()
+    }
+
+    /** 递归扫描目录，跳过隐藏文件 */
+    private fun scanDirRecursive(
+        dir: DocumentFile,
+        result: MutableList<Uri>,
+    ) {
+        for (child in dir.listFiles()) {
+            val name = child.name ?: continue
+            if (name.startsWith(".")) continue
+            when {
+                child.isDirectory -> scanDirRecursive(child, result)
+                child.isFile && isSupportedExtension(name) -> result.add(child.uri)
+            }
+        }
+    }
+
+    private fun isSupportedExtension(fileName: String): Boolean {
+        val ext = fileName.substringAfterLast('.', "").lowercase()
+        return ext in listOf("txt", "md", "markdown", "pdf", "docx", "pptx", "epub", "csv", "json", "xml", "yaml", "yml")
+    }
+
+    private fun getFileNameFromUri(cr: ContentResolver, uri: Uri): String? {
+        var name: String? = null
+        if (uri.scheme == "content") {
+            cr.query(uri, null, null, null, null)?.use {
+                if (it.moveToFirst()) {
+                    val idx = it.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    if (idx >= 0) name = it.getString(idx)
+                }
+            }
+        }
+        if (name == null) name = uri.lastPathSegment
+        if (name != null && !name.contains(".")) name = "$name.md"
+        return name
+    }
+
+    private fun readDocumentContent(
+        cr: ContentResolver,
+        uri: Uri,
+        mimeType: String,
+    ): String {
+        // 直接读取，不经过 runBlocking
+        val cacheDir = File(context.cacheDir, "kb_import").apply { mkdirs() }
+        val ext = when {
+            mimeType.contains("pdf") -> ".pdf"
+            mimeType.contains("word") || mimeType.contains("document") -> ".docx"
+            mimeType.contains("presentation") -> ".pptx"
+            mimeType.contains("epub") -> ".epub"
+            mimeType.contains("markdown") || mimeType.contains("md") -> ".md"
+            else -> ".txt"
+        }
+        val tmp = File.createTempFile("import_", ext, cacheDir)
+        try {
+            cr.openInputStream(uri)?.use { input ->
+                tmp.outputStream().use { output -> input.copyTo(output) }
+            }
+            return when {
+                mimeType == "application/pdf" || mimeType.contains("pdf") ->
+                    PdfParser.parserPdf(tmp)
+                mimeType.contains("word") || tmp.name.endsWith(".docx") ->
+                    DocxParser.parse(tmp)
+                mimeType.contains("presentation") || tmp.name.endsWith(".pptx") ->
+                    PptxParser.parse(tmp)
+                mimeType == "application/epub+zip" || tmp.name.endsWith(".epub") ->
+                    EpubParser.parse(tmp)
+                else -> tmp.readText()
+            }
+        } catch (_: Exception) {
+            tmp.readText()
+        } finally {
+            tmp.delete()
+        }
     }
 
     // ============ 文档管理 ============

@@ -39,10 +39,12 @@ val knowledgeModule = module {
 
     single {
         KnowledgeService(
+            context = get(),
             knowledgeBaseDao = get(),
             documentDao = get(),
             embeddingService = get(),
             searchService = get(),
+            appScope = get(),
         )
     }
 
