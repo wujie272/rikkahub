@@ -941,6 +941,7 @@ sealed interface Screen : NavKey {
     @Serializable
     data object SettingAdvanced : Screen
 
+    @Serializable
     data object SettingMcp : Screen
 
     @Serializable
@@ -952,6 +953,7 @@ sealed interface Screen : NavKey {
     @Serializable
     data object SettingDebate : Screen
 
+    @Serializable
     data object SettingWeb : Screen
 
     @Serializable
