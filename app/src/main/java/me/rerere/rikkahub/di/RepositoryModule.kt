@@ -50,7 +50,9 @@ val repositoryModule = module {
             baseDir = File(context.filesDir, "workspaces"),
             shellRunner = ProotShellRunner(
                 nativeLibraryDir = File(context.applicationInfo.nativeLibraryDir),
-                extraBindMounts = listOf(
+            ),
+            // 同一份挂载表既用于 PRoot 的 -b 参数, 也用于文件工具的路径解析, 避免两处漂移
+            bindMounts = listOf(
                     WorkspaceBindMount(
                         source = File(context.filesDir, FileFolders.SKILLS).apply { mkdirs() },
                         target = "/skills",
@@ -64,7 +66,6 @@ val repositoryModule = module {
                         target = "/upload",
                     ),
                 ),
-            )
         )
     }
 
