@@ -1,0 +1,97 @@
+name: Release Build
+
+on:
+  workflow_dispatch:
+
+# GITHUB_TOKEN 默认没有 release 权限，显式授权
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          submodules: true
+
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: Install pnpm
+        run: npm install -g pnpm
+
+      - name: pnpm cache
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.local/share/pnpm/store
+            web/node_modules
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('web/package.json', 'web/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-
+
+      - name: Install web dependencies
+        run: cd web && pnpm install
+
+      - name: Gradle cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Prepare build files
+        run: |
+          echo "${{ secrets.KEY_BASE64 }}" | base64 -d > app/app.key
+          echo "${{ secrets.SIGNING_CONFIG }}" | base64 -d > local.properties
+          if [ -z "${{ secrets.GOOGLE_SERVICES_JSON }}" ]; then
+            echo '{"project_info":{"project_number":"000000000000","project_id":"rikkahub-ci-dummy","storage_bucket":"rikkahub-ci-dummy.appspot.com"},"client":[{"client_info":{"mobilesdk_app_id":"1:000000000000:android:0000000000000000","android_client_info":{"package_name":"me.jaye.rikkahub"}},"oauth_client":[],"api_key":[{"current_key":"AIzaSyDummy0000000000000000000000000000"}],"services":{"analytics_service":{"status":1},"appinvite_service":{"status":1},"google_cast_service":{"status":1}}}],"configuration_version":"1"}' > app/google-services.json
+          else
+            echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > app/google-services.json
+          fi
+
+      - name: Build (arm64-v8a only)
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --build-cache -PabiFilter=arm64-v8a
+
+      - name: Get version info
+        id: version
+        run: |
+          echo "versionName=$(grep versionName app/build.gradle.kts | sed 's/.*"\(.*\)".*/\1/')" >> $GITHUB_OUTPUT
+          echo "versionCode=$(grep versionCode app/build.gradle.kts | sed 's/.*=\s*\([0-9]*\)/\1/' | head -1)" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.versionName }}
+          name: RikkaHub v${{ steps.version.outputs.versionName }}
+          body: |
+            ### RikkaHub v${{ steps.version.outputs.versionName }} (build ${{ steps.version.outputs.versionCode }})
+
+            🚀 自动构建发布，仅包含 arm64-v8a 架构。
+
+          draft: false
+          prerelease: false
+          files: |
+            app/build/outputs/apk/release/*.apk
+
+      - name: Upload APK as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rikkahub-release-apk
+          path: app/build/outputs/apk/release/*.apk
