@@ -18,6 +18,7 @@ import me.rerere.rikkahub.data.knowledge.EmbeddingService
 import me.rerere.rikkahub.data.knowledge.SearchResult
 import me.rerere.rikkahub.data.knowledge.MountedKnowledgeDir
 import me.rerere.rikkahub.data.knowledge.MountedSearchResult
+import me.rerere.rikkahub.data.knowledge.MountedFileItem
 import me.rerere.rikkahub.data.knowledge.UnifiedSearchResult
 import me.rerere.rikkahub.data.knowledge.KnowledgeService.VectorizeProgress
 import kotlinx.coroutines.Dispatchers
@@ -105,7 +106,15 @@ class KnowledgeVM(
         val filePath: String,
         val fileName: String,
         val chunkCount: Int,
+        val source: FileSource = FileSource.IMPORTED,
+        val fileSize: Long = 0,
+        val mountName: String = "",
     )
+
+    enum class FileSource {
+        IMPORTED,  // 已导入知识库（有向量）
+        MOUNTED,   // 挂载目录（未向量化）
+    }
 
     init {
         loadEmbeddingModels()
@@ -239,14 +248,31 @@ class KnowledgeVM(
             val kb = knowledgeService.getKnowledgeBase(id)
             _selectedKb.value = kb
             if (kb != null) {
-                val files = knowledgeService.getDistinctFiles(id)
-                _fileList.value = files.map {
+                // 已导入的文件
+                val importedFiles = knowledgeService.getDistinctFiles(id).map {
                     FileInfo(
                         filePath = it.file_path,
                         fileName = it.file_name.ifBlank { it.file_path },
                         chunkCount = knowledgeService.getChunksByFile(id, it.file_path).size,
+                        source = FileSource.IMPORTED,
                     )
                 }
+
+                // 挂载目录的文件
+                val mountedFiles = knowledgeService.getMountedDirectoryFiles(id).map {
+                    FileInfo(
+                        filePath = it.filePath,
+                        fileName = it.fileName,
+                        chunkCount = 0,
+                        source = FileSource.MOUNTED,
+                        fileSize = it.fileSize,
+                        mountName = it.mountName,
+                    )
+                }
+
+                // 合并去重：优先保留已导入的文件（有向量），挂载的补充
+                val allFiles = importedFiles + mountedFiles
+                _fileList.value = allFiles.distinctBy { it.filePath }
             }
         }
     }
@@ -587,6 +613,7 @@ class KnowledgeVM(
             result.onSuccess {
                 _snackbar.value = "已挂载目录: ${it.name}"
                 loadMountedDirs(kbId)
+                selectKnowledgeBase(kbId)
             }.onFailure { e ->
                 _snackbar.value = "挂载失败: ${e.message}"
             }

@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -72,6 +73,8 @@ import me.rerere.ai.ui.UIMessageAnnotation
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.isEmptyUIMessage
 import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.ArrowDown01
+import me.rerere.hugeicons.stroke.ArrowUp01
 import me.rerere.hugeicons.stroke.BookOpen01
 import me.rerere.hugeicons.stroke.File02
 import me.rerere.hugeicons.stroke.MusicNote03
@@ -167,6 +170,14 @@ fun ChatMessage(
                 )
             }
         }
+
+        // 知识库来源卡片（折叠在思考过程之前）
+        if (knowledgeSources.isNotEmpty() && message.role == MessageRole.ASSISTANT) {
+            KnowledgeSourcesSection(
+                sources = knowledgeSources,
+            )
+        }
+
         ProvideTextStyle(textStyle) {
             MessagePartsBlock(
                 assistant = assistant,
@@ -175,7 +186,6 @@ fun ChatMessage(
                 annotations = message.annotations,
                 loading = loading,
                 model = model,
-                knowledgeSources = if (message.role == MessageRole.ASSISTANT) knowledgeSources else emptyList(),
                 onToolApproval = onToolApproval,
                 onToolAnswer = onToolAnswer,
                 onUserMessageClick = if (message.role == MessageRole.USER) onEdit else null,
@@ -280,7 +290,6 @@ private fun MessagePartsBlock(
     parts: List<UIMessagePart>,
     annotations: List<UIMessageAnnotation>,
     loading: Boolean,
-    knowledgeSources: List<KnowledgeSource> = emptyList(),
     onToolApproval: ((toolCallId: String, approved: Boolean, reason: String, scope: me.rerere.rikkahub.service.ChatService.ApprovalScope, toolName: String) -> Unit)? = null,
     onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
     onUserMessageClick: (() -> Unit)? = null,
@@ -329,26 +338,8 @@ private fun MessagePartsBlock(
     // sufficient to detect a meaningful change; the lastOrNull() hash catches in-place edits
     // on the tail part (e.g. streaming text appended to the final Text part).
     val partsKey = parts.size.toString() + (parts.lastOrNull()?.hashCode()?.toString() ?: "")
-    val groupedParts = remember(partsKey, knowledgeSources) {
-        val blocks = parts.groupMessageParts().toMutableList()
-        // 将知识库来源注入到 ChainOfThought 中
-        if (knowledgeSources.isNotEmpty()) {
-            val knowledgeStep = ThinkingStep.KnowledgeStep(sources = knowledgeSources)
-            // 找最后一个 ThinkingBlock，把 KnowledgeStep 追加进去
-            val lastThinkingIdx = blocks.indexOfLast { it is MessagePartBlock.ThinkingBlock }
-            if (lastThinkingIdx >= 0) {
-                val thinkingBlock = blocks[lastThinkingIdx] as MessagePartBlock.ThinkingBlock
-                blocks[lastThinkingIdx] = thinkingBlock.copy(
-                    steps = thinkingBlock.steps + knowledgeStep
-                )
-            } else {
-                // 没有 ThinkingBlock 就新建一个
-                blocks.add(
-                    MessagePartBlock.ThinkingBlock(listOf(knowledgeStep))
-                )
-            }
-        }
-        blocks
+    val groupedParts = remember(partsKey) {
+        parts.groupMessageParts()
     }
     groupedParts.fastForEach { block ->
         when (block) {
@@ -391,14 +382,6 @@ private fun MessagePartsBlock(
                                         loading = loading && !step.tool.isExecuted,
                                         onToolApproval = onToolApproval,
                                         onToolAnswer = onToolAnswer,
-                                    )
-                                }
-                            }
-
-                            is ThinkingStep.KnowledgeStep -> {
-                                key("knowledge_sources") {
-                                    KnowledgeSourcesStep(
-                                        sources = step.sources,
                                     )
                                 }
                             }
@@ -691,67 +674,148 @@ private fun MessagePartsBlock(
     }
 }
 
-/**
- * 知识库来源步骤，渲染在 ChainOfThought 时间线中
- */
+// ============ 知识库来源卡片（折叠展示） ============
+
 @Composable
-private fun ChainOfThoughtScope.KnowledgeSourcesStep(
+private fun KnowledgeSourcesSection(
     sources: List<KnowledgeSource>,
 ) {
-    ChainOfThoughtStep(
-        icon = {
-            Icon(
-                imageVector = HugeIcons.BookOpen01,
-                contentDescription = null,
-                modifier = Modifier.size(14.dp),
-                tint = MaterialTheme.colorScheme.primary,
-            )
-        },
-        label = {
-            Text(
-                text = stringResource(R.string.kb_sources_title, sources.size),
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.secondary,
-            )
-        },
-        content = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .animateContentSize(),
+    ) {
+        // 折叠按钮
+        Surface(
+            onClick = { expanded = !expanded },
+            shape = RoundedCornerShape(8.dp),
+            color = Color.Transparent,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp, horizontal = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Icon(
+                    imageVector = if (expanded) HugeIcons.ArrowUp01 else HugeIcons.ArrowDown01,
+                    contentDescription = null,
+                    modifier = Modifier.size(14.dp),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+                Icon(
+                    imageVector = HugeIcons.BookOpen01,
+                    contentDescription = null,
+                    modifier = Modifier.size(14.dp),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+                Text(
+                    text = stringResource(R.string.kb_sources_title, sources.size),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+        }
+
+        // 展开后的来源卡片列表
+        AnimatedVisibility(visible = expanded) {
+            Column(
+                modifier = Modifier.padding(top = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
                 sources.forEach { source ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(
-                            imageVector = HugeIcons.BookOpen01,
-                            contentDescription = null,
-                            modifier = Modifier.size(14.dp),
-                            tint = MaterialTheme.colorScheme.primary,
-                        )
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = source.fileName,
-                                style = MaterialTheme.typography.bodySmall,
-                                fontWeight = FontWeight.Medium,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            Text(
-                                text = source.content,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                        Text(
-                            text = "${(source.score * 100).toInt()}%",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
+                    KnowledgeSourceCard(source = source)
                 }
             }
-        },
-    )
+        }
+    }
+}
+
+@Composable
+private fun KnowledgeSourceCard(
+    source: KnowledgeSource,
+) {
+    val relevanceLabel = when {
+        source.score >= 0.85f -> stringResource(R.string.kb_relevance_high)
+        source.score >= 0.60f -> stringResource(R.string.kb_relevance_medium)
+        source.score >= 0.40f -> stringResource(R.string.kb_relevance_low)
+        else -> stringResource(R.string.kb_relevance_minimal)
+    }
+    val relevanceColor = when {
+        source.score >= 0.85f -> MaterialTheme.colorScheme.primary
+        source.score >= 0.60f -> MaterialTheme.colorScheme.tertiary
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        tonalElevation = 0.dp,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // 源类型图标
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(MaterialTheme.colorScheme.primaryContainer),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = HugeIcons.File02,
+                    contentDescription = null,
+                    modifier = Modifier.size(14.dp),
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+            }
+
+            // 文件名 + 内容预览
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = source.fileName,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (source.content.isNotBlank()) {
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = source.content,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+
+            // 相关度分数
+            Column(
+                horizontalAlignment = Alignment.End,
+            ) {
+                Text(
+                    text = "${(source.score * 100).toInt()}%",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = relevanceColor,
+                )
+                Text(
+                    text = relevanceLabel,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    maxLines = 1,
+                )
+            }
+        }
+    }
 }

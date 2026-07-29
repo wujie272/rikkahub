@@ -725,6 +725,28 @@ class KnowledgeService(
     }
 
     /**
+     * 获取挂载目录下的所有文件列表
+     */
+    suspend fun getMountedDirectoryFiles(kbId: String): List<MountedFileItem> = withContext(Dispatchers.IO) {
+        val mounts = mountedDirDao.getByKbId(kbId)
+        val results = mutableListOf<MountedFileItem>()
+        for (mount in mounts) {
+            val posixPath = mount.posixPath ?: continue
+            val files = fileSystemSearchEngine.listFiles(posixPath)
+            results.addAll(files.map { file ->
+                MountedFileItem(
+                    mountId = mount.id,
+                    mountName = mount.name,
+                    filePath = file.filePath,
+                    fileName = file.fileName,
+                    fileSize = file.fileSize,
+                )
+            })
+        }
+        return@withContext results
+    }
+
+    /**
      * 观察知识库的所有挂载目录（Flow）
      */
     fun observeMountedDirectories(kbId: String): Flow<List<MountedKnowledgeDir>> {
@@ -1129,6 +1151,21 @@ data class SearchResult(
     val bm25Score: Float = 0f,
     val expandedContext: String = "",
     val tags: String = "",
+)
+
+/**
+ * 挂载目录搜索结果
+ */
+
+/**
+ * 挂载目录下的文件
+ */
+data class MountedFileItem(
+    val mountId: String,
+    val mountName: String,
+    val filePath: String,
+    val fileName: String,
+    val fileSize: Long,
 )
 
 /**

@@ -69,7 +69,6 @@ import me.rerere.hugeicons.stroke.GlobalSearch
 import me.rerere.hugeicons.stroke.Link01
 import me.rerere.hugeicons.stroke.Settings02
 import me.rerere.hugeicons.stroke.Refresh01
-import me.rerere.hugeicons.stroke.BookOpen01
 import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.rikkahub.data.knowledge.SearchResult
 import me.rerere.rikkahub.data.knowledge.MountedSearchResult
@@ -290,31 +289,6 @@ fun KnowledgeBaseDetailPage(
         "application/epub+zip",
     )
 
-    // 笔记专用：只选 Markdown/文本文件
-    val noteMimeTypes = arrayOf("text/markdown", "text/plain", "text/*", "application/octet-stream")
-
-    val noteFileLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenMultipleDocuments()
-    ) { uris: List<Uri> ->
-        if (uris.isNotEmpty()) {
-            scope.launch {
-                val fileContents = mutableListOf<Triple<String, String, String>>()
-                for (uri in uris) {
-                    try {
-                        val mimeType = context.contentResolver.getType(uri) ?: "text/plain"
-                        val fileName = getFileNameFromUri(context, uri) ?: "unknown"
-                        val content = readDocumentContent(context, uri, mimeType)
-                        if (content.isNotBlank()) {
-                            fileContents.add(Triple(content, uri.toString(), fileName))
-                        }
-                    } catch (_: Exception) { }
-                }
-                if (fileContents.isNotEmpty()) {
-                    vm.importFiles(kbId, fileContents)
-                }
-            }
-        }
-    }
 
     val multiFileLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenMultipleDocuments()
@@ -336,14 +310,6 @@ fun KnowledgeBaseDetailPage(
                     vm.importFiles(kbId, fileContents)
                 }
             }
-        }
-    }
-
-    val dirPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocumentTree()
-    ) { treeUri: Uri? ->
-        if (treeUri != null) {
-            vm.importDirectory(kbId, context, treeUri)
         }
     }
 
@@ -421,8 +387,6 @@ fun KnowledgeBaseDetailPage(
         ) {
             AddDataSourceSheet(
                 onPickFile = { showBottomSheet = false; multiFileLauncher.launch(supportedMimeTypes) },
-                onPickDir = { showBottomSheet = false; dirPickerLauncher.launch(null) },
-                onPickNote = { showBottomSheet = false; noteFileLauncher.launch(noteMimeTypes) },
                 onMountDir = { showBottomSheet = false; mountDirPickerLauncher.launch(null) },
                 onPickUrl = { showBottomSheet = false; showUrlDialog = true },
             )
@@ -620,11 +584,29 @@ fun KnowledgeBaseDetailPage(
                         FileListItem(
                             fileName = file.fileName,
                             chunkCount = file.chunkCount,
+                            source = file.source,
+                            mountName = file.mountName,
                             onViewChunks = {
-                                vm.loadChunks(kbId, file.filePath)
-                                navController.navigate(Screen.KnowledgeBaseChunks(kbId, Uri.encode(file.filePath)))
+                                if (file.source == me.rerere.rikkahub.ui.pages.knowledge.KnowledgeVM.FileSource.MOUNTED) {
+                                    toaster.show(
+                                        message = "挂载目录文件，请先一键向量化",
+                                        type = com.dokar.sonner.ToastType.Info
+                                    )
+                                } else {
+                                    vm.loadChunks(kbId, file.filePath)
+                                    navController.navigate(Screen.KnowledgeBaseChunks(kbId, Uri.encode(file.filePath)))
+                                }
                             },
-                            onDelete = { vm.deleteFile(kbId, file.filePath) }
+                            onDelete = {
+                                if (file.source == me.rerere.rikkahub.ui.pages.knowledge.KnowledgeVM.FileSource.MOUNTED) {
+                                    toaster.show(
+                                        message = "挂载目录文件请从目录卡片卸载",
+                                        type = com.dokar.sonner.ToastType.Info
+                                    )
+                                } else {
+                                    vm.deleteFile(kbId, file.filePath)
+                                }
+                            }
                         )
                     }
                 }
@@ -637,6 +619,8 @@ fun KnowledgeBaseDetailPage(
 private fun FileListItem(
     fileName: String,
     chunkCount: Int,
+    source: me.rerere.rikkahub.ui.pages.knowledge.KnowledgeVM.FileSource = me.rerere.rikkahub.ui.pages.knowledge.KnowledgeVM.FileSource.IMPORTED,
+    mountName: String = "",
     onViewChunks: () -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -710,29 +694,57 @@ private fun FileListItem(
                     )
                     Spacer(Modifier.height(4.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Surface(
-                            shape = RoundedCornerShape(4.dp),
-                            color = MaterialTheme.colorScheme.primaryContainer,
-                            tonalElevation = 0.dp,
-                        ) {
-                            Text(
-                                stringResource(R.string.kb_chunks_label, chunkCount),
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                            )
-                        }
-                        if (chunkCount > 1) {
+                        if (source == me.rerere.rikkahub.ui.pages.knowledge.KnowledgeVM.FileSource.MOUNTED) {
                             Surface(
                                 shape = RoundedCornerShape(4.dp),
-                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                color = MaterialTheme.colorScheme.tertiaryContainer,
                                 tonalElevation = 0.dp,
                             ) {
                                 Text(
-                                    stringResource(R.string.kb_view_chunks),
+                                    text = "未向量化",
                                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
                                     style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer,
                                 )
+                            }
+                            if (mountName.isNotBlank()) {
+                                Surface(
+                                    shape = RoundedCornerShape(4.dp),
+                                    color = MaterialTheme.colorScheme.surfaceVariant,
+                                    tonalElevation = 0.dp,
+                                ) {
+                                    Text(
+                                        text = mountName,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                        style = MaterialTheme.typography.labelSmall,
+                                    )
+                                }
+                            }
+                        } else {
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = MaterialTheme.colorScheme.primaryContainer,
+                                tonalElevation = 0.dp,
+                            ) {
+                                Text(
+                                    stringResource(R.string.kb_chunks_label, chunkCount),
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                )
+                            }
+                            if (chunkCount > 1) {
+                                Surface(
+                                    shape = RoundedCornerShape(4.dp),
+                                    color = MaterialTheme.colorScheme.surfaceVariant,
+                                    tonalElevation = 0.dp,
+                                ) {
+                                    Text(
+                                        stringResource(R.string.kb_view_chunks),
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                        style = MaterialTheme.typography.labelSmall,
+                                    )
+                                }
                             }
                         }
                     }
@@ -972,8 +984,6 @@ private fun SearchResultItem(
 @Composable
 private fun AddDataSourceSheet(
     onPickFile: () -> Unit,
-    onPickDir: () -> Unit,
-    onPickNote: () -> Unit = {},
     onMountDir: () -> Unit = {},
     onPickUrl: () -> Unit = {},
 ) {
@@ -988,14 +998,6 @@ private fun AddDataSourceSheet(
             text = "添加数据源",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
-        )
-
-        // 笔记
-        DataSourceOption(
-            icon = HugeIcons.BookOpen01,
-            title = "笔记",
-            subtitle = "选择 Markdown / 文本笔记文件导入",
-            onClick = onPickNote
         )
 
         // 文件
@@ -1018,14 +1020,6 @@ private fun AddDataSourceSheet(
         DataSourceOption(
             icon = HugeIcons.Folder01,
             title = "文件夹 / 目录",
-            subtitle = "选择文件夹或工作区，批量提取其中的文本文件",
-            onClick = onPickDir,
-        )
-
-        // 挂载目录（零存储）
-        DataSourceOption(
-            icon = HugeIcons.Folder01,
-            title = "挂载外部目录",
             subtitle = "不占用空间，直接在文件系统上搜索",
             onClick = onMountDir,
         )

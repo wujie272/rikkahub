@@ -280,9 +280,44 @@ class FileSystemSearchEngine(
         DirStats(fileCount, totalSize)
     }
 
+    /**
+     * 列出目录下所有文本文件
+     */
+    suspend fun listFiles(dirPath: String, maxResults: Int = 1000): List<FileItem> = withContext(Dispatchers.IO) {
+        val root = File(dirPath)
+        if (!root.isDirectory) return@withContext emptyList()
+
+        val files = mutableListOf<FileItem>()
+        try {
+            Files.walk(root.toPath()).use { stream ->
+                stream.iterator().forEach { path ->
+                    if (files.size >= maxResults) return@forEach
+                    val file = path.toFile()
+                    if (file.isFile && file.length() > 0 && isTextFile(file.name)) {
+                        files.add(FileItem(
+                            filePath = file.absolutePath,
+                            fileName = file.name,
+                            fileSize = file.length(),
+                        ))
+                    }
+                }
+            }
+        } catch (_: Exception) { }
+        return@withContext files
+    }
+
     data class DirStats(
         val fileCount: Int,
         val totalSizeBytes: Long,
+    )
+
+    /**
+     * 单个文件信息
+     */
+    data class FileItem(
+        val filePath: String,
+        val fileName: String,
+        val fileSize: Long,
     )
 
     companion object {

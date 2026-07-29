@@ -117,6 +117,7 @@ internal fun backgroundTextGenerationParams(
 /** 知识库引用来源 */
 data class KnowledgeSource(
     val fileName: String,
+    val filePath: String = "",
     val content: String,
     val score: Float,
     val chunkIndex: Int,
@@ -2719,6 +2720,7 @@ class ChatService(
                 put(conversationId, results.map { r ->
                     KnowledgeSource(
                         fileName = r.fileName,
+                        filePath = r.filePath,
                         content = (if (r.expandedContext.isNotBlank()) r.expandedContext else r.content).take(300),
                         score = r.score,
                         chunkIndex = r.chunkIndex,
