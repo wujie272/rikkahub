@@ -1033,7 +1033,7 @@ class GenerationHandler(
             if (systemParts.isNotEmpty()) {
                 add(UIMessage(role = MessageRole.SYSTEM, parts = systemParts))
             }
-            addAll(messages.limitContext(assistant.contextMessageSize).ageOldToolImages())
+            addAll(messages.limitContext(assistant.contextMessageLimit).ageOldToolImages())
         }.transforms(
             transformers = transformers,
             context = context,

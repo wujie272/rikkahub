@@ -298,9 +298,6 @@
   <string name="chat_page_save">保存</string>
   <string name="chat_page_scroll_to_bottom">滚动到底部</string>
   <string name="chat_page_search_chats">搜索聊天</string>
-  <string name="roleplay_title">角色扮演</string>
-  <string name="roleplay_coming_soon">即将推出</string>
-  <string name="roleplay_coming_soon_desc">多角色群聊功能正在建设中，你可以创建角色群组，一次与多个 AI 角色聊天。</string>
   <string name="group_page_create">创建群组</string>
   <string name="group_page_rename">重命名群组</string>
   <string name="group_page_delete">删除群组</string>
@@ -486,8 +483,6 @@
   <string name="placeholder_battery_level">电池电量</string>
   <string name="placeholder_char">助手名称</string>
   <string name="placeholder_current_date">日期</string>
-  <string name="placeholder_current_datetime">日期和时间</string>
-  <string name="placeholder_current_time">时间</string>
   <string name="placeholder_device_info">设备信息</string>
   <string name="placeholder_locale">语言环境</string>
   <string name="placeholder_model_id">模型ID</string>
@@ -1847,7 +1842,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <!-- Browser settings (4) -->
   <string name="setting_browser_per_tool_timeout_desc">每次浏览器工具调用的时间硬上限。范围 10 秒至 10 分钟。</string>
   <string name="setting_browser_per_tool_timeout_unit">秒</string>
-  <string name="setting_browser_single_task_timeout_desc">AI 浏览器单次任务的硬上限，防止死循环。范围 1 分钟至 60 分钟。</string>
+  <string name="setting_browser_single_task_timeout_desc">AI 浏览器单次任务的硬上限，防止死循环。范围 1 分钟至 240 分钟。</string>
   <string name="setting_browser_single_task_timeout_unit">分钟</string>
 
   <!-- SSH settings (2) -->
@@ -1862,7 +1857,6 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
     <string name="setting_ssh_edit">编辑 SSH 主机</string>
     <string name="setting_ssh_test">测试连接</string>
     <string name="setting_ssh_testing">正在测试连接…</string>
-    <string name="setting_ssh_search">搜索主机</string>
     <string name="setting_ssh_copy_info">复制信息</string>
     <string name="setting_ssh_field_name">名称</string>
     <string name="setting_ssh_field_host">主机地址</string>
@@ -1884,35 +1878,6 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
     <string name="setting_ssh_save">保存</string>
     <string name="setting_ssh_validation_required">请填写%s</string>
 
-  <!-- Multi-key management (35) -->
-  <string name="multi_key_title">密钥管理</string>
-  <string name="multi_key_manage">管理密钥</string>
-  <string name="multi_key_add">添加 API 密钥</string>
-  <string name="multi_key_add_hint">每行一个密钥，支持空格/换行/逗号分隔</string>
-  <string name="multi_key_alias">别名（可选）</string>
-  <string name="multi_key_alias_placeholder">例如：主密钥</string>
-  <string name="multi_key_delete">删除</string>
-  <string name="multi_key_delete_errors">删除错误项</string>
-  <string name="multi_key_deleted">已删除 %s</string>
-  <string name="multi_key_deleted_errors">已删除 %d 个错误密钥</string>
-  <string name="multi_key_edit">编辑密钥</string>
-  <string name="multi_key_edit_btn">编辑</string>
-  <string name="multi_key_empty">暂无密钥，点击 + 添加</string>
-  <string name="multi_key_error">错误</string>
-  <string name="multi_key_import">从现有密钥导入（%d）</string>
-  <string name="multi_key_imported">已添加 %d 个密钥</string>
-  <string name="multi_key_normal">正常</string>
-  <string name="multi_key_restored">已恢复</string>
-  <string name="multi_key_save">保存</string>
-  <string name="multi_key_status_active">正常</string>
-  <string name="multi_key_status_disabled">已禁用</string>
-  <string name="multi_key_status_error">错误</string>
-  <string name="multi_key_status_exhausted">已耗尽</string>
-  <string name="multi_key_status_rate_limited">频率受限</string>
-  <string name="multi_key_summary">%d 个活跃 / 共 %d 个</string>
-  <string name="multi_key_test">测试</string>
-  <string name="multi_key_total">总计</string>
-  <string name="multi_key_undo">撤销</string>
 
   <!-- Local tools assistant page (23) -->
   <string name="assistant_page_local_tools_archive_title">归档（zip）</string>
@@ -1978,9 +1943,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_provider_page_cooldown_off">Off</string>
   <string name="setting_provider_page_add_key">添加 Key</string>
   <string name="setting_provider_page_paste_from_clipboard">从剪贴板导入</string>
-  <string name="setting_provider_page_legacy_key_migrate">旧格式 Key 可用，点击迁移到结构化管理</string>
   <string name="setting_provider_page_keys_enabled">个 Key 已启用</string>
-  <string name="setting_provider_page_no_api_keys">未配置 API Key</string>
   <string name="setting_provider_page_edit_alias">编辑别名</string>
   <string name="setting_provider_page_edit_key">编辑 Key</string>
   <string name="setting_provider_page_alias">别名</string>

@@ -64,10 +64,10 @@
   <string name="assistant_page_chat_model_desc">Set the default chat model for the assistant. If not set, the global default chat model will be used</string>
   <string name="assistant_page_clone">Clone</string>
   <string name="assistant_page_confirm">Confirm</string>
-  <string name="assistant_page_context_message_count">Context Message Size: %d</string>
-  <string name="assistant_page_context_message_desc">Controls how many historical messages will be sent to the model as context. Messages exceeding this number will be ignored, only the most recent N messages will be retained, which can save tokens</string>
-  <string name="assistant_page_context_message_size">Context Message Size</string>
-  <string name="assistant_page_context_message_unlimited">Unlimited context messages</string>
+  <string name="assistant_page_context_message_limit_count">Context message limit: %d</string>
+  <string name="assistant_page_context_message_limit_desc">Caps how many recent messages are sent to the model. When the limit is exceeded, the context is trimmed down to about half in one step instead of dropping one message per turn, so the request prefix stays stable and prompt caching keeps working for many turns.</string>
+  <string name="assistant_page_context_message_limit">Context Message Limit</string>
+  <string name="assistant_page_context_message_limit_unlimited">Unlimited context messages</string>
   <string name="assistant_page_creative">Creative</string>
   <string name="assistant_page_current_assistant">Current Assistant</string>
   <string name="assistant_page_custom_bodies">Custom Body</string>
@@ -304,9 +304,6 @@
   <string name="chat_page_save">Save</string>
   <string name="chat_page_scroll_to_bottom">Scroll to bottom</string>
   <string name="chat_page_search_chats">Search Chats</string>
-  <string name="roleplay_title">Roleplay</string>
-  <string name="roleplay_coming_soon">Coming Soon</string>
-  <string name="roleplay_coming_soon_desc">Multi-character group chat is being built. Manage character groups and chat with multiple AI characters at once.</string>
   <string name="group_page_create">Create Group</string>
   <string name="group_page_rename">Rename Group</string>
   <string name="group_page_delete">Delete Group</string>
@@ -501,8 +498,6 @@
   <string name="placeholder_battery_level">Battery Level</string>
   <string name="placeholder_char">Assistant Name</string>
   <string name="placeholder_current_date">Date</string>
-  <string name="placeholder_current_datetime">Date and Time</string>
-  <string name="placeholder_current_time">Time</string>
   <string name="placeholder_device_info">Device Info</string>
   <string name="placeholder_locale">Locale</string>
   <string name="placeholder_model_id">Model ID</string>
@@ -1618,7 +1613,7 @@
   <string name="setting_browser_per_tool_timeout_desc">Hard time budget for each browser tool call. Range 10 s to 10 min.</string>
   <string name="setting_browser_per_tool_timeout_unit">seconds</string>
   <string name="setting_browser_single_task_timeout">Single-task timeout</string>
-  <string name="setting_browser_single_task_timeout_desc">Hard cap on one AI-driven browser task to bound runaway loops. Range 1 min to 60 min.</string>
+  <string name="setting_browser_single_task_timeout_desc">Hard cap on one AI-driven browser task to bound runaway loops. Range 1 min to 240 min.</string>
   <string name="setting_browser_single_task_timeout_unit">minutes</string>
   <string name="setting_page_termux">Termux</string>
   <string name="setting_page_termux_desc">Shell commands, timeouts, and Termux integration.</string>
@@ -1941,7 +1936,7 @@
   <string name="codex_response_failed">The Codex response failed.</string>
   <string name="codex_monthly_limit">Monthly limit</string>
   <string name="codex_oauth_ports_unavailable">Codex sign-in cannot start because the local callback ports are in use. Close the app using them and try again.</string>
-  <string name="assistant_page_context_message_truncation_warning">Limiting context may cause frequent context truncation and prevent prompt caching</string>
+  <string name="assistant_page_context_message_limit_warning">Any non-zero limit invalidates the prompt cache each time the context is trimmed. A larger limit trims less often; 0 never trims and keeps the cache fully intact.</string>
   <string name="chat_message_tool_recent_chats">View recent chats</string>
   <string name="chat_message_tool_conversation_search">Search history: %1$s</string>
   <string name="assistant_page_local_tools_screen_time_title">Screen Time</string>
@@ -1966,34 +1961,6 @@
   <string name="chat_page_delete_folder_generating">Some conversations in this folder are still generating. Please stop them before deleting.</string>
 
     <!-- Multi-Key Management -->
-    <string name="multi_key_title">Key Management</string>
-    <string name="multi_key_total">Total</string>
-    <string name="multi_key_normal">Normal</string>
-    <string name="multi_key_error">Error</string>
-    <string name="multi_key_empty">No keys yet, tap + to add</string>
-    <string name="multi_key_import">Import from existing keys (%d)</string>
-    <string name="multi_key_add">Add API Key</string>
-    <string name="multi_key_add_hint">One key per line, supports spaces/newlines/commas</string>
-    <string name="multi_key_edit">Edit Key</string>
-    <string name="multi_key_alias">Alias (optional)</string>
-    <string name="multi_key_alias_placeholder">e.g. Primary Key</string>
-    <string name="multi_key_deleted">Deleted %s</string>
-    <string name="multi_key_deleted_errors">Deleted %d error keys</string>
-    <string name="multi_key_imported">Added %d keys</string>
-    <string name="multi_key_undo">Undo</string>
-    <string name="multi_key_status_active">Normal</string>
-    <string name="multi_key_status_disabled">Disabled</string>
-    <string name="multi_key_status_error">Error</string>
-    <string name="multi_key_status_rate_limited">Rate Limited</string>
-    <string name="multi_key_status_exhausted">Exhausted</string>
-    <string name="multi_key_delete_errors">Delete errors</string>
-    <string name="multi_key_delete">Delete</string>
-    <string name="multi_key_edit_btn">Edit</string>
-    <string name="multi_key_save">Save</string>
-    <string name="multi_key_restored">Restored</string>
-    <string name="multi_key_test">Test</string>
-    <string name="multi_key_manage">Manage Keys</string>
-    <string name="multi_key_summary">%d active / %d total</string>
     
 
     <!-- SSH & Multi-Key Page -->
@@ -2008,7 +1975,6 @@
     <string name="setting_ssh_edit">Edit SSH Host</string>
     <string name="setting_ssh_test">Test Connection</string>
     <string name="setting_ssh_testing">Testing connection…</string>
-    <string name="setting_ssh_search">Search hosts</string>
     <string name="setting_ssh_copy_info">Copy Info</string>
     <string name="setting_ssh_field_name">Name</string>
     <string name="setting_ssh_field_host">Host</string>
@@ -2029,7 +1995,6 @@
     <string name="setting_ssh_test_fail">Failed</string>
     <string name="setting_ssh_save">Save</string>
     <string name="setting_ssh_validation_required">%s is required</string>
-    <string name="setting_provider_page_keys">Keys</string>
   <string name="setting_provider_page_api_keys">API Keys</string>
   <string name="setting_provider_page_key_strategy">Load Balancing</string>
     <string name="setting_provider_page_strategy_round_robin">Round Robin</string>
@@ -2039,9 +2004,7 @@
     <string name="setting_provider_page_priority_label">Priority (1-10)</string>
   <string name="setting_provider_page_add_key">Add Key</string>
   <string name="setting_provider_page_paste_from_clipboard">Paste from Clipboard</string>
-  <string name="setting_provider_page_legacy_key_migrate">Legacy key available, click to migrate to structured management</string>
   <string name="setting_provider_page_keys_enabled">keys enabled</string>
-  <string name="setting_provider_page_no_api_keys">No API keys configured</string>
   <string name="setting_provider_page_edit_alias">Edit Alias</string>
   <string name="setting_provider_page_import_keys">Import Keys</string>
   <string name="setting_provider_page_import_keys_hint">Paste keys from clipboard, one per line or comma-separated</string>

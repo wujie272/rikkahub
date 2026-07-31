@@ -368,20 +368,20 @@ internal fun AssistantBasicContent(
             FormItem(
                 modifier = Modifier.padding(8.dp),
                 label = {
-                    Text(stringResource(R.string.assistant_page_context_message_size))
+                    Text(stringResource(R.string.assistant_page_context_message_limit))
                 },
                 description = {
                     Text(
-                        text = stringResource(R.string.assistant_page_context_message_desc),
+                        text = stringResource(R.string.assistant_page_context_message_limit_desc),
                     )
                 }
             ) {
                 Slider(
-                    value = assistant.contextMessageSize.toFloat(),
-                    onValueChange = {
+                    value = assistant.contextMessageLimit.toFloat(),
+                    onValueChange = { value ->
                         onUpdate(
                             assistant.copy(
-                                contextMessageSize = it.roundToInt()
+                                contextMessageLimit = snapContextMessageLimit(value)
                             )
                         )
                     },
@@ -391,17 +391,17 @@ internal fun AssistantBasicContent(
                 )
 
                 Text(
-                    text = if (assistant.contextMessageSize > 0) stringResource(
-                        R.string.assistant_page_context_message_count,
-                        assistant.contextMessageSize
-                    ) else stringResource(R.string.assistant_page_context_message_unlimited),
+                    text = if (assistant.contextMessageLimit > 0) stringResource(
+                        R.string.assistant_page_context_message_limit_count,
+                        assistant.contextMessageLimit
+                    ) else stringResource(R.string.assistant_page_context_message_limit_unlimited),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.75f),
                 )
 
-                if (assistant.contextMessageSize > 0) {
+                if (assistant.contextMessageLimit > 0) {
                     Text(
-                        text = stringResource(R.string.assistant_page_context_message_truncation_warning),
+                        text = stringResource(R.string.assistant_page_context_message_limit_warning),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.error,
                     )
@@ -579,5 +579,17 @@ internal fun AssistantBasicContent(
                 }
             }
         }
+    }
+}
+
+/**
+ * 将 slider 的浮点值拍平成合理的上下文消息条数限制值
+ * 0~20 → 原值取整; 20~512 → 按 5 的倍数取整
+ */
+private fun snapContextMessageLimit(value: Float): Int {
+    return when {
+        value <= 0f -> 0
+        value <= 20f -> value.roundToInt()
+        else -> (value.roundToInt() / 5) * 5
     }
 }
