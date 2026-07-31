@@ -5,7 +5,7 @@ import me.rerere.hugeicons.stroke.Package01
 import me.rerere.hugeicons.stroke.Connect
 import me.rerere.hugeicons.stroke.ArrowDown01
 import me.rerere.hugeicons.stroke.Add01
-import me.rerere.hugeicons.stroke.CheckmarkCircle01
+
 import me.rerere.hugeicons.stroke.Refresh03
 import me.rerere.hugeicons.stroke.Tools
 import me.rerere.hugeicons.stroke.Share01
@@ -14,7 +14,7 @@ import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.Cloud
 import me.rerere.hugeicons.stroke.Copy01
 import me.rerere.hugeicons.stroke.Edit01
-import me.rerere.hugeicons.stroke.CheckmarkCircle01
+
 import me.rerere.hugeicons.stroke.View
 import me.rerere.hugeicons.stroke.ViewOff
 import androidx.compose.foundation.clickable
@@ -119,6 +119,7 @@ import me.rerere.ai.provider.ProviderManager
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.util.KeyState
+import me.rerere.ai.util.KeyRoulette
 import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
@@ -151,8 +152,8 @@ import me.rerere.ai.provider.ProviderApiKey
 import me.rerere.ai.provider.ProviderKeyStrategy
 import me.rerere.ai.provider.syncEnabledApiKeysToLegacyField
 import me.rerere.rikkahub.ui.theme.CustomColors
-import me.rerere.rikkahub.ui.theme.extendColors
-import me.rerere.rikkahub.utils.UiState
+
+
 import me.rerere.rikkahub.utils.readClipboardText
 import me.rerere.rikkahub.utils.plus
 import org.koin.androidx.compose.koinViewModel
@@ -469,17 +470,16 @@ private fun KeyManagementSheet(
 
     // 单 key 测试状态
     var testingKeyId by remember { mutableStateOf<String?>(null) }
-    var testResults by remember { mutableStateOf<Map<String, UiState<String>>>(emptyMap()) }
+    val toaster = LocalToaster.current
 
     // 单 key 测试逻辑
     fun runSingleKeyTest(apiKey: ProviderApiKey) {
         if (testingKeyId != null) return
         testingKeyId = apiKey.id
-        testResults = testResults + (apiKey.id to UiState.Loading as UiState<String>)
         sheetScope.launch {
             val testModel = provider.models.firstOrNull { it.type == ModelType.CHAT }
             if (testModel == null) {
-                testResults = testResults + (apiKey.id to UiState.Error(Exception("No chat model for testing")) as UiState<String>)
+                toaster.show("No chat model for testing", type = ToastType.Error)
                 testingKeyId = null
                 return@launch
             }
@@ -514,16 +514,24 @@ private fun KeyManagementSheet(
                 val text = chunk.choices.firstOrNull()?.message?.parts
                     ?.filterIsInstance<UIMessagePart.Text>()
                     ?.joinToString("") { it.text } ?: ""
-                testResults = testResults + (apiKey.id to UiState.Success(text.ifBlank { "✓" }) as UiState<String>)
+                toaster.show("✅ ${text.ifBlank { "✓" }.take(60)}", type = ToastType.Success)
             }.onFailure { e ->
-                testResults = testResults + (apiKey.id to UiState.Error(e) as UiState<String>)
+                toaster.show("❌ ${(e.message ?: "Error").take(60)}", type = ToastType.Error)
             }
             testingKeyId = null
         }
     }
 
-    // 冷却状态已移除（LRU 机制已删除）
-    val keyStateMap = remember { emptyMap<String, KeyState>() }
+    val keyRoulette = remember { KeyRoulette.tracked(sheetContext) }
+    var keyStateMap by remember { mutableStateOf(keyRoulette.getKeyStates(provider.id.toString()).associateBy { it.key }) }
+
+    // 每 3 秒刷新 Key 状态（冷却倒计时、统计信息）
+    LaunchedEffect(provider.id) {
+        while (true) {
+            delay(3000)
+            keyStateMap = keyRoulette.getKeyStates(provider.id.toString()).associateBy { it.key }
+        }
+    }
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
@@ -540,14 +548,44 @@ private fun KeyManagementSheet(
                 .imePadding(),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            // 标题
+            // 标题：Key 启用数量
+            val enabledCount = internalApiKeys.count { it.enabled }
             Text(
-                text = stringResource(R.string.setting_provider_page_api_keys),
+                text = "$enabledCount / ${internalApiKeys.size} 个 Key",
                 style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             )
-
             // 策略选择器
-            // 冷却时间配置（Kelivo 风格：对所有策略生效）
+            Text(
+                text = stringResource(R.string.setting_provider_page_key_strategy),
+                style = MaterialTheme.typography.titleSmall,
+            )
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                ProviderKeyStrategy.entries.forEachIndexed { index, strategy ->
+                    SegmentedButton(
+                        shape = SegmentedButtonDefaults.itemShape(index, ProviderKeyStrategy.entries.size),
+                        selected = internalStrategy == strategy,
+                        onClick = { internalStrategy = strategy },
+                        label = {
+                            Text(
+                                stringResource(
+                                    when (strategy) {
+                                        ProviderKeyStrategy.ROUND_ROBIN -> R.string.setting_provider_page_strategy_round_robin
+                                        ProviderKeyStrategy.PRIORITY -> R.string.setting_provider_page_strategy_priority
+                                        ProviderKeyStrategy.LEAST_USED -> R.string.setting_provider_page_strategy_least_used
+                                        ProviderKeyStrategy.RANDOM -> R.string.setting_provider_page_strategy_random
+                                    }
+                                )
+                            )
+                        }
+                    )
+                }
+            }
+
+            // 冷却时间配置
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -591,128 +629,92 @@ private fun KeyManagementSheet(
                     )
                 }
             }
-            Text(
-                text = stringResource(R.string.setting_provider_page_key_strategy),
-                style = MaterialTheme.typography.titleSmall,
-            )
-            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                ProviderKeyStrategy.entries.forEachIndexed { index, strategy ->
-                    SegmentedButton(
-                        shape = SegmentedButtonDefaults.itemShape(index, ProviderKeyStrategy.entries.size),
-                        selected = internalStrategy == strategy,
-                        onClick = { internalStrategy = strategy },
-                        label = {
-                            Text(
-                                stringResource(
-                                    when (strategy) {
-                                        ProviderKeyStrategy.ROUND_ROBIN -> R.string.setting_provider_page_strategy_round_robin
-                                        ProviderKeyStrategy.PRIORITY -> R.string.setting_provider_page_strategy_priority
-                                        ProviderKeyStrategy.LEAST_USED -> R.string.setting_provider_page_strategy_least_used
-                                        ProviderKeyStrategy.RANDOM -> R.string.setting_provider_page_strategy_random
-                                    }
-                                )
-                            )
+
+            HorizontalDivider()
+
+            // 添加 Key 和从剪贴板导入（固定顶部，不随列表滚动）
+            var showImportDialog by remember { mutableStateOf(false) }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedCard(
+                    modifier = Modifier.weight(1f),
+                    onClick = { showAddDialog = true }
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(HugeIcons.Add01, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(R.string.setting_provider_page_add_key), style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+
+                OutlinedCard(
+                    modifier = Modifier.weight(1f),
+                    onClick = {
+                        val clipText = sheetContext.readClipboardText()
+                        if (clipText.isNotBlank()) {
+                            importText = clipText
+                            showImportDialog = true
                         }
-                    )
+                    }
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(HugeIcons.Copy01, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(R.string.setting_provider_page_paste_from_clipboard), style = MaterialTheme.typography.bodyMedium)
+                    }
                 }
             }
 
-            // 启用数量统计
-            val enabledCount = internalApiKeys.count { it.enabled }
-            Text(
-                text = "$enabledCount / ${internalApiKeys.size} 个 Key 已启用",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-
-            HorizontalDivider()
+            if (showImportDialog && importText != null) {
+                ImportKeysDialog(
+                    initialText = importText!!,
+                    onDismissRequest = {
+                        showImportDialog = false
+                        importText = null
+                    },
+                    onImport = { raw ->
+                        val existingValues = internalApiKeys.map { it.key }.toSet()
+                        val newKeys = raw.split("\n", ",")
+                            .map { it.trim() }
+                            .filter { it.isNotBlank() && it !in existingValues }
+                            .map { ProviderApiKey(key = it) }
+                        internalApiKeys = (internalApiKeys + newKeys).toMutableList()
+                        showImportDialog = false
+                        importText = null
+                    }
+                )
+            }
 
             // Key 列表
             LazyColumn(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                // 添加 Key 和从剪贴板导入（横向排列，固定在顶部）
-                item {
-                    var showImportDialog by remember { mutableStateOf(false) }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        OutlinedCard(
-                            modifier = Modifier.weight(1f),
-                            onClick = { showAddDialog = true }
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(12.dp),
-                                horizontalArrangement = Arrangement.Center,
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Icon(HugeIcons.Add01, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(Modifier.width(8.dp))
-                                Text(stringResource(R.string.setting_provider_page_add_key), style = MaterialTheme.typography.bodyMedium)
-                            }
-                        }
-
-                        OutlinedCard(
-                            modifier = Modifier.weight(1f),
-                            onClick = {
-                                val clipText = sheetContext.readClipboardText()
-                                if (clipText.isNotBlank()) {
-                                    importText = clipText
-                                    showImportDialog = true
-                                }
-                            }
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(12.dp),
-                                horizontalArrangement = Arrangement.Center,
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Icon(HugeIcons.Copy01, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(Modifier.width(8.dp))
-                                Text(stringResource(R.string.setting_provider_page_paste_from_clipboard), style = MaterialTheme.typography.bodyMedium)
-                            }
-                        }
-                    }
-
-                    if (showImportDialog && importText != null) {
-                        ImportKeysDialog(
-                            initialText = importText!!,
-                            onDismissRequest = {
-                                showImportDialog = false
-                                importText = null
-                            },
-                            onImport = { raw ->
-                                val existingValues = internalApiKeys.map { it.key }.toSet()
-                                val newKeys = raw.split("\n", ",")
-                                    .map { it.trim() }
-                                    .filter { it.isNotBlank() && it !in existingValues }
-                                    .map { ProviderApiKey(key = it) }
-                                internalApiKeys = (internalApiKeys + newKeys).toMutableList()
-                                showImportDialog = false
-                                importText = null
-                            }
-                        )
-                    }
-                }
-
                 items(internalApiKeys, key = { it.id }) { apiKey ->
                     val state = keyStateMap[apiKey.key]
                     KeySheetCard(
                         apiKey = apiKey,
                         state = state,
                         isTesting = testingKeyId == apiKey.id,
-                        testState = testResults[apiKey.id],
                         onToggleEnabled = {
                             internalApiKeys = internalApiKeys.map { k ->
                                 if (k.id == apiKey.id) k.copy(enabled = !k.enabled) else k
                             }.toMutableList()
-                            // setKeyEnabled 已移除（LRU 机制已删除）
+                            keyRoulette.setKeyEnabled(apiKey.key, provider.id.toString(), !apiKey.enabled)
                         },
                         onEditAlias = {
                             editingAliasKey = apiKey
@@ -720,9 +722,8 @@ private fun KeyManagementSheet(
                         },
                         onDelete = {
                             internalApiKeys = internalApiKeys.filter { it.id != apiKey.id }.toMutableList()
-                            testResults = testResults - apiKey.id
                         },
-                        onThaw = { /* thawKey 已移除（LRU 机制已删除） */ },
+                        onThaw = { keyRoulette.thawKey(apiKey.key, provider.id.toString()) },
                         onTest = { runSingleKeyTest(apiKey) },
                     )
                 }
@@ -913,7 +914,6 @@ private fun KeySheetCard(
     apiKey: ProviderApiKey,
     state: KeyState?,
     isTesting: Boolean = false,
-    testState: UiState<String>? = null,
     onToggleEnabled: () -> Unit,
     onEditAlias: () -> Unit,
     onDelete: () -> Unit,
@@ -938,13 +938,17 @@ private fun KeySheetCard(
                 .padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            // 第一行：别名/脱敏 Key + 状态标签
+            // 第一行：别名（可选）+ 脱敏 Key + 状态标签
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    modifier = Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     if (apiKey.alias.isNotBlank()) {
                         Text(
                             text = apiKey.alias,
@@ -979,19 +983,19 @@ private fun KeySheetCard(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    IconButton(onClick = onEditAlias, modifier = Modifier.size(32.dp)) {
-                        Icon(HugeIcons.Edit01, contentDescription = stringResource(R.string.setting_provider_page_edit_alias), modifier = Modifier.size(16.dp))
+                    IconButton(onClick = onEditAlias, modifier = Modifier.size(28.dp)) {
+                        Icon(HugeIcons.Edit01, contentDescription = stringResource(R.string.setting_provider_page_edit_alias), modifier = Modifier.size(14.dp))
                     }
-                    IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
-                        Icon(HugeIcons.Delete01, contentDescription = stringResource(R.string.delete), modifier = Modifier.size(16.dp))
+                    IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
+                        Icon(HugeIcons.Delete01, contentDescription = stringResource(R.string.delete), modifier = Modifier.size(14.dp))
                     }
                     // 单 key 测试按钮
                     if (onTest != null && apiKey.enabled) {
                         if (isTesting) {
-                            LinearWavyProgressIndicator(modifier = Modifier.size(24.dp))
+                            LinearWavyProgressIndicator(modifier = Modifier.size(20.dp))
                         } else {
-                            IconButton(onClick = onTest, modifier = Modifier.size(32.dp), enabled = !isTesting) {
-                                Icon(HugeIcons.Connect, contentDescription = stringResource(R.string.setting_provider_page_test_connection), modifier = Modifier.size(16.dp))
+                            IconButton(onClick = onTest, modifier = Modifier.size(28.dp), enabled = !isTesting) {
+                                Icon(HugeIcons.Connect, contentDescription = stringResource(R.string.setting_provider_page_test_connection), modifier = Modifier.size(14.dp))
                             }
                         }
                     }
@@ -1001,17 +1005,13 @@ private fun KeySheetCard(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(
-                        text = stringResource(R.string.setting_provider_page_enabled),
-                        style = MaterialTheme.typography.labelSmall,
-                    )
                     Switch(
                         checked = apiKey.enabled,
                         onCheckedChange = { onToggleEnabled() },
-                        modifier = Modifier.height(24.dp),
+                        modifier = Modifier.height(20.dp),
                     )
                     if (isCooling) {
-                        TextButton(onClick = onThaw, modifier = Modifier.height(32.dp)) {
+                        TextButton(onClick = onThaw, modifier = Modifier.height(28.dp), contentPadding = PaddingValues(horizontal = 4.dp)) {
                             Text(stringResource(R.string.setting_provider_page_thaw), style = MaterialTheme.typography.labelSmall)
                         }
                     }
@@ -1028,37 +1028,6 @@ private fun KeySheetCard(
                     color = MaterialTheme.colorScheme.error,
                     trackColor = MaterialTheme.colorScheme.errorContainer,
                 )
-            }
-
-            // 测试结果展示
-            if (testState != null && !isTesting) {
-                when (val ts = testState) {
-                    is UiState.Success -> {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Icon(HugeIcons.CheckmarkCircle01, contentDescription = null, modifier = Modifier.size(14.dp), tint = MaterialTheme.extendColors.green6)
-                            Text(
-                                text = ts.data.take(80),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.extendColors.green6,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                    }
-                    is UiState.Error -> {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Icon(HugeIcons.Cancel01, contentDescription = null, modifier = Modifier.size(14.dp), tint = MaterialTheme.extendColors.red6)
-                            Text(
-                                text = (ts.error.message ?: "Error").take(80),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.extendColors.red6,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                    }
-                    else -> {}
-                }
             }
 
             // 统计（仅非冷却时显示）

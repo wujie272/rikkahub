@@ -1432,17 +1432,11 @@ private fun MultiKeySection(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Icon(HugeIcons.Key01, null, tint = MaterialTheme.colorScheme.primary)
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text(
-                            text = stringResource(R.string.setting_provider_page_api_keys),
-                            style = MaterialTheme.typography.titleSmall,
-                        )
-                        Text(
-                            text = "$enabledCount / $totalCount ${stringResource(R.string.setting_provider_page_keys_enabled)} · ${provider.keyStrategy.name}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
+                    Text(
+                        text = "$enabledCount / $totalCount ${stringResource(R.string.setting_provider_page_keys_enabled)} · ${provider.keyStrategy.name}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
                 Icon(HugeIcons.ArrowRight01, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
