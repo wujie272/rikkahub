@@ -19,6 +19,8 @@ import me.rerere.search.SearchResult.SearchResultItem
 import me.rerere.search.SearchService.Companion.httpClient
 import me.rerere.search.SearchService.Companion.json
 import me.rerere.search.SearchService.Companion.keyRoulette
+
+import me.rerere.search.SearchService.Companion.retryWithKeyRotation
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 
@@ -68,30 +70,29 @@ object LinkUpService : SearchService<SearchServiceOptions.LinkUpOptions> {
     ): Result<SearchResult> = withContext(Dispatchers.IO) {
         runCatching {
             val query = params["query"]?.jsonPrimitive?.content ?: error("query is required")
-            val body = buildJsonObject {
-                put("q", JsonPrimitive(query))
-                put("depth", JsonPrimitive(serviceOptions.depth))
-                put("outputType", JsonPrimitive("sourcedAnswer"))
-                put("includeImages", JsonPrimitive("false"))
-            }
-            val apiKey = keyRoulette.next(serviceOptions.apiKey, serviceOptions.id.toString())
-
-            val request = Request.Builder()
-                .url("https://api.linkup.so/v1/search")
-                .post(body.toString().toRequestBody())
-                .addHeader("Authorization", "Bearer $apiKey")
-                .addHeader("Content-Type", "application/json")
-                .build()
-
-            Log.i(TAG, "search: $query")
-
-            val response = httpClient.newCall(request).await()
-            if (response.isSuccessful) {
-                val responseBody = response.body.string().let {
-                    json.decodeFromString<LinkUpSearchResponse>(it)
+            val result = retryWithKeyRotation(serviceOptions.apiKey, serviceOptions.id.toString()) { key ->
+                val body = buildJsonObject {
+                    put("q", JsonPrimitive(query))
+                    put("depth", JsonPrimitive(serviceOptions.depth))
+                    put("outputType", JsonPrimitive("sourcedAnswer"))
+                    put("includeImages", JsonPrimitive("false"))
                 }
+                val request = Request.Builder()
+                    .url("https://api.linkup.so/v1/search")
+                    .post(body.toString().toRequestBody())
+                    .addHeader("Authorization", "Bearer $key")
+                    .addHeader("Content-Type", "application/json")
+                    .build()
 
-                return@withContext Result.success(
+                Log.i(TAG, "search: $query")
+
+                val response = httpClient.newCall(request).await()
+                if (response.isSuccessful) {
+                    val responseBody = response.body.string().let {
+                        json.decodeFromString<LinkUpSearchResponse>(it)
+                    }
+
+                    keyRoulette.reportSuccess(key, serviceOptions.id.toString())
                     SearchResult(
                         answer = responseBody.answer,
                         items = responseBody.sources.take(commonOptions.resultSize).map {
@@ -102,10 +103,11 @@ object LinkUpService : SearchService<SearchServiceOptions.LinkUpOptions> {
                             )
                         }
                     )
-                )
-            } else {
-                error("response failed #${response.code}: ${response.body.string()}")
+                } else {
+                    error("response failed #${response.code}: ${response.body.string()}")
+                }
             }
+            return@withContext Result.success(result)
         }
     }
 
@@ -116,28 +118,27 @@ object LinkUpService : SearchService<SearchServiceOptions.LinkUpOptions> {
     ): Result<ScrapedResult> = withContext(Dispatchers.IO) {
         runCatching {
             val url = params["url"]?.jsonPrimitive?.content ?: error("url is required")
-            val body = buildJsonObject {
-                put("url", JsonPrimitive(url))
-                put("includeRawHtml", JsonPrimitive(false))
-                put("renderJs", JsonPrimitive(false))
-                put("extractImages", JsonPrimitive(false))
-            }
-            val apiKey = keyRoulette.next(serviceOptions.apiKey, serviceOptions.id.toString())
-
-            val request = Request.Builder()
-                .url("https://api.linkup.so/v1/fetch")
-                .post(body.toString().toRequestBody())
-                .addHeader("Authorization", "Bearer $apiKey")
-                .addHeader("Content-Type", "application/json")
-                .build()
-
-            val response = httpClient.newCall(request).await()
-            if (response.isSuccessful) {
-                val responseBody = response.body.string().let {
-                    json.decodeFromString<LinkUpFetchResponse>(it)
+            val result = retryWithKeyRotation(serviceOptions.apiKey, serviceOptions.id.toString()) { key ->
+                val body = buildJsonObject {
+                    put("url", JsonPrimitive(url))
+                    put("includeRawHtml", JsonPrimitive(false))
+                    put("renderJs", JsonPrimitive(false))
+                    put("extractImages", JsonPrimitive(false))
                 }
+                val request = Request.Builder()
+                    .url("https://api.linkup.so/v1/fetch")
+                    .post(body.toString().toRequestBody())
+                    .addHeader("Authorization", "Bearer $key")
+                    .addHeader("Content-Type", "application/json")
+                    .build()
 
-                return@withContext Result.success(
+                val response = httpClient.newCall(request).await()
+                if (response.isSuccessful) {
+                    val responseBody = response.body.string().let {
+                        json.decodeFromString<LinkUpFetchResponse>(it)
+                    }
+
+                    keyRoulette.reportSuccess(key, serviceOptions.id.toString())
                     ScrapedResult(
                         urls = listOf(
                             ScrapedResultUrl(
@@ -146,10 +147,11 @@ object LinkUpService : SearchService<SearchServiceOptions.LinkUpOptions> {
                             )
                         )
                     )
-                )
-            } else {
-                error("response failed #${response.code}: ${response.body.string()}")
+                } else {
+                    error("response failed #${response.code}: ${response.body.string()}")
+                }
             }
+            return@withContext Result.success(result)
         }
     }
 

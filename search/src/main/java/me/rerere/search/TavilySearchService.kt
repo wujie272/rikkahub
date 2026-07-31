@@ -22,6 +22,8 @@ import me.rerere.search.SearchResult.SearchResultItem
 import me.rerere.search.SearchService.Companion.httpClient
 import me.rerere.search.SearchService.Companion.json
 import me.rerere.search.SearchService.Companion.keyRoulette
+
+import me.rerere.search.SearchService.Companion.retryWithKeyRotation
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 
@@ -87,42 +89,42 @@ object TavilySearchService : SearchService<SearchServiceOptions.TavilyOptions> {
                 error("topic must be one of `general`, `news`, `finance`")
             }
 
-            val body = buildJsonObject {
-                put("query", query)
-                put("max_results", commonOptions.resultSize)
-                put("search_depth", serviceOptions.depth.ifEmpty { "advanced" })
-                put("topic", topic)
-                put("include_answer", "advanced")
-                put("include_images", true)
-            }
-            val apiKey = keyRoulette.next(serviceOptions.apiKey, serviceOptions.id.toString())
-
-            val request = Request.Builder()
-                .url("https://api.tavily.com/search")
-                .post(body.toString().toRequestBody())
-                .addHeader("Authorization", "Bearer $apiKey")
-                .build()
-            val response = httpClient.newCall(request).await()
-            if (response.isSuccessful) {
-                val response = response.body.string().let {
-                    json.decodeFromString<SearchResponse>(it)
+            val result = retryWithKeyRotation(serviceOptions.apiKey, serviceOptions.id.toString()) { key ->
+                val body = buildJsonObject {
+                    put("query", query)
+                    put("max_results", commonOptions.resultSize)
+                    put("search_depth", serviceOptions.depth.ifEmpty { "advanced" })
+                    put("topic", topic)
+                    put("include_answer", "advanced")
+                    put("include_images", true)
                 }
-
-                return@withContext Result.success(
+                val request = Request.Builder()
+                    .url("https://api.tavily.com/search")
+                    .post(body.toString().toRequestBody())
+                    .addHeader("Authorization", "Bearer $key")
+                    .build()
+                val response = httpClient.newCall(request).await()
+                if (response.isSuccessful) {
+                    val responseData = response.body.string().let {
+                        json.decodeFromString<SearchResponse>(it)
+                    }
+                    keyRoulette.reportSuccess(key, serviceOptions.id.toString())
                     SearchResult(
-                        answer = response.answer,
-                        items = response.results.map {
+                        answer = responseData.answer,
+                        items = responseData.results.map {
                             SearchResultItem(
                                 title = it.title,
                                 url = it.url,
                                 text = it.content
                             )
                         },
-                        images = response.images,
-                    ))
-            } else {
-                error("response failed #${response.code}")
+                        images = responseData.images,
+                    )
+                } else {
+                    error("response failed #${response.code}")
+                }
             }
+            return@withContext Result.success(result)
         }
     }
 
@@ -138,30 +140,31 @@ object TavilySearchService : SearchService<SearchServiceOptions.TavilyOptions> {
                     add(url)
                 })
             }
-            val apiKey = keyRoulette.next(serviceOptions.apiKey, serviceOptions.id.toString())
-            val request = Request.Builder()
-                .url("https://api.tavily.com/extract")
-                .post(body.toString().toRequestBody())
-                .addHeader("Authorization", "Bearer $apiKey")
-                .build()
-            val response = httpClient.newCall(request).await()
-            if (response.isSuccessful) {
-                val response = response.body.string().let {
-                    json.decodeFromString<ScrapeResponse>(it)
-                }
-                return@withContext Result.success(
+            val result = retryWithKeyRotation(serviceOptions.apiKey, serviceOptions.id.toString()) { key ->
+                val request = Request.Builder()
+                    .url("https://api.tavily.com/extract")
+                    .post(body.toString().toRequestBody())
+                    .addHeader("Authorization", "Bearer $key")
+                    .build()
+                val response = httpClient.newCall(request).await()
+                if (response.isSuccessful) {
+                    val responseData = response.body.string().let {
+                        json.decodeFromString<ScrapeResponse>(it)
+                    }
+                    keyRoulette.reportSuccess(key, serviceOptions.id.toString())
                     ScrapedResult(
-                        urls = response.results.map {
+                        urls = responseData.results.map {
                             ScrapedResultUrl(
                                 url = it.url,
                                 content = it.rawContent,
                             )
                         }
                     )
-                )
-            } else {
-                error("response failed #${response.code}")
+                } else {
+                    error("response failed #${response.code}")
+                }
             }
+            return@withContext Result.success(result)
         }
     }
 

@@ -83,6 +83,38 @@ interface SearchService<T : SearchServiceOptions> {
             keyRoulette = if (context != null) KeyRoulette.tracked(context) else KeyRoulette.default()
         }
 
+        /**
+         * 自动重试：key 失败后换下一个 key 重试，最多 [maxRetries] 次
+         *
+         * 使用方式：在 runCatching 内调用，block 内抛出异常时自动 reportFailure 并换 key
+         * block 成功时需自行调用 keyRoulette.reportSuccess
+         *
+         * @param keys 多个 key 的字符串（空格/换行/逗号分隔）
+         * @param providerId 用于 key 状态追踪的 ID
+         * @param maxRetries 最大重试次数（包括第一次），默认 3
+         * @param cooldownMs 失败冷却时长基数，默认 60s
+         * @param block 执行请求的 lambda，成功返回 T，失败抛出异常
+         */
+        suspend fun <T> retryWithKeyRotation(
+            keys: String,
+            providerId: String,
+            maxRetries: Int = 3,
+            cooldownMs: Long = 60_000L,
+            block: suspend (key: String) -> T,
+        ): T {
+            var lastError: Throwable? = null
+            repeat(maxRetries) {
+                val key = keyRoulette.next(keys, providerId)
+                try {
+                    return block(key)
+                } catch (e: Throwable) {
+                    keyRoulette.reportFailure(key, providerId, cooldownMs)
+                    lastError = e
+                }
+            }
+            throw lastError ?: Exception("All keys exhausted after $maxRetries retries")
+        }
+
         internal val json by lazy {
             Json {
                 ignoreUnknownKeys = true

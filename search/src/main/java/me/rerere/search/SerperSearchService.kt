@@ -17,6 +17,8 @@ import me.rerere.search.SearchResult.SearchResultItem
 import me.rerere.search.SearchService.Companion.httpClient
 import me.rerere.search.SearchService.Companion.json
 import me.rerere.search.SearchService.Companion.keyRoulette
+
+import me.rerere.search.SearchService.Companion.retryWithKeyRotation
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 
@@ -58,44 +60,44 @@ object SerperSearchService : SearchService<SearchServiceOptions.SerperOptions> {
         runCatching {
             val query = params["query"]?.jsonPrimitive?.content ?: error("query is required")
 
-            val body = buildJsonObject {
-                put("q", query)
-                put("num", commonOptions.resultSize)
-            }
-            val apiKey = keyRoulette.next(serviceOptions.apiKey, serviceOptions.id.toString())
-
-            val request = Request.Builder()
-                .url("https://google.serper.dev/search")
-                .post(body.toString().toRequestBody())
-                .addHeader("X-API-KEY", apiKey)
-                .addHeader("Content-Type", "application/json")
-                .build()
-
-            val response = httpClient.newCall(request).await()
-            if (response.isSuccessful) {
-                val responseBody = response.body.string()
-                val searchResponse = json.decodeFromString<SerperSearchResponse>(responseBody)
-
-                val answer = searchResponse.answerBox?.let { it.answer ?: it.snippet }
-                    ?: searchResponse.knowledgeGraph?.description
-
-                val items = searchResponse.organic.map { result ->
-                    SearchResultItem(
-                        title = result.title,
-                        url = result.link,
-                        text = result.snippet ?: ""
-                    )
+            val result = retryWithKeyRotation(serviceOptions.apiKey, serviceOptions.id.toString()) { key ->
+                val body = buildJsonObject {
+                    put("q", query)
+                    put("num", commonOptions.resultSize)
                 }
+                val request = Request.Builder()
+                    .url("https://google.serper.dev/search")
+                    .post(body.toString().toRequestBody())
+                    .addHeader("X-API-KEY", key)
+                    .addHeader("Content-Type", "application/json")
+                    .build()
 
-                return@withContext Result.success(
+                val response = httpClient.newCall(request).await()
+                if (response.isSuccessful) {
+                    val responseBody = response.body.string()
+                    val searchResponse = json.decodeFromString<SerperSearchResponse>(responseBody)
+
+                    val answer = searchResponse.answerBox?.let { it.answer ?: it.snippet }
+                        ?: searchResponse.knowledgeGraph?.description
+
+                    val items = searchResponse.organic.map { result ->
+                        SearchResultItem(
+                            title = result.title,
+                            url = result.link,
+                            text = result.snippet ?: ""
+                        )
+                    }
+
+                    keyRoulette.reportSuccess(key, serviceOptions.id.toString())
                     SearchResult(
                         answer = answer,
                         items = items
                     )
-                )
-            } else {
-                error("Serper search failed with code ${response.code}: ${response.message}")
+                } else {
+                    error("Serper search failed with code ${response.code}: ${response.message}")
+                }
             }
+            return@withContext Result.success(result)
         }
     }
 
