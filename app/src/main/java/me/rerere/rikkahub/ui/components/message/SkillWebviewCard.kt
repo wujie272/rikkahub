@@ -11,20 +11,26 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import me.rerere.rikkahub.R
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.ui.UIMessagePart
-import me.rerere.rikkahub.browser.BrowserActivity
+import me.rerere.rikkahub.R
+import me.rerere.rikkahub.browser.BrowserController
+import me.rerere.rikkahub.browser.BrowserControllerHandle
 
 /**
  * Pass 3 (Phase 18B-card): chat-side renderer for `UIMessagePart.Text` parts whose
@@ -102,12 +108,17 @@ internal fun SkillWebviewCardOrNull(
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                val scope = rememberCoroutineScope()
                 FilledTonalButton(onClick = {
-                    // Routes through the in-app browser so the persistent profile, tool
-                    // toggles, and HARDLINE all apply uniformly. Falls back to about:blank
-                    // if the URL was somehow lost between metadata write + render.
-                    runCatching {
-                        context.startActivity(BrowserActivity.intent(context, webview.url))
+                    // 在嵌入式浏览器预览中打开
+                    BrowserController.onShowEmbeddedRequest?.invoke()
+                    scope.launch {
+                        if (BrowserController.awaitBind(5_000L)) {
+                            BrowserControllerHandle.withController {
+                                withContext(Dispatchers.Main) { webView.loadUrl(webview.url) }
+                                buildJsonObject { }
+                            }
+                        }
                     }
                 }) {
                     Text(stringResource(R.string.skill_webview_card_open))

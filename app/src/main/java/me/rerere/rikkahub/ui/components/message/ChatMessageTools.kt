@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.ui.components.message
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -21,9 +22,9 @@ import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.SheetValue
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -76,6 +77,12 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
     loading: Boolean = false,
     onToolApproval: ((toolCallId: String, approved: Boolean, reason: String, scope: me.rerere.rikkahub.service.ChatService.ApprovalScope, toolName: String) -> Unit)? = null,
     onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
+    /** 同组工具块列表（用于详情页翻页） */
+    allToolBlocks: List<UIMessagePart.Tool>? = null,
+    /** 当前工具在列表中的索引 */
+    currentToolIndex: Int = 0,
+    /** 打开工具详情 Sheet 的回调 */
+    onOpenToolDetail: ((toolBlocks: List<UIMessagePart.Tool>, index: Int) -> Unit)? = null,
 ) {
     // ask_user 是交互式问答流程, 不走注册式渲染框架
     if (tool.toolName == ASK_USER_TOOL_NAME) {
@@ -328,7 +335,13 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
                                     contentDescription = null,
                                     modifier = Modifier
                                         .height(64.dp)
-                                        .wrapContentWidth(),
+                                        .wrapContentWidth()
+                                        .clickable {
+                                            onOpenToolDetail?.invoke(
+                                                allToolBlocks ?: listOf(tool),
+                                                currentToolIndex,
+                                            )
+                                        },
                                 )
                             }
                         }

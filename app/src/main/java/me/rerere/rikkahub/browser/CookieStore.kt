@@ -71,14 +71,14 @@ object CookieStore {
 
     /**
      * 删除某个域名的所有 Cookie（同时删除记录）。
-     * [CookieManager] 没有按域名删除的 API，所以只能全部删除然后重新添加。
-     * 但更实用的做法：如果要删除某个域名的 Cookie，用户应该使用"清除所有浏览数据"。
-     * 我们这里只删除记录，提示用户需要重新登录。
+     * 通过 [CookieManager.setCookie] 写入空字符串来清除该域名的所有 Cookie。
+     * 对标 OpenMinis: CookieManager.getInstance().setCookie(domain, "")
      */
     fun removeCookieForDomain(domain: String) {
         removeDomain(domain)
-        // CookieManager 不支持按域名删除，但用户可以通过清除所有数据来清理。
-        // 这里只删除我们的记录，避免用户误以为 Cookie 已被清理但实际未清理。
+        CookieManager.getInstance().setCookie("https://$domain", "")
+        CookieManager.getInstance().setCookie("http://$domain", "")
+        CookieManager.getInstance().flush()
     }
 
     private fun extractHost(url: String): String? {

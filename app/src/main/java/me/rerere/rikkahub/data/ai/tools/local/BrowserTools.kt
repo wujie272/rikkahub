@@ -26,19 +26,14 @@ import me.rerere.rikkahub.browser.BrowserController
 import me.rerere.rikkahub.browser.BrowserControllerHandle
 import me.rerere.rikkahub.browser.BrowserDiffHelper
 import me.rerere.rikkahub.browser.BrowserToolDefaults
-import me.rerere.rikkahub.browser.HeadlessBrowserSessionPool
 import me.rerere.rikkahub.browser.ReadabilityRunner.runReadability
 import me.rerere.rikkahub.browser.awaitReadyState
 import me.rerere.rikkahub.browser.evaluateJavascriptAsync
-import me.rerere.rikkahub.data.ai.tools.HeadlessConversations
-import me.rerere.rikkahub.data.ai.tools.ToolInvocationContext
 import java.io.File
 import java.io.FileOutputStream
-import kotlin.uuid.ExperimentalUuidApi
-import kotlin.uuid.Uuid
 
 /**
- * Pass 2 of the in-app Browser feature: 17 LLM-callable tool factories that drive the
+ * Pass 2 of the in-app Browser feature: LLM-callable tool factories that drive the
  * BrowserActivity's WebView through [BrowserControllerHandle.withController].
  *
  * Every tool wraps its dispatch in [withTimeoutOrNull] (30 s per the spec's "every tool
@@ -51,7 +46,7 @@ import kotlin.uuid.Uuid
  * user has explicitly disabled.
  */
 
-private const val MAX_SCREENSHOT_HEIGHT_PX = 8192
+private const val MAX_SCREENSHOT_HEIGHT_PX = 32768
 private const val SCREENSHOT_CACHE_SUBDIR = "browser-shots"
 
 /**
@@ -67,55 +62,44 @@ private const val EVAL_JS_MAX_RESULT_CHARS = 64 * 1024
  * [BrowserController.perToolTimeoutMs], which [me.rerere.rikkahub.browser.BrowserPreferences]
  * keeps in sync with the persisted value.
  */
-private val toolTimeoutMs: Long get() = BrowserController.perToolTimeoutMs
+internal val toolTimeoutMs: Long get() = BrowserController.perToolTimeoutMs
 
-/**
- * Pass 3: appended to every browser tool's description so the LLM knows that in headless
- * (Telegram / cron / sub-agent) mode, the act of taking a state-changing action will
- * automatically push a screenshot+caption to the calling chat. Without this cue, the
- * model would otherwise call `browser_screenshot` after every action — doubling vision
- * tokens and round-trips for no gain.
- */
-private const val TELEGRAM_HEADLESS_CUE =
-    " In Telegram / headless mode, screenshots stream to the calling chat after each state-changing action — call browser_done when you're confident the task is complete."
 
-/**
- * Decide whether the current invocation should run in headless mode. Resolution order:
- *  1. [ToolInvocationContext.callerConversationId] is the canonical source. Cron jobs,
- *     sub-agents, Telegram bot, external automation all set it.
- *  2. We try to parse it as a [Uuid]. The [HeadlessConversations] registry keys on Uuid
- *     (cron / sub-agent paths use the conversation's primary key).
- *  3. If parsing fails (some external automation paths use string ids), we still treat
- *     the [ToolInvocationContext.isHeadless] flag as authoritative — that flag is set by
- *     every flow that wants headless behaviour.
- *
- * Conservative default: foreground. The visible Activity is never wrong; the worst case
- * of a misclassification is the activity briefly appears on the user's screen.
- */
-@OptIn(ExperimentalUuidApi::class)
-private fun isHeadlessInvocation(ctx: ToolInvocationContext?): Boolean {
-    if (ctx == null) return false
-    if (ctx.isHeadless) return true
-    val convId = ctx.callerConversationId ?: return false
-    val asUuid = runCatching { Uuid.parse(convId) }.getOrNull() ?: return false
-    return HeadlessConversations.isHeadless(asUuid)
-}
 
 // ---- Common envelope helpers --------------------------------------------------------------
 
-private fun timeoutEnvelope(toolName: String): JsonObject = buildJsonObject {
+/**
+ * 视觉变化动作（对标 OpenMinis BrowserAction.visualChangeActions）。
+ * 这些动作执行后应保存一帧截图，供 ToolDetailSheet 显示。
+ */
+private val VISUAL_CHANGE_ACTIONS: Set<String> = BrowserToolDefaults.VISUAL_CHANGE_TOOLS
+
+internal fun timeoutEnvelope(toolName: String): JsonObject = buildJsonObject {
     put("error", "tool_timeout")
     put("tool", toolName)
     put("recovery", "The browser tool exceeded its $toolTimeoutMs-ms budget. Retry, or simplify the selector.")
 }
 
-private fun missingArgEnvelope(name: String, detail: String): JsonObject = buildJsonObject {
+internal fun missingArgEnvelope(name: String, detail: String): JsonObject = buildJsonObject {
     put("error", "missing_$name")
     put("detail", detail)
 }
 
-private fun textPart(obj: JsonObject): List<UIMessagePart> =
+internal fun textPart(obj: JsonObject): List<UIMessagePart> =
     listOf(UIMessagePart.Text(obj.toString()))
+
+/**
+ * 返回文本 + 可选截图（对标 OpenMinis：visualChangeActions 后附带截图）。
+ */
+private suspend fun textPartWithScreenshot(
+    obj: JsonObject,
+    toolName: String,
+): List<UIMessagePart> {
+    val parts = mutableListOf<UIMessagePart>()
+    parts.add(UIMessagePart.Text(obj.toString()))
+    addScreenshotIfVisualChange(toolName, parts)
+    return parts
+}
 
 /**
  * JSON-encode a Kotlin string so it can be embedded inside an evaluateJavascript payload
@@ -124,17 +108,13 @@ private fun textPart(obj: JsonObject): List<UIMessagePart> =
  * route through kotlinx.serialization's JsonPrimitive which formats per the JSON spec
  * (also valid JS string syntax).
  */
-private fun jsString(s: String): String = JsonPrimitive(s).toString()
+internal fun jsString(s: String): String = JsonPrimitive(s).toString()
 
 // ---- Read tools ---------------------------------------------------------------------------
 
-fun browserOpenTool(context: Context, invocationContext: ToolInvocationContext? = null): Tool = Tool(
-    name = BrowserToolDefaults.OPEN,
-    description = "Navigate the in-app browser to a URL. Launches the browser if it isn't open. Returns {success, current_url, title}. Resets the per-task 5-minute timer. " +
-        "mode parameter: auto (default)=assistant chooses, foreground=open visible browser activity, headless=browse in background (no UI). " +
-        "Use mode='headless' when the user just wants information from a page. " +
-        "Use mode='foreground' when user interaction may be needed (login, CAPTCHA, forms)." +
-        "$TELEGRAM_HEADLESS_CUE",
+fun browserOpenTool(context: Context): Tool = Tool(
+    name = BrowserToolDefaults.NAVIGATE,
+    description = "Navigate the in-app browser to a URL. If the input is not a URL (no scheme like http://), it's treated as a search query and routed through the configured search engine (DuckDuckGo by default). Returns {success, current_url, title, search_query?}. Resets the per-task 5-minute timer.",
     parameters = {
         InputSchema.Obj(
             properties = buildJsonObject {
@@ -142,21 +122,21 @@ fun browserOpenTool(context: Context, invocationContext: ToolInvocationContext? 
                     put("type", "string")
                     put("description", "The full URL to navigate to (https://...)")
                 })
-                put("mode", buildJsonObject {
-                    put("type", "string")
-                    put("enum", buildJsonArray {
-                        add("auto")
-                        add("foreground")
-                        add("headless")
-                    })
-                    put("description", "Browse mode: auto=assistant chooses (default), foreground=visible browser, headless=background (no UI)")
-                })
             },
             required = listOf("url"),
         )
     },
     execute = { input ->
-        val url = input.jsonObject["url"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+        val raw = input.jsonObject["url"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+        // 自动检测：非 URL 的输入作为搜索查询处理
+        // 对标 OpenMinis：browser_open 支持搜索查询
+        val isSearchQuery = raw != null && android.net.Uri.parse(raw.trim()).scheme == null
+        val resolvedUrl = if (isSearchQuery) {
+            BrowserToolDefaults.buildSearchUrl(raw, BrowserController.currentSearchEngineUrlTemplate())
+        } else {
+            raw
+        }
+        val url = resolvedUrl
         // Heuristic exfil-shape check: if the URL's QUERY (not path — CDN asset hashes
         // would false-positive) carries something that looks like an opaque blob, JWT,
         // API key, or credit-card-shaped digit run, attach a warning so the LLM treats
@@ -179,97 +159,30 @@ fun browserOpenTool(context: Context, invocationContext: ToolInvocationContext? 
             }
         } else {
             withTimeoutOrNull(toolTimeoutMs) {
-                // Pass 3 mode picker. If the caller is a Telegram / cron / sub-agent
-                // conversation, run in headless mode — no on-screen Activity, screenshots
-                // streamed to the calling chat after every state-changing tool. Otherwise
-                // fall back to the foreground BrowserActivity (the only tool that can
-                // launch it).
-                val callerConvId = invocationContext?.callerConversationId
-                // mode parameter overrides the default headless detection
-                val modeParam = input.jsonObject["mode"]?.jsonPrimitive?.contentOrNull
-                val headless = when (modeParam) {
-                    "headless" -> true
-                    "foreground" -> false
-                    else -> isHeadlessInvocation(invocationContext) // auto = original logic
+                // 嵌入模式：通知 ChatPage 弹出 Sheet，等待 WebView 绑定
+                // 对标 OpenMinis：先创建 WebView，再通知 UI 显示 Sheet
+                // 对标 OpenMinis BrowserTabPool：创建新标签页
+                withContext(Dispatchers.Main) {
+                    BrowserController.createTab(context)
                 }
-
-                if (headless && callerConvId != null) {
-                    // Peek BEFORE allocating: getOrCreate + start() spin up a ~30 MB WebView,
-                    // which bindHeadless would then immediately reject if a different live
-                    // conversation owns the controller slot — wasting the allocation.
-                    // canBindHeadless mirrors bindHeadless's reject rule without mutating state;
-                    // bindHeadless stays authoritative and re-checks under its lock, so a race
-                    // here costs at most a discarded allocation, never a wrong binding.
-                    if (!BrowserController.canBindHeadless(callerConvId)) {
-                        return@withTimeoutOrNull BrowserController.bindBusyEnvelope()
-                    }
-                    // Headless path: get-or-create the per-conv WebView session. The
-                    // lifecycle of the WebView piggybacks on the calling FGS — when the
-                    // FGS dies, the whole pool dies with it. Subsequent tool calls will
-                    // see Mode.Idle and return `browser_session_lost`.
-                    val session = HeadlessBrowserSessionPool.getOrCreate(context, callerConvId)
-                    val webView = withContext(Dispatchers.Main) { session.start(callerConvId) }
-                    // Reject if another conversation already holds the (single, global)
-                    // controller binding — binding a second concurrently would route this
-                    // conv's streamed screenshots into the other chat. Same-conv re-bind is
-                    // always accepted, so the common per-task reuse path is unaffected.
-                    if (!BrowserController.bindHeadless(callerConvId, webView)) {
-                        return@withTimeoutOrNull BrowserController.bindBusyEnvelope()
-                    }
-                    BrowserController.startTaskWindow()
-                    BrowserController.appendAction("Open: $url")
-                    val result = BrowserControllerHandle.withController {
-                        withContext(Dispatchers.Main) { webView.loadUrl(url) }
-                        webView.awaitReadyState(8_000L)
-                        buildJsonObject {
-                            put("success", true)
-                            put("current_url", webView.url ?: url)
-                            put("title", webView.title.orEmpty())
-                        }
-                    }
-                    // Stream the landing-page screenshot so the user sees we arrived.
-                    BrowserController.streamScreenshotIfHeadless("Opened $url")
-                    result
-                } else {
-                    // Foreground path (Pass 1+2 behaviour). browser_open is the ONLY tool
-                    // allowed to launch the Activity. Any other tool returning
-                    // browser_not_open is the LLM's signal to call this first.
-                    val wasAlreadyBound = BrowserController.isBound()
-                    if (!wasAlreadyBound) {
-                        context.startActivity(
-                            me.rerere.rikkahub.browser.BrowserActivity.intent(
-                                context,
-                                url,
-                                conversationId = callerConvId,
-                            )
-                        )
-                        if (!BrowserController.awaitBind(5_000L)) {
-                            return@withTimeoutOrNull buildJsonObject {
-                                put("error", "browser_launch_failed")
-                                put("recovery", "Activity did not bind within 5s; retry browser_open or check that the app has overlay permission.")
-                            }
-                        }
-                    }
-                    // (Re)start the 5-minute task window on every browser_open.
-                    BrowserController.startTaskWindow()
-                    BrowserController.appendAction("Open: $url")
-                    BrowserControllerHandle.withController {
-                        // When the Activity was just freshly launched, the URL was already
-                        // passed as EXTRA_INITIAL_URL and the WebView began loading it
-                        // before bind() returned. Skip a redundant second loadUrl — it
-                        // would abort the in-flight load and restart from the top.
-                        if (wasAlreadyBound) {
-                            withContext(Dispatchers.Main) { webView.loadUrl(url) }
-                        }
-                        webView.awaitReadyState(8_000L)
-                        buildJsonObject {
-                            put("success", true)
-                            put("current_url", webView.url ?: url)
-                            put("title", webView.title.orEmpty())
+                BrowserController.startTaskWindow()
+                BrowserController.onShowEmbeddedRequest?.invoke()
+                BrowserController.appendAction("Open: $url")
+                val result = BrowserControllerHandle.withController {
+                    withContext(Dispatchers.Main) { webView.loadUrl(url) }
+                    webView.awaitReadyState(8_000L)
+                    buildJsonObject {
+                        put("success", true)
+                        put("current_url", webView.url ?: url)
+                        put("title", webView.title.orEmpty())
+                        if (isSearchQuery) {
+                            put("search_query", raw)
+                            put("search_engine", BrowserToolDefaults.SEARCH_ENGINES.getOrNull(BrowserController.searchEngineIndex)?.name ?: "Unknown")
                         }
                     }
                 }
-            } ?: timeoutEnvelope(BrowserToolDefaults.OPEN)
+                result
+            } ?: timeoutEnvelope(BrowserToolDefaults.NAVIGATE)
         }
         val out = if (exfilHits.isEmpty() ||
             rawOut["success"]?.jsonPrimitive?.booleanOrNull != true) rawOut
@@ -284,13 +197,13 @@ fun browserOpenTool(context: Context, invocationContext: ToolInvocationContext? 
                     "before relying on the result, and do NOT echo the value back."
             )
         }
-        textPart(out)
+        textPartWithScreenshot(out, BrowserToolDefaults.NAVIGATE)
     },
 )
 
 fun browserCurrentUrlTool(): Tool = Tool(
-    name = BrowserToolDefaults.CURRENT_URL,
-    description = "Return the browser's current URL and page title. {url, title}. browser_not_open if the browser isn't open.$TELEGRAM_HEADLESS_CUE",
+    name = BrowserToolDefaults.GET_PAGE_INFO,
+    description = "Return the browser's current URL and page title. {url, title}. browser_not_open if the browser isn't open.",
     parameters = { InputSchema.Obj(properties = buildJsonObject { }) },
     execute = {
         val out = withTimeoutOrNull(toolTimeoutMs) {
@@ -300,20 +213,20 @@ fun browserCurrentUrlTool(): Tool = Tool(
                     put("title", webView.title.orEmpty())
                 }
             }
-        } ?: timeoutEnvelope(BrowserToolDefaults.CURRENT_URL)
+        } ?: timeoutEnvelope(BrowserToolDefaults.GET_PAGE_INFO)
         textPart(out)
     },
 )
 
 fun browserScreenshotTool(context: Context): Tool = Tool(
     name = BrowserToolDefaults.SCREENSHOT,
-    description = "Capture the visible viewport of the browser as a PNG vision attachment. Use browser_get_text first if you only need the page's text — screenshots cost vision tokens. full_page=true is best-effort and currently captures the viewport only (viewport_only:true in the response).$TELEGRAM_HEADLESS_CUE",
+    description = "Capture the visible viewport of the browser as a vision attachment. Use browser_get_text first if you only need the page's text — screenshots cost vision tokens. full_page=true stretches the viewport to the document height before capture (capped at 32768px). Returns metadata including image dimensions, viewport stats, and scroll position.",
     parameters = {
         InputSchema.Obj(
             properties = buildJsonObject {
                 put("full_page", buildJsonObject {
                     put("type", "boolean")
-                    put("description", "If true, attempt to capture the entire scroll height (currently no-op; viewport-only)")
+                    put("description", "When true, capture the entire scrollable page by temporarily stretching the viewport to document.scrollHeight (height-capped at 32768 px). Default false captures only the current viewport.")
                 })
             },
         )
@@ -323,34 +236,105 @@ fun browserScreenshotTool(context: Context): Tool = Tool(
         val parts = mutableListOf<UIMessagePart>()
         val out = withTimeoutOrNull(toolTimeoutMs) {
             BrowserControllerHandle.withController {
-                val (path, w, h) = withContext(Dispatchers.Main) {
+                withContext(Dispatchers.Main) {
+                    var truncated = false
+                    var originalHeightPx = 0
+                    var didStretch = false
+                    var savedW = 0
+                    var savedH = 0
+
+                    if (fullPage) {
+                        // Measure full document height in CSS pixels
+                        val cssScrollHeight = webView.evaluateJavascriptAsync(
+                            "document.documentElement.scrollHeight", 4_000L
+                        )?.trim()?.toIntOrNull() ?: 0
+                        val density = webView.resources.displayMetrics.density
+                        val scrollHeightPx = if (cssScrollHeight > 0) {
+                            (cssScrollHeight * density).toInt()
+                        } else {
+                            webView.height
+                        }
+                        originalHeightPx = scrollHeightPx
+                        val cappedPx = scrollHeightPx.coerceAtMost(MAX_SCREENSHOT_HEIGHT_PX)
+                        truncated = scrollHeightPx > MAX_SCREENSHOT_HEIGHT_PX
+
+                        // Eagerize lazy images
+                        webView.evaluateJavascriptAsync(
+                            """(async () => {
+                                document.querySelectorAll('img[loading="lazy"]').forEach(i => i.loading = 'eager');
+                                await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+                                return 'ok';
+                            })()""", 2_000L
+                        )
+                        delay(100)
+
+                        // Stretch viewport to full height
+                        val (vpW, vpH) = BrowserController.resolvedViewportSize()
+                        savedW = vpW; savedH = vpH
+                        val cssCappedHeight = (cappedPx / density).toInt().coerceAtLeast(vpH)
+                        val session = BrowserController.selectedSession
+                        session?.applyViewport(savedW, cssCappedHeight)
+                        didStretch = true
+                        delay(100)
+                    }
+
                     val width = webView.width.coerceAtLeast(1)
                     val height = webView.height.coerceAtLeast(1).coerceAtMost(MAX_SCREENSHOT_HEIGHT_PX)
                     val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
                     val canvas = Canvas(bitmap)
                     webView.draw(canvas)
+
+                    // Restore viewport if stretched
+                    if (didStretch) {
+                        val session = BrowserController.selectedSession
+                        session?.applyViewport(savedW, savedH)
+                    }
+
                     val cacheDir = File(context.cacheDir, SCREENSHOT_CACHE_SUBDIR).apply { mkdirs() }
-                    val out = File(cacheDir, "screenshot-${System.currentTimeMillis()}.webp")
-                    // Recycle unconditionally in a finally block so the bitmap is freed
-                    // exactly once regardless of whether compress() succeeds or throws.
-                    // The prior pattern called recycle() in onFailure AND then again
-                    // unconditionally — a double-recycle causes IllegalStateException.
+                    val outFile = File(cacheDir, "screenshot-${System.currentTimeMillis()}.webp")
                     try {
-                        FileOutputStream(out).use { os ->
+                        FileOutputStream(outFile).use { os ->
                             bitmap.compress(Bitmap.CompressFormat.WEBP, 85, os)
                         }
                     } finally {
                         bitmap.recycle()
                     }
-                    Triple(out.absolutePath, width, height)
-                }
-                BrowserController.appendAction("Screenshot")
-                buildJsonObject {
-                    put("success", true)
-                    put("file_path", path)
-                    put("width", w)
-                    put("height", h)
-                    if (fullPage) put("viewport_only", true)
+
+                    BrowserController.appendAction("Screenshot" + if (fullPage) " (full_page)" else "")
+
+                    // Collect viewport metadata via JS
+                    val scrollInfo = webView.evaluateJavascriptAsync(
+                        "JSON.stringify({sx:window.scrollX||0,sy:window.scrollY||0,pw:document.documentElement.scrollWidth||0,ph:document.documentElement.scrollHeight||0,vw:window.innerWidth||0,vh:window.innerHeight||0})",
+                        2_000L
+                    )
+                    var scrollX = 0; var scrollY = 0; var pageW = 0; var pageH = 0; var vpW = 0; var vpH = 0
+                    try {
+                        val info = kotlinx.serialization.json.Json.parseToJsonElement(scrollInfo ?: "{}").jsonObject
+                        scrollX = info["sx"]?.jsonPrimitive?.intOrNull ?: 0
+                        scrollY = info["sy"]?.jsonPrimitive?.intOrNull ?: 0
+                        pageW = info["pw"]?.jsonPrimitive?.intOrNull ?: 0
+                        pageH = info["ph"]?.jsonPrimitive?.intOrNull ?: 0
+                        vpW = info["vw"]?.jsonPrimitive?.intOrNull ?: 0
+                        vpH = info["vh"]?.jsonPrimitive?.intOrNull ?: 0
+                    } catch (_: Exception) {}
+
+                    buildJsonObject {
+                        put("success", true)
+                        put("file_path", outFile.absolutePath)
+                        put("width", width)
+                        put("height", height)
+                        put("viewportWidth", vpW)
+                        put("viewportHeight", vpH)
+                        put("pageWidth", pageW)
+                        put("pageHeight", pageH)
+                        put("scrollX", scrollX)
+                        put("scrollY", scrollY)
+                        if (fullPage) {
+                            put("full_page", true)
+                            if (originalHeightPx > 0) put("originalHeight", originalHeightPx)
+                            if (truncated) put("truncated", true)
+                        }
+                    }
                 }
             }
         } ?: timeoutEnvelope(BrowserToolDefaults.SCREENSHOT)
@@ -364,83 +348,12 @@ fun browserScreenshotTool(context: Context): Tool = Tool(
 
 fun browserGetTextTool(): Tool = Tool(
     name = BrowserToolDefaults.GET_TEXT,
-    description = "Returns the main article content via Readability.js by default, falling back to selector-based extraction if Readability fails. Pass extract_mode:'raw' for the unfiltered text. Pass selector (e.g. 'article', 'main', '.content') for explicit scoping — selectors override Readability. max_chars (default 8000) caps the result. Use this BEFORE screenshot if you only need text content. {text, truncated, extract_mode}.$TELEGRAM_HEADLESS_CUE",
+    description = "Returns the main article content via Readability.js by default, falling back to selector-based extraction if Readability fails. Pass extract_mode:'raw' for the unfiltered text. Pass selector (e.g. 'article', 'main', '.content') for explicit scoping — selectors override Readability. max_chars (default 8000) caps the result. Use this BEFORE screenshot if you only need text content. {text, truncated, extract_mode}.",
     parameters = { getTextSchema(defaultMax = 8000) },
     execute = { input -> textPart(runGetText(input)) },
 )
 
-fun browserGetDomTool(): Tool = Tool(
-    name = BrowserToolDefaults.GET_DOM,
-    description = "Extract a simplified outerHTML of a CSS selector (default 'body'). Strips <script>/<style>. Truncates at max_chars (default 4000). Use scoped selectors like 'article' / 'main' rather than 'body' for relevance — body usually includes nav and footer chrome that costs tokens without value. {html, truncated}.$TELEGRAM_HEADLESS_CUE",
-    parameters = { selectorAndMaxCharsSchema(defaultMax = 4000, required = false) },
-    execute = { input -> textPart(runReadHelper(input, BrowserToolDefaults.GET_DOM, defaultMax = 4000) { selector, maxChars ->
-        """(function(){
-            try {
-                var el = document.querySelector(${jsString(selector)});
-                if (!el) return JSON.stringify({error:'selector_not_found', selector:${jsString(selector)}});
-                var clone = el.cloneNode(true);
-                clone.querySelectorAll('script,style,noscript').forEach(function(n){n.remove();});
-                var html = clone.outerHTML || '';
-                var truncated = false;
-                if (html.length > $maxChars) { html = html.substring(0, $maxChars); truncated = true; }
-                return JSON.stringify({html:html, truncated:truncated});
-            } catch(e) { return JSON.stringify({error:'js_failed', detail:String(e)}); }
-        })()"""
-    }) },
-)
 
-fun browserGetLinksTool(): Tool = Tool(
-    name = BrowserToolDefaults.GET_LINKS,
-    description = "List up to 100 anchor links inside a CSS selector (default 'body') as {links:[{href, text}], count}. {error:'selector_not_found'} if the root selector doesn't match.$TELEGRAM_HEADLESS_CUE",
-    parameters = {
-        InputSchema.Obj(properties = buildJsonObject {
-            put("selector", buildJsonObject {
-                put("type", "string")
-                put("description", "Root selector to search inside (default 'body')")
-            })
-        })
-    },
-    execute = { input ->
-        val selector = (input.jsonObject["selector"]?.jsonPrimitive?.contentOrNull
-            ?.takeIf { it.isNotBlank() }) ?: "body"
-        val out = withTimeoutOrNull(toolTimeoutMs) {
-            BrowserControllerHandle.withController {
-                val js = """(function(){
-                    try {
-                        var root = document.querySelector(${jsString(selector)});
-                        if (!root) return JSON.stringify({error:'selector_not_found', selector:${jsString(selector)}});
-                        var anchors = root.querySelectorAll('a[href]');
-                        var out = [];
-                        for (var i=0; i<anchors.length && out.length<100; i++) {
-                            var a = anchors[i];
-                            var href = a.href || '';
-                            var text = (a.innerText || a.textContent || '').replace(/\s+/g,' ').trim();
-                            if (text.length>200) text = text.substring(0,200);
-                            out.push({href:href, text:text});
-                        }
-                        return JSON.stringify({links:out, count:out.length});
-                    } catch(e) { return JSON.stringify({error:'js_failed', detail:String(e)}); }
-                })()"""
-                parseJsResult(webView.evaluateJavascriptAsync(js))
-            }
-        } ?: timeoutEnvelope(BrowserToolDefaults.GET_LINKS)
-        textPart(out)
-    },
-)
-
-fun browserBackTool(): Tool = Tool(
-    name = BrowserToolDefaults.BACK,
-    description = "Navigate the browser one step back in history. {success, current_url}.$TELEGRAM_HEADLESS_CUE",
-    parameters = { InputSchema.Obj(properties = buildJsonObject { }) },
-    execute = { textPart(runHistoryNav(BrowserToolDefaults.BACK, forward = false)) },
-)
-
-fun browserForwardTool(): Tool = Tool(
-    name = BrowserToolDefaults.FORWARD,
-    description = "Navigate the browser one step forward in history. {success, current_url}.$TELEGRAM_HEADLESS_CUE",
-    parameters = { InputSchema.Obj(properties = buildJsonObject { }) },
-    execute = { textPart(runHistoryNav(BrowserToolDefaults.FORWARD, forward = true)) },
-)
 
 /** Valid values for browser_wait_for's `state` arg. `attached` preserves the original behavior. */
 private val WAIT_FOR_STATES = setOf("attached", "detached", "visible", "hidden")
@@ -497,8 +410,8 @@ internal fun buildWaitForPredicate(selector: String, state: String, containsText
 }
 
 fun browserWaitForTool(): Tool = Tool(
-    name = BrowserToolDefaults.WAIT_FOR,
-    description = "Pause until a CSS selector reaches a target state. Polls every 200 ms up to timeout_ms (default 10_000). state is one of attached (default — element present in DOM), detached (element gone), visible (present AND rendered), hidden (none rendered). Optional contains_text waits until a matching element contains that text. {found, elapsed_ms}.$TELEGRAM_HEADLESS_CUE",
+    name = BrowserToolDefaults.WAIT_FOR_DOM_STABLE,
+    description = "Pause until a CSS selector reaches a target state. Polls every 200 ms up to timeout_ms (default 10_000). state is one of attached (default — element present in DOM), detached (element gone), visible (present AND rendered), hidden (none rendered). Optional contains_text waits until a matching element contains that text. {found, elapsed_ms}.",
     parameters = {
         InputSchema.Obj(properties = buildJsonObject {
             put("selector", buildJsonObject {
@@ -545,6 +458,29 @@ fun browserWaitForTool(): Tool = Tool(
                         val deadline = started + timeoutMs
                         val js = buildWaitForPredicate(selector, state, containsText)
                         var found = false
+
+                        // 快速路径：页面已加载完成时，用两次采样确认稳定性
+                        // 对标 OpenMinis：readyState=complete 快速检测
+                        if (state == "attached" || state == "visible") {
+                            val readyState = webView.evaluateJavascriptAsync(
+                                "(function(){try{return document.readyState;}catch(e){return '';}})()", 1_500L
+                            )
+                            if (readyState?.contains("complete") == true) {
+                                val first = webView.evaluateJavascriptAsync(js, 1_500L)
+                                delay(50)
+                                val second = webView.evaluateJavascriptAsync(js, 1_500L)
+                                if (first == "true" && second == "true") {
+                                    return@withController buildJsonObject {
+                                        put("found", true)
+                                        put("elapsed_ms", System.currentTimeMillis() - started)
+                                        put("state", state)
+                                        put("fast_path", true)
+                                        if (containsText != null) put("contains_text", containsText)
+                                    }
+                                }
+                            }
+                        }
+
                         while (System.currentTimeMillis() < deadline) {
                             val raw = webView.evaluateJavascriptAsync(js, 1_500L)
                             if (raw == "true") { found = true; break }
@@ -557,7 +493,7 @@ fun browserWaitForTool(): Tool = Tool(
                             if (containsText != null) put("contains_text", containsText)
                         }
                     }
-                } ?: timeoutEnvelope(BrowserToolDefaults.WAIT_FOR)
+                } ?: timeoutEnvelope(BrowserToolDefaults.WAIT_FOR_DOM_STABLE)
             }
         }
         textPart(out)
@@ -568,7 +504,7 @@ fun browserWaitForTool(): Tool = Tool(
 
 fun browserClickTool(): Tool = Tool(
     name = BrowserToolDefaults.CLICK,
-    description = "Click an element matching a CSS selector. Returns the diff between the page before and after the action by default ({added, removed, added_chars, removed_chars, truncated} truncated to 4000 chars total). Pass full:true to skip the diff and get post_click_url only — use when the click navigates to an entirely new page. Waits up to 8 s for readyState=complete.$TELEGRAM_HEADLESS_CUE",
+    description = "Click an element matching a CSS selector. Returns the diff between the page before and after the action by default ({added, removed, added_chars, removed_chars, truncated} truncated to 4000 chars total). Pass full:true to skip the diff and get post_click_url only — use when the click navigates to an entirely new page. Waits up to 8 s for readyState=complete.",
     parameters = { selectorWithFullSchema("CSS selector to click") },
     execute = { input ->
         val selector = input.jsonObject["selector"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
@@ -601,18 +537,13 @@ fun browserClickTool(): Tool = Tool(
                 }
             } ?: timeoutEnvelope(BrowserToolDefaults.CLICK)
         }
-        // Pass 3: post-click screenshot stream in headless mode. Skipped on error envelopes
-        // so we don't push a stale screenshot when the click never landed.
-        if (out["success"]?.toString() == "true") {
-            BrowserController.streamScreenshotIfHeadless("Clicked $selector")
-        }
-        textPart(out)
+        textPartWithScreenshot(out, BrowserToolDefaults.CLICK)
     },
 )
 
 fun browserTypeTool(): Tool = Tool(
     name = BrowserToolDefaults.TYPE,
-    description = "Type text into an input/textarea/contenteditable matching a CSS selector. Focuses, optionally clears, sets the value + dispatches an 'input' event so SPA frameworks observe the change. Returns the diff between the page before and after by default; pass full:true to skip the diff. {success, [diff]}.$TELEGRAM_HEADLESS_CUE",
+    description = "Type text into an input/textarea/contenteditable matching a CSS selector. Focuses, optionally clears, sets the value + dispatches an 'input' event so SPA frameworks observe the change. Returns the diff between the page before and after by default; pass full:true to skip the diff. {success, [diff]}.",
     parameters = {
         InputSchema.Obj(properties = buildJsonObject {
             put("selector", buildJsonObject { put("type","string"); put("description","CSS selector of the input") })
@@ -659,16 +590,13 @@ fun browserTypeTool(): Tool = Tool(
                 }
             } ?: timeoutEnvelope(BrowserToolDefaults.TYPE)
         }
-        if (out["success"]?.toString() == "true") {
-            BrowserController.streamScreenshotIfHeadless("Typed into $selector")
-        }
-        textPart(out)
+        textPartWithScreenshot(out, BrowserToolDefaults.TYPE)
     },
 )
 
 fun browserScrollTool(): Tool = Tool(
     name = BrowserToolDefaults.SCROLL,
-    description = "Scroll the page in a direction (up/down/top/bottom). amount is in pixels (default 600, ignored for top/bottom). {success, scroll_y}.$TELEGRAM_HEADLESS_CUE",
+    description = "Scroll the page in a direction (up/down/top/bottom). amount is in pixels (default 600, ignored for top/bottom). {success, scroll_y}.",
     parameters = {
         InputSchema.Obj(properties = buildJsonObject {
             put("direction", buildJsonObject {
@@ -707,387 +635,133 @@ fun browserScrollTool(): Tool = Tool(
                 }
             } ?: timeoutEnvelope(BrowserToolDefaults.SCROLL)
         }
-        // Pass 3: browser_scroll is in WRITE_TOOLS and the TELEGRAM_HEADLESS_CUE describes
+        // browser_scroll is in WRITE_TOOLS
         // "screenshots stream after each state-changing action." Stream the post-scroll view so
         // the Telegram user can see the new viewport position (scroll is purely viewport movement
         // — the diff helper won't capture it since body.innerText doesn't change).
-        if (out["success"]?.toString() == "true") {
-            val scrollY = out["scroll_y"]?.jsonPrimitive?.intOrNull
-            BrowserController.streamScreenshotIfHeadless(
-                if (scrollY != null) "Scrolled to y=$scrollY" else "Scrolled"
-            )
-        }
-        textPart(out)
+        textPartWithScreenshot(out, BrowserToolDefaults.SCROLL)
     },
 )
 
-fun browserSubmitTool(): Tool = Tool(
-    name = BrowserToolDefaults.SUBMIT,
-    description = "Submit a form. If the selector is a <button type=submit> click it; otherwise locates the enclosing <form> and calls .submit(). Awaits the post-navigation readyState. Returns the diff between the page before and after by default; pass full:true to skip the diff (recommended when submission navigates to a brand-new page). {success, post_submit_url, [diff]}.$TELEGRAM_HEADLESS_CUE",
-    parameters = { selectorWithFullSchema("CSS selector of a submit button or any element inside the target form") },
-    execute = { input ->
-        val selector = input.jsonObject["selector"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
-        val full = parseFullArg(input)
-        val out = if (selector == null) {
-            missingArgEnvelope("selector", "selector is required")
-        } else {
-            withTimeoutOrNull(toolTimeoutMs) {
-                BrowserControllerHandle.withController {
-                    withDiff(full) {
-                        val js = """(function(){
-                            try {
-                                var el = document.querySelector(${jsString(selector)});
-                                if (!el) return JSON.stringify({error:'selector_not_found', selector:${jsString(selector)}});
-                                if (el.tagName === 'BUTTON' && (el.type === 'submit' || el.type === '')) {
-                                    el.click();
-                                    return JSON.stringify({submitted:true, via:'button_click'});
-                                }
-                                var form = el.closest('form');
-                                if (!form) return JSON.stringify({error:'no_enclosing_form'});
-                                if (typeof form.requestSubmit === 'function') form.requestSubmit();
-                                else form.submit();
-                                return JSON.stringify({submitted:true, via:'form_submit'});
-                            } catch(e) { return JSON.stringify({error:'js_failed', detail:String(e)}); }
-                        })()"""
-                        val res = parseJsResult(webView.evaluateJavascriptAsync(js))
-                        if (res.containsKey("error")) return@withDiff res
-                        webView.awaitReadyState(8_000L)
-                        BrowserController.appendAction("Submit: $selector")
-                        buildJsonObject {
-                            put("success", true)
-                            put("post_submit_url", webView.url.orEmpty())
-                        }
-                    }
-                }
-            } ?: timeoutEnvelope(BrowserToolDefaults.SUBMIT)
-        }
-        if (out["success"]?.toString() == "true") {
-            BrowserController.streamScreenshotIfHeadless("Submitted $selector")
-        }
-        textPart(out)
-    },
-)
 
-fun browserSelectTool(): Tool = Tool(
-    name = BrowserToolDefaults.SELECT,
-    description = "Set a <select> element's value. Dispatches 'change' so framework listeners fire. Returns the diff between the page before and after by default; pass full:true to skip the diff. {success, [diff]}.$TELEGRAM_HEADLESS_CUE",
-    parameters = {
-        InputSchema.Obj(properties = buildJsonObject {
-            put("selector", buildJsonObject { put("type","string"); put("description","CSS selector of the <select>") })
-            put("value", buildJsonObject { put("type","string"); put("description","The option value to set") })
-            put("full", buildJsonObject { put("type","boolean"); put("description","If true, return the action envelope without the page-text diff (default false)") })
-        }, required = listOf("selector","value"))
-    },
-    execute = { input ->
-        val selector = input.jsonObject["selector"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
-        val value = input.jsonObject["value"]?.jsonPrimitive?.contentOrNull
-        val full = parseFullArg(input)
-        val out = when {
-            selector == null -> missingArgEnvelope("selector", "selector is required")
-            value == null -> missingArgEnvelope("value", "value is required")
-            else -> withTimeoutOrNull(toolTimeoutMs) {
-                BrowserControllerHandle.withController {
-                    withDiff(full) {
-                        val js = """(function(){
-                            try {
-                                var el = document.querySelector(${jsString(selector)});
-                                if (!el) return JSON.stringify({error:'selector_not_found', selector:${jsString(selector)}});
-                                if (el.tagName !== 'SELECT') return JSON.stringify({error:'not_a_select'});
-                                el.value = ${jsString(value)};
-                                el.dispatchEvent(new Event('change', {bubbles:true}));
-                                return JSON.stringify({selected:true});
-                            } catch(e) { return JSON.stringify({error:'js_failed', detail:String(e)}); }
-                        })()"""
-                        val res = parseJsResult(webView.evaluateJavascriptAsync(js))
-                        if (res.containsKey("error")) return@withDiff res
-                        BrowserController.appendAction("Select: $selector=$value")
-                        buildJsonObject { put("success", true) }
-                    }
-                }
-            } ?: timeoutEnvelope(BrowserToolDefaults.SELECT)
-        }
-        if (out["success"]?.toString() == "true") {
-            BrowserController.streamScreenshotIfHeadless("Selected $value in $selector")
-        }
-        textPart(out)
-    },
-)
+fun navigateTool(context: Context): Tool = browserOpenTool(context)
 
-fun browserPressKeyTool(): Tool = Tool(
-    name = BrowserToolDefaults.PRESS_KEY,
-    description = "Synthesize keydown + keyup events on the active element. Use KeyboardEvent.key values like 'Enter', 'Escape', 'ArrowDown', 'Tab'. Returns the diff between the page before and after by default; pass full:true to skip the diff (recommended when Enter triggers a navigation). {success, [diff]}.$TELEGRAM_HEADLESS_CUE",
-    parameters = {
-        InputSchema.Obj(properties = buildJsonObject {
-            put("key", buildJsonObject {
-                put("type","string")
-                put("description","KeyboardEvent.key value (e.g. 'Enter', 'Escape', 'ArrowDown')")
-            })
-            put("full", buildJsonObject { put("type","boolean"); put("description","If true, return the action envelope without the page-text diff (default false)") })
-        }, required = listOf("key"))
-    },
-    execute = { input ->
-        // Cap at 32 chars — KeyboardEvent.key values like "ArrowDown" are short. A multi-KB
-        // string here suggests model misuse; clamp before splicing into the JS payload.
-        val key = input.jsonObject["key"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }?.take(32)
-        val full = parseFullArg(input)
-        val out = if (key == null) {
-            missingArgEnvelope("key", "key is required (e.g. 'Enter', 'Escape')")
-        } else {
-            withTimeoutOrNull(toolTimeoutMs) {
-                BrowserControllerHandle.withController {
-                    withDiff(full) {
-                        val js = """(function(){
-                            try {
-                                var el = document.activeElement || document.body;
-                                var down = new KeyboardEvent('keydown', {key:${jsString(key)}, bubbles:true, cancelable:true});
-                                var up = new KeyboardEvent('keyup', {key:${jsString(key)}, bubbles:true, cancelable:true});
-                                el.dispatchEvent(down);
-                                el.dispatchEvent(up);
-                                return JSON.stringify({pressed:true});
-                            } catch(e) { return JSON.stringify({error:'js_failed', detail:String(e)}); }
-                        })()"""
-                        val res = parseJsResult(webView.evaluateJavascriptAsync(js))
-                        if (res.containsKey("error")) return@withDiff res
-                        BrowserController.appendAction("Press key: $key")
-                        buildJsonObject { put("success", true) }
-                    }
-                }
-            } ?: timeoutEnvelope(BrowserToolDefaults.PRESS_KEY)
-        }
-        if (out["success"]?.toString() == "true") {
-            BrowserController.streamScreenshotIfHeadless("Pressed $key")
-        }
-        textPart(out)
-    },
-)
+fun getPageInfoTool(): Tool = browserCurrentUrlTool()
 
-fun browserEvalJsTool(): Tool = Tool(
-    name = BrowserToolDefaults.EVAL_JS,
-    description = "Run arbitrary JavaScript in the page and return its last expression. HARDLINE-checked: shell-shaped strings, document.cookie writes, eval/Function constructors, and string-form setTimeout are all blocked at the tool dispatcher BEFORE the JS executes. Always asks for approval; never eligible for 'Always Allow'.$TELEGRAM_HEADLESS_CUE",
-    parameters = {
-        InputSchema.Obj(properties = buildJsonObject {
-            put("code", buildJsonObject {
-                put("type","string")
-                put("description","JavaScript to evaluate. The string returned by the WebView is the value of the last expression, JSON-encoded.")
-            })
-        }, required = listOf("code"))
-    },
-    execute = { input ->
-        // HARDLINE has already run via GenerationHandler before we get here. The execute
-        // body just dispatches the JS and forwards whatever the WebView returns. Any
-        // pattern HARDLINE missed is a bug to fix in HardlineCommandGuard, not here.
-        val code = input.jsonObject["code"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
-        val out = if (code == null) {
-            missingArgEnvelope("code", "code is required")
-        } else {
-            withTimeoutOrNull(toolTimeoutMs) {
-                BrowserControllerHandle.withController {
-                    val raw = webView.evaluateJavascriptAsync(code, toolTimeoutMs - 1_000L)
-                    BrowserController.appendAction("Run JS")
-                    // Clamp the raw result before it enters the envelope. evaluateJavascript
-                    // returns whatever the page's last expression serialised to — a model that
-                    // evals e.g. `document.body.outerHTML` can dump megabytes into the turn.
-                    // Reuse the 64 KB cap the read tools (runGetText / runReadHelper) apply.
-                    val (clipped, truncated) = clipText(raw ?: "null", EVAL_JS_MAX_RESULT_CHARS)
+fun screenshotTool(context: Context): Tool = browserScreenshotTool(context)
+
+fun getTextTool(): Tool = browserGetTextTool()
+
+fun getReadableTool(): Tool = Tool(
+    name = BrowserToolDefaults.GET_READABLE,
+    description = "Extract the main readable content from the current page using Readability.js. Returns the article text, title, and excerpt. Falls back to raw body text if Readability fails. {text, title, excerpt}.",
+    parameters = { InputSchema.Obj(properties = buildJsonObject { }) },
+    execute = {
+        val out = withTimeoutOrNull(toolTimeoutMs) {
+            BrowserControllerHandle.withController {
+                val text = webView.runReadability()
+                if (text.isNullOrEmpty()) {
+                    buildJsonObject { put("error", "readability_failed") }
+                } else {
                     buildJsonObject {
-                        put("result", clipped)
-                        if (truncated) put("truncated", true)
+                        put("text", text)
+                        put("title", withContext(Dispatchers.Main) { webView.title.orEmpty() })
                     }
                 }
-            } ?: timeoutEnvelope(BrowserToolDefaults.EVAL_JS)
-        }
-        // Pass 3: browser_eval_js is in WRITE_TOOLS — it CAN mutate page state (e.g.
-        // click via JS, modify the DOM, submit a form programmatically). Stream a screenshot
-        // so the Telegram user sees the page after the script ran, consistent with every
-        // other write tool. Only stream on success — error envelopes (timeout, missing_code,
-        // browser_not_open) all carry an "error" key so we use that as the gate.
-        if (!out.containsKey("error")) {
-            BrowserController.streamScreenshotIfHeadless("Ran JS")
-        }
+            }
+        } ?: timeoutEnvelope(BrowserToolDefaults.GET_READABLE)
         textPart(out)
     },
 )
 
-/**
- * Token-cost optimisation pass — composite click+read tool. Cuts the dominant
- * "click → wait → get_text" three-call sequence to one round trip. The trade is
- * a slightly heavier per-call envelope (URL + title + text/diff) which is
- * still cheaper than three separate calls' worth of model thinking-tokens.
- *
- * extract_mode: "diff" (default), "auto", "readability", "raw".
- *   - "diff" → snapshot text before/after, return {diff: ...}.
- *   - "auto"/"readability"/"raw" → snapshot URL+title, click, await readyState,
- *     extract text per get_text rules, return {text, page_title}.
- *
- * max_chars caps either the diff side OR the extracted text. The cap protects
- * against an LLM asking for a megabyte of text on a long-form page.
- */
-fun browserClickAndReadTool(): Tool = Tool(
-    name = BrowserToolDefaults.CLICK_AND_READ,
-    description = "One-shot click + read in a single round trip. Click an element, await readyState, then return either the diff (default extract_mode:'diff') or the extracted text (auto/readability/raw — same semantics as browser_get_text). Use this instead of browser_click + browser_get_text when you want to minimise tokens. {success, post_click_url, page_title, [diff], [text]}.$TELEGRAM_HEADLESS_CUE",
+fun clickTool(): Tool = browserClickTool()
+
+fun typeTool(): Tool = browserTypeTool()
+
+fun scrollTool(): Tool = browserScrollTool()
+
+fun executeJsTool(): Tool = browserEvalJsTool()
+
+fun findElementsTool(): Tool = Tool(
+    name = BrowserToolDefaults.FIND_ELEMENTS,
+    description = "Find elements matching a CSS selector. Returns a list of elements with their tag, text, attributes, and position. {count, elements: [{tag, text, id, class, href, rect}]}.",
     parameters = {
         InputSchema.Obj(properties = buildJsonObject {
             put("selector", buildJsonObject {
-                put("type","string")
-                put("description","CSS selector to click")
-            })
-            put("extract_mode", buildJsonObject {
-                put("type","string")
-                put("enum", buildJsonArray { add("diff"); add("auto"); add("readability"); add("raw") })
-                put("description","diff (default) returns a before/after diff; auto/readability/raw return the extracted page text")
-            })
-            put("max_chars", buildJsonObject {
-                put("type","integer")
-                put("description","Caps the returned text length (default 4000)")
+                put("type", "string")
+                put("description", "CSS selector to find elements")
             })
         }, required = listOf("selector"))
     },
     execute = { input ->
         val selector = input.jsonObject["selector"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
-        val mode = input.jsonObject["extract_mode"]?.jsonPrimitive?.contentOrNull?.lowercase()
-            ?.takeIf { it in setOf("diff", "auto", "readability", "raw") } ?: "diff"
-        val maxChars = (input.jsonObject["max_chars"]?.jsonPrimitive?.intOrNull ?: 4000)
-            .coerceIn(100, 64 * 1024)
         val out = if (selector == null) {
             missingArgEnvelope("selector", "selector is required")
         } else {
             withTimeoutOrNull(toolTimeoutMs) {
                 BrowserControllerHandle.withController {
-                    val before = if (mode == "diff") captureBodyText() else ""
-                    val titleBefore = withContext(Dispatchers.Main) { webView.title.orEmpty() }
-                    val clickJs = """(function(){
+                    val js = """(function(){
                         try {
-                            var el = document.querySelector(${jsString(selector)});
-                            if (!el) return JSON.stringify({error:'selector_not_found', selector:${jsString(selector)}});
-                            el.scrollIntoView({block:'center', inline:'center'});
-                            el.click();
-                            return JSON.stringify({clicked:true});
+                            var els = document.querySelectorAll(${jsString(selector)});
+                            var out = [];
+                            for (var i=0; i<els.length && out.length<50; i++) {
+                                var e = els[i];
+                                var r = e.getBoundingClientRect();
+                                out.push({
+                                    index: i,
+                                    tag: (e.tagName||'').toLowerCase(),
+                                    text: (e.innerText||e.textContent||'').trim().substring(0,200),
+                                    id: e.id||'',
+                                    class: (e.className||'').toString().substring(0,100),
+                                    href: (e.href||e.getAttribute('href')||'').substring(0,500),
+                                    rect: {x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height)}
+                                });
+                            }
+                            return JSON.stringify({count: els.length, shown: out.length, elements: out});
                         } catch(e) { return JSON.stringify({error:'js_failed', detail:String(e)}); }
                     })()"""
-                    val clickRes = parseJsResult(webView.evaluateJavascriptAsync(clickJs))
-                    if (clickRes.containsKey("error")) return@withController clickRes
-                    webView.awaitReadyState(8_000L)
-                    BrowserController.appendAction("Click+read: $selector")
-                    val postUrl = withContext(Dispatchers.Main) { webView.url.orEmpty() }
-                    val postTitle = withContext(Dispatchers.Main) { webView.title.orEmpty() }
-                    @Suppress("UNUSED_VARIABLE")
-                    val unused = titleBefore // documents that we considered showing diff of titles
-                    when (mode) {
-                        "diff" -> {
-                            val after = captureBodyText()
-                            buildJsonObject {
-                                put("success", true)
-                                put("post_click_url", postUrl)
-                                put("page_title", postTitle)
-                                put("diff", BrowserDiffHelper.computeDiff(before, after))
-                            }
-                        }
-                        else -> {
-                            val text = when (mode) {
-                                "readability" -> webView.runReadability()
-                                "auto" -> webView.runReadability()?.takeIf { it.length >= READABILITY_MIN_CHARS }
-                                else -> null
-                            }
-                            val (resolved, extractMode) = if (!text.isNullOrEmpty()) {
-                                text to "readability"
-                            } else if (mode == "readability") {
-                                // Forced mode + null result → surface the error envelope.
-                                return@withController buildJsonObject {
-                                    put("success", false)
-                                    put("post_click_url", postUrl)
-                                    put("page_title", postTitle)
-                                    put("error", "readability_failed")
-                                }
-                            } else {
-                                // Fall back to selector-based body innerText.
-                                val rawJs = """(function(){
-                                    try {
-                                        var t = (document.body.innerText || document.body.textContent || '').replace(/\s+/g,' ').trim();
-                                        return JSON.stringify({text:t});
-                                    } catch(e) { return JSON.stringify({error:'js_failed', detail:String(e)}); }
-                                })()"""
-                                val rawRes = parseJsResult(webView.evaluateJavascriptAsync(rawJs))
-                                val rawText = rawRes["text"]?.jsonPrimitive?.contentOrNull.orEmpty()
-                                rawText to (if (mode == "auto") "raw_fallback" else "raw")
-                            }
-                            val (clipped, truncated) = clipText(resolved, maxChars)
-                            buildJsonObject {
-                                put("success", true)
-                                put("post_click_url", postUrl)
-                                put("page_title", postTitle)
-                                put("text", clipped)
-                                put("truncated", truncated)
-                                put("extract_mode", extractMode)
-                            }
-                        }
-                    }
+                    val res = parseJsResult(webView.evaluateJavascriptAsync(js))
+                    if (res.containsKey("error")) return@withController res
+                    BrowserController.appendAction("Find: $selector")
+                    res
                 }
-            } ?: timeoutEnvelope(BrowserToolDefaults.CLICK_AND_READ)
-        }
-        // Pass 3 parity: stream a screenshot in headless mode on success, same as
-        // plain browser_click. The diff envelope still flows to the LLM via textPart.
-        if (out["success"]?.toString() == "true") {
-            BrowserController.streamScreenshotIfHeadless("Clicked $selector (and read)")
+            } ?: timeoutEnvelope(BrowserToolDefaults.FIND_ELEMENTS)
         }
         textPart(out)
     },
 )
 
-// ---- Loop control --------------------------------------------------------------------------
-
-fun browserDoneTool(invocationContext: ToolInvocationContext? = null): Tool = Tool(
-    name = BrowserToolDefaults.DONE,
-    description = "Signal that the AI has finished its current browser task. Clears the per-task 5-minute timer so the next browser_open starts fresh. The browser session ITSELF stays alive — subsequent turns can navigate, click, scroll without re-opening; only `/new` (Telegram) or the in-app reset closes it. result_url is optional; pass the page URL the user should look at if any. {success}.$TELEGRAM_HEADLESS_CUE",
-    parameters = {
-        InputSchema.Obj(properties = buildJsonObject {
-            put("summary", buildJsonObject {
-                put("type","string")
-                put("description","One-sentence summary of what was accomplished")
-            })
-            put("result_url", buildJsonObject {
-                put("type","string")
-                put("description","Optional URL the user should look at")
-            })
-        }, required = listOf("summary"))
-    },
+fun hoverTool(): Tool = Tool(
+    name = BrowserToolDefaults.HOVER,
+    description = "Hover over an element matching a CSS selector. Dispatches mouseenter and mouseover events. {success}.",
+    parameters = { selectorOnlySchema("CSS selector of the element to hover over") },
     execute = { input ->
-        val summary = input.jsonObject["summary"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
-        val out = if (summary == null) {
-            missingArgEnvelope("summary", "summary is required")
+        val selector = input.jsonObject["selector"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+        val out = if (selector == null) {
+            missingArgEnvelope("selector", "selector is required")
         } else {
-            BrowserController.appendAction("Done: $summary")
-            BrowserController.clearTaskWindow()
-            // Pass 3 design originally released the headless WebView here. Live-test feedback
-            // (2026-05-08): users want the session to persist across LLM turns so a follow-up
-            // "click the next link" doesn't have to re-open from scratch — that broke the
-            // page state, cookies-in-flight, and the read screenshots stayed white because
-            // we paid the page-load tax twice. browser_done now ONLY clears the per-task
-            // 5-minute timer; the session stays alive until `/new` (headless reset command)
-            // or the calling FGS dies. Foreground mode behaves identically — Activity keeps
-            // running as before.
-            buildJsonObject { put("success", true) }
+            withTimeoutOrNull(toolTimeoutMs) {
+                BrowserControllerHandle.withController {
+                    val js = """(function(){
+                        try {
+                            var el = document.querySelector(${jsString(selector)});
+                            if (!el) return JSON.stringify({error:'selector_not_found'});
+                            el.dispatchEvent(new MouseEvent('mouseover', {bubbles:true}));
+                            el.dispatchEvent(new MouseEvent('mouseenter', {bubbles:true}));
+                            return JSON.stringify({hovered:true, tag: (el.tagName||'').toLowerCase()});
+                        } catch(e) { return JSON.stringify({error:'js_failed', detail:String(e)}); }
+                    })()"""
+                    val res = parseJsResult(webView.evaluateJavascriptAsync(js))
+                    if (res.containsKey("error")) return@withController res
+                    BrowserController.appendAction("Hover: $selector")
+                    buildJsonObject { put("success", true) }
+                }
+            } ?: timeoutEnvelope(BrowserToolDefaults.HOVER)
         }
-        textPart(out)
+        textPartWithScreenshot(out, BrowserToolDefaults.HOVER)
     },
 )
 
-// ---- Internal helpers ---------------------------------------------------------------------
-
-private fun selectorOnlySchema(description: String): InputSchema = InputSchema.Obj(
-    properties = buildJsonObject {
-        put("selector", buildJsonObject {
-            put("type", "string")
-            put("description", description)
-        })
-    },
-    required = listOf("selector"),
-)
-
-/**
- * selector + optional full flag — used by the state-changing tools (click / submit)
- * that gain the diff-after-action toggle. selector remains required; `full` defaults
- * to false (i.e. return diff). The naming matches the spec verbatim.
- */
 private fun selectorWithFullSchema(description: String): InputSchema = InputSchema.Obj(
     properties = buildJsonObject {
         put("selector", buildJsonObject {
@@ -1203,7 +877,7 @@ private fun parseFullArg(input: kotlinx.serialization.json.JsonElement): Boolean
  * Falls back to {error:'js_no_result'} on null and {error:'js_parse_failed'} on a
  * value that can't be parsed — both surface to the LLM cleanly without throwing.
  */
-private fun parseJsResult(raw: String?): JsonObject {
+internal fun parseJsResult(raw: String?): JsonObject {
     if (raw == null) return buildJsonObject { put("error", "js_no_result") }
     return runCatching {
         // evaluateJavascript wraps a JS string return value in JSON-quoted form, so
@@ -1331,69 +1005,116 @@ private fun clipText(text: String, maxChars: Int): Pair<String, Boolean> =
     if (text.length <= maxChars) text to false
     else text.substring(0, maxChars) to true
 
-private suspend fun runHistoryNav(toolName: String, forward: Boolean): JsonObject {
-    val out = withTimeoutOrNull(toolTimeoutMs) {
-        BrowserControllerHandle.withController {
-            val ok = withContext(Dispatchers.Main) {
-                if (forward) {
-                    if (webView.canGoForward()) { webView.goForward(); true } else false
-                } else {
-                    if (webView.canGoBack()) { webView.goBack(); true } else false
-                }
-            }
-            if (ok) webView.awaitReadyState(8_000L)
-            BrowserController.appendAction(if (forward) "Forward" else "Back")
-            buildJsonObject {
-                put("success", ok)
-                put("current_url", webView.url.orEmpty())
-            }
+/**
+ * 保存截图到缓存文件，返回可用于 UIMessagePart.Image 的 file:// URL。
+ * 对标 OpenMinis BrowserUseManager 中 visualChangeActions 后的截图保存逻辑。
+ */
+private suspend fun saveScreenshotToFile(context: Context? = null): String? {
+    // 对标 OpenMinis：先等页面稳定再截图
+    delay(300)
+    // 等待 WebView attach 到 window（首次 navigate 时 sheet 可能还没渲染完）
+    // 对齐 OpenMinis：attachSnapshot 在同一个类实例内直接访问 webView，
+    // 但 RikkaHub 的 saveScreenshotToFile 在 withController 作用域外执行，
+    // 需要确保 WebView 已挂载到窗口，否则 draw(canvas) 可能空白
+    var waited = 0L
+    while (waited < 3000) {
+        val session = BrowserController.selectedSession
+        if (session != null) {
+            val attached = withContext(Dispatchers.Main) { session.webView.isAttachedToWindow }
+            if (attached) break
         }
-    } ?: timeoutEnvelope(toolName)
-    // Pass 3: stream the post-nav screenshot to the calling chat in headless mode. Only
-    // fires when the controller is actually in Mode.Headless; foreground-mode is a no-op.
-    // Don't stream when we already returned an error envelope.
-    if (out["success"]?.toString() == "true") {
-        BrowserController.streamScreenshotIfHeadless(if (forward) "Forward" else "Back")
+        delay(200)
+        waited += 200
     }
-    return out
+    return withContext(Dispatchers.Main) {
+        val session = BrowserController.selectedSession ?: return@withContext null
+        val webView = session.webView
+        val ctx = context ?: webView.context.applicationContext ?: return@withContext null
+        try {
+            // 对标 OpenMinis captureWebViewBitmap：处理宽高为 0 的情况
+            var w = webView.width
+            var h = webView.height
+            if (w <= 0 || h <= 0) {
+                // 对齐 OpenMinis：使用 profile viewport 尺寸而非硬编码 1080x1920
+                // OpenMinis 用 currentProfile.viewportSize（412x915 或 1280x800）
+                val (vpW, vpH) = BrowserController.resolvedViewportSize()
+                val density = webView.resources.displayMetrics.density
+                val targetW = (vpW * density).toInt().coerceAtLeast(1)
+                val targetH = (vpH * density).toInt().coerceAtLeast(1)
+                webView.measure(
+                    android.view.View.MeasureSpec.makeMeasureSpec(targetW, android.view.View.MeasureSpec.EXACTLY),
+                    android.view.View.MeasureSpec.makeMeasureSpec(targetH, android.view.View.MeasureSpec.EXACTLY),
+                )
+                webView.layout(0, 0, targetW, targetH)
+                w = targetW; h = targetH
+            }
+            h = h.coerceAtMost(MAX_SCREENSHOT_HEIGHT_PX)
+            val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(bitmap)
+            webView.draw(canvas)
+            val cacheDir = File(ctx.cacheDir, SCREENSHOT_CACHE_SUBDIR).apply { mkdirs() }
+            val out = File(cacheDir, "visual-${System.currentTimeMillis()}.webp")
+            try {
+                FileOutputStream(out).use { os ->
+                    bitmap.compress(Bitmap.CompressFormat.WEBP, 85, os)
+                }
+                "file://${out.absolutePath}"
+            } finally {
+                bitmap.recycle()
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("BrowserTools", "saveScreenshotToFile failed: ${e.message}")
+            null
+        }
+    }
 }
 
 /**
- * Factory dispatch for a given browser tool name. Used by
- * [me.rerere.rikkahub.data.ai.tools.LocalTools.getTools] which iterates the per-tool
- * preference map and only constructs the ones currently enabled.
- *
- * Pass 3: [invocationContext] flows through to the two tool factories that consult it:
- *  - [browserOpenTool]: picks foreground-Activity vs headless-WebView mode by reading
- *    [HeadlessConversations.isHeadless] on the caller's conversation id.
- *  - [browserDoneTool]: in headless mode, also releases the per-conv WebView session.
- *
- * Other tool factories don't need the context — the auto-stream side of headless mode is
- * handled inside [BrowserController.streamScreenshotIfHeadless] which reads the live mode
- * directly without per-tool plumbing.
+ * 如果当前工具是视觉变化动作，保存截图并添加到输出。
+ * 对标 OpenMinis: visualChangeActions 后 result.imageFilePath = saveScreenshot()
+ */
+private suspend fun addScreenshotIfVisualChange(
+    toolName: String,
+    parts: MutableList<UIMessagePart>,
+) {
+    if (toolName !in VISUAL_CHANGE_ACTIONS) return
+    val url = saveScreenshotToFile()
+    if (url != null) {
+        parts.add(UIMessagePart.Image(url = url))
+    }
+}
+
+/**
+ * Factory dispatch for a given browser tool name.
+ * All browser tools run in embedded mode (in-chat BrowserPreviewSheet).
  */
 fun createBrowserTool(
     toolName: String,
     context: Context,
-    invocationContext: ToolInvocationContext? = null,
 ): Tool? = when (toolName) {
-    BrowserToolDefaults.OPEN -> browserOpenTool(context, invocationContext)
-    BrowserToolDefaults.CURRENT_URL -> browserCurrentUrlTool()
-    BrowserToolDefaults.SCREENSHOT -> browserScreenshotTool(context)
-    BrowserToolDefaults.GET_TEXT -> browserGetTextTool()
-    BrowserToolDefaults.GET_DOM -> browserGetDomTool()
-    BrowserToolDefaults.GET_LINKS -> browserGetLinksTool()
-    BrowserToolDefaults.BACK -> browserBackTool()
-    BrowserToolDefaults.FORWARD -> browserForwardTool()
-    BrowserToolDefaults.WAIT_FOR -> browserWaitForTool()
-    BrowserToolDefaults.CLICK -> browserClickTool()
-    BrowserToolDefaults.TYPE -> browserTypeTool()
-    BrowserToolDefaults.SCROLL -> browserScrollTool()
-    BrowserToolDefaults.SUBMIT -> browserSubmitTool()
-    BrowserToolDefaults.SELECT -> browserSelectTool()
-    BrowserToolDefaults.PRESS_KEY -> browserPressKeyTool()
-    BrowserToolDefaults.EVAL_JS -> browserEvalJsTool()
-    BrowserToolDefaults.CLICK_AND_READ -> browserClickAndReadTool()
-    BrowserToolDefaults.DONE -> browserDoneTool(invocationContext)
+    // 对标 OpenMinis BrowserAction
+    BrowserToolDefaults.NAVIGATE -> navigateTool(context)
+    BrowserToolDefaults.GET_PAGE_INFO -> getPageInfoTool()
+    BrowserToolDefaults.SCREENSHOT -> screenshotTool(context)
+    BrowserToolDefaults.GET_TEXT -> getTextTool()
+    BrowserToolDefaults.GET_READABLE -> getReadableTool()
+    BrowserToolDefaults.CLICK -> clickTool()
+    BrowserToolDefaults.TYPE -> typeTool()
+    BrowserToolDefaults.SCROLL -> scrollTool()
+    BrowserToolDefaults.EXECUTE_JS -> executeJsTool()
+    BrowserToolDefaults.FIND_ELEMENTS -> findElementsTool()
+    BrowserToolDefaults.HOVER -> hoverTool()
+    BrowserToolDefaults.WAIT_FOR_DOM_STABLE -> waitForDomStableTool()
+    // 补齐的 10 个工具（对标 OpenMinis BrowserAction）
+    BrowserToolDefaults.GET_BACKBONE -> getBackboneTool()
+    BrowserToolDefaults.FETCH -> fetchTool()
+    BrowserToolDefaults.GET_COOKIES -> getCookiesTool()
+    BrowserToolDefaults.SET_COOKIES -> setCookiesTool()
+    BrowserToolDefaults.LIST_TABS -> listTabsTool()
+    BrowserToolDefaults.NEW_TAB -> newTabTool(context)
+    BrowserToolDefaults.CLOSE_TAB -> closeTabTool()
+    BrowserToolDefaults.SET_USER_AGENT -> setUserAgentTool()
+    BrowserToolDefaults.SET_VIEWPORT -> setViewportTool()
+    BrowserToolDefaults.SCROLL_AND_COLLECT -> scrollAndCollectTool()
     else -> null
 }

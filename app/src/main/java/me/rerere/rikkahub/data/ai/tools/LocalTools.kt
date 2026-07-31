@@ -524,9 +524,6 @@ class LocalTools(
                     me.rerere.rikkahub.data.ai.tools.local.createBrowserTool(
                         toolName = name,
                         context = context,
-                        // Pass 3: thread the caller context so browser_open can pick the
-                        // foreground vs headless mode by reading HeadlessConversations.
-                        invocationContext = invocationContext,
                     )?.let { tools.add(it) }
                 }
             }

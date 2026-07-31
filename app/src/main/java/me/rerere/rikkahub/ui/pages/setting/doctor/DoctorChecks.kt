@@ -65,7 +65,7 @@ private object Capability {
         LocalToolOption.Files,               // file_read / file_write to arbitrary paths
     )
     val Browser: Set<LocalToolOption> = setOf(
-        LocalToolOption.Browser,             // 17 browser tools (in-app WebView)
+        LocalToolOption.Browser,             // 31 browser tools (in-app WebView)
     )
     // Phase 25 — Phase 3 second cut.
     val SendSms: Set<LocalToolOption> = setOf(

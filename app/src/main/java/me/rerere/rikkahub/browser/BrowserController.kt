@@ -1,543 +1,564 @@
 package me.rerere.rikkahub.browser
 
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.webkit.WebView
+
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.contentOrNull
 import java.io.File
 import java.io.FileOutputStream
-import java.lang.ref.WeakReference
+import java.net.URI
 
 /**
- * Singleton bridge between the LLM browser tools and the live WebView.
- * Mirrors the [me.rerere.rikkahub.service.RikkaAccessibilityService.instance] pattern: the
- * Activity (or headless session host) publishes itself in on bind and clears on unbind.
+ * 浏览器控制器 —— 单例，管理浏览器会话池。
  *
- * Pass 1 laid the foundation — the WeakReference, the recent-actions log, and the
- * [BrowserControllerHandle.withController] dispatch helper. Pass 2 added launch-await
- * (`awaitBind`), the 5-min single-task window, and a main-thread bridge.
+ * 对标 OpenMinis BrowserTabPool（池化管理）+ BrowserUseManager（会话管理）。
  *
- * **Pass 3 introduces a [Mode] sealed class** so the controller can serve two parallel
- * use cases without forking the tool dispatcher:
- *  - [Mode.Foreground]: the on-screen [BrowserActivity] hosts the WebView. The user
- *    watches the AI navigate.
- *  - [Mode.Headless]: a [HeadlessBrowserSession] hosts the WebView in the application
- *    process, parented to an unattached layout. Used when the calling conversation is a
- *    cron / sub-agent — anything `HeadlessConversations.isHeadless(convId)`
- *    returns true for. After every state-changing tool, the controller streams a screenshot
- *    + URL into the calling chat via [BrowserScreenshotStreamer].
- *
- * The legacy [bind]/[unbind] entry points still work — they delegate to the new
- * foreground bind so existing call sites in [BrowserActivity] compile unchanged. The
- * [WeakReference] reaches into [Mode.Foreground.activityRef] now; [Mode.Headless] holds a
- * hard reference (the headless session is the WebView's only owner — letting it GC mid-task
- * would lose the session).
+ * 全局配置（超时、搜索引擎、UA 等）直接放在这里；
+ * 每个 [BrowserSession] 管理单个 WebView 的所有状态。
  */
 object BrowserController {
 
-    private const val MAX_RECENT_ACTIONS = 20
+    private const val TAG = "BrowserController"
+    private const val MAX_SESSIONS = 3
 
-    /**
-     * Hard cap on a single AI-driven task to bound runaway loops. User-configurable via
-     * Settings → Browser (GitHub issue #4) — [BrowserPreferences] writes the persisted value
-     * here at app start and on every edit. Defaults to 5 min until the first read settles.
-     * Always holds a value clamped into [BrowserToolDefaults]'s supported range.
-     */
+    // ── 全局配置 ──
     @Volatile
     var singleTaskTimeoutMs: Long = BrowserToolDefaults.DEFAULT_SINGLE_TASK_TIMEOUT_MS
 
-    /**
-     * Per-tool timeout — the `withTimeoutOrNull` budget every browser tool wraps its dispatch
-     * in. User-configurable via Settings → Browser (GitHub issue #4); kept in sync by
-     * [BrowserPreferences]. Defaults to 30 s until the first read settles. Always clamped.
-     */
     @Volatile
     var perToolTimeoutMs: Long = BrowserToolDefaults.DEFAULT_PER_TOOL_TIMEOUT_MS
 
-    /**
-     * Current search engine index (0-based into [BrowserToolDefaults.SEARCH_ENGINES]).
-     * Synced from [BrowserPreferences] at app start and on every edit.
-     */
     @Volatile
     var searchEngineIndex: Int = BrowserToolDefaults.DEFAULT_SEARCH_ENGINE_INDEX
 
-    /** Get the current search engine URL template. */
     fun currentSearchEngineUrlTemplate(): String =
         BrowserToolDefaults.SEARCH_ENGINES.getOrNull(searchEngineIndex)?.urlTemplate
             ?: BrowserToolDefaults.SEARCH_ENGINES.first().urlTemplate
-    /**
-     * Desktop mode toggle: when true, the WebView sends a desktop-class User-Agent.
-     * Read by BrowserActivity on menu toggle; persisted in memory (not DataStore —
-     * a simple per-session toggle is intentional, matching Chrome's "Request Desktop
-     * Site" behaviour that resets on tab close).
-     */
+
     @Volatile
     var desktopMode: Boolean = false
 
-    /** Desktop-class User-Agent (Chrome on Windows). */
     const val DESKTOP_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
 
-    /** Mobile UA captured from configureWebViewForRikka, used to restore from desktop mode. */
     @Volatile
     var mobileUA: String? = null
 
-    /** Cache subdir for streamed (headless) screenshots — separate from the `browser-shots`
-     *  subdir the explicit browser_screenshot tool writes into so the streamer pipe can be
-     *  swept independently if it ever grows unbounded. */
-    private const val STREAM_CACHE_SUBDIR = "browser-stream"
+    // ── 会话池（对标 OpenMinis BrowserTabPool） ──
+    // ── 串行锁（对标 OpenMinis BrowserTabPool.tabLocks） ──
+    private val sessionLocks = java.util.concurrent.ConcurrentHashMap<Int, Mutex>()
 
     /**
-     * Skip a stream send if URL matches the previous send within this window. 8 s was the
-     * first cut but live testing with slow models (minimax-m2.7 at 0.7 tok/s) showed a
-     * single LLM turn easily spans 30+ s while bouncing back to the same URL multiple
-     * times. 30 s catches all the practical "model retrying the same page" cases without
-     * suppressing legitimate revisits later in the conversation (different turn = mostly
-     * a new URL anyway).
+     * 获取某个会话的串行锁，确保同一标签页的并发工具调用不会踩踏 WebView。
+     * 对标 OpenMinis BrowserTabPool.lockForTab
      */
-    private const val STREAM_DEDUPE_WINDOW_MS = 30_000L
+    private fun lockForSession(id: Int): Mutex = sessionLocks.getOrPut(id) { Mutex() }
 
     /**
-     * After `awaitReadyState` returns (`document.readyState === "complete"`), the WebView
-     * has parsed HTML and finished resource loads but still hasn't painted its first frame.
-     * `webView.draw(canvas)` at that exact moment captures the empty/white initial backing
-     * — the bug the user reported on cold `browser_open`. 250 ms wasn't enough on slower
-     * pages (kali.org/docs/ rendered the first 2 streams white). 600 ms handles the long
-     * tail; further actions on the same page hit the de-dupe window so this delay only
-     * fires once per real navigation.
+     * 在某个会话的串行锁保护下执行操作。
+     * 对标 OpenMinis BrowserTabPool.executeSerialized
      */
-    private const val PAINT_SETTLE_MS = 600L
-    private const val TAG = "BrowserController"
-
-    /**
-     * Execution mode for the controller. Exactly one is active at a time; the [Mode.Idle]
-     * case lets `isBound()` return false uniformly without a null check.
-     */
-    sealed class Mode {
-        data object Idle : Mode()
-
-        /** A visible [BrowserActivity] hosts the WebView. */
-        data class Foreground(val activityRef: WeakReference<WebView>) : Mode()
-
-        /**
-         * A headless WebView lives in the application process, parented to an unattached
-         * layout owned by [HeadlessBrowserSession]. After every state-changing tool, the
-         * controller posts a screenshot + URL caption into the conversation identified by
-         * [callerConvId] via [BrowserScreenshotStreamer].
-         */
-        data class Headless(val callerConvId: String, val webView: WebView) : Mode()
+    suspend fun <T> withSessionLock(sessionId: Int, action: suspend () -> T): T {
+        val mutex = lockForSession(sessionId)
+        return withTimeoutOrNull(60_000L) {
+            mutex.withLock { action() }
+        } ?: throw java.util.concurrent.TimeoutException("Session $sessionId lock timed out after 60s")
     }
 
+    /**
+     * 在当前选中会话的串行锁下执行操作。
+     */
+    suspend fun <T> withCurrentSessionLock(action: suspend () -> T): T? {
+        val session = selectedSession ?: return null
+        return withTimeoutOrNull(60_000L) {
+            lockForSession(session.id).withLock { action() }
+        }
+    }
+    private val _sessions = MutableStateFlow<List<BrowserSession>>(emptyList())
+    val sessions: StateFlow<List<BrowserSession>> = _sessions.asStateFlow()
+
+    private val _selectedSessionIndex = MutableStateFlow(0)
+    val selectedSessionIndex: StateFlow<Int> = _selectedSessionIndex.asStateFlow()
+
+    val selectedSession: BrowserSession?
+        get() = _sessions.value.getOrNull(_selectedSessionIndex.value)
+
+    internal fun activeWebView(): WebView? = selectedSession?.webView
+
+    // ── 事件回调（全局） ──
     @Volatile
-    private var mode: Mode = Mode.Idle
+    var onShowEmbeddedRequest: (() -> Unit)? = null
+
+
+    // ── 会话持久化（对标 OpenMinis BrowserTabPool.saveState/loadState） ──
+
+    /** 保存的标签页 URL（在空闲回收时保存，重新打开时恢复） */
+    private val savedUrls = mutableMapOf<Int, String>()
+
+    /** 持久化文件路径 */
+    private var stateFile: java.io.File? = null
+
+    @Volatile
+    private var persistenceInitialized = false
+
+    private fun ensurePersistence(context: Context) {
+        if (!persistenceInitialized) {
+            persistenceInitialized = true
+            initPersistence(context)
+        }
+    }
+
+    /** 初始化持久化 */
+    fun initPersistence(context: Context) {
+        stateFile = java.io.File(context.filesDir, "browser_sessions.json")
+        loadState()
+    }
+
+    /** 保存当前标签页状态到文件 */
+    private fun saveState() {
+        val file = stateFile ?: return
+        try {
+            val json = buildJsonObject {
+                put("selectedIndex", _selectedSessionIndex.value)
+                put("tabs", kotlinx.serialization.json.buildJsonArray {
+                    _sessions.value.forEach { session ->
+                        val url = session.currentUrl.value.ifEmpty { null }
+                        if (url != null) {
+                            add(buildJsonObject {
+                                put("id", session.id)
+                                put("url", url)
+                                put("title", session.pageTitle.value)
+                            })
+                        }
+                    }
+                    savedUrls.forEach { (id, url) ->
+                        if (_sessions.value.none { it.id == id }) {
+                            add(buildJsonObject {
+                                put("id", id)
+                                put("url", url)
+                                put("title", "")
+                            })
+                        }
+                    }
+                })
+            }
+            file.writeText(json.toString())
+        } catch (e: Exception) {
+            android.util.Log.w(TAG, "Failed to save session state: ${e.message}")
+        }
+    }
+
+    /** 从文件加载标签页状态 */
+    private fun loadState() {
+        val file = stateFile ?: return
+        try {
+            if (!file.exists()) return
+            val text = file.readText()
+            val json = kotlinx.serialization.json.Json.parseToJsonElement(text).jsonObject
+            val tabsArray = json["tabs"]?.jsonArray ?: return
+            savedUrls.clear()
+            for (element in tabsArray) {
+                val obj = element.jsonObject
+                val id = obj["id"]?.jsonPrimitive?.intOrNull ?: continue
+                val url = obj["url"]?.jsonPrimitive?.contentOrNull ?: continue
+                savedUrls[id] = url
+            }
+            _selectedSessionIndex.value = json["selectedIndex"]?.jsonPrimitive?.intOrNull ?: 0
+            android.util.Log.i(TAG, "Loaded ${savedUrls.size} saved sessions")
+        } catch (e: Exception) {
+            android.util.Log.w(TAG, "Failed to load session state: ${e.message}")
+        }
+    }
+
+    // ── 会话管理（对标 OpenMinis BrowserTabPool.createTab/closeTab/selectTab） ──
+
+    fun createSession(context: Context): BrowserSession? {
+        ensurePersistence(context)
+        val current = _sessions.value.toMutableList()
+        if (current.size >= MAX_SESSIONS) return null
+        val id = (current.maxOfOrNull { it.id } ?: 0) + 1
+        // 如果有保存的 URL，恢复
+        val savedUrl = savedUrls.remove(id)
+        val session = BrowserSession(id, context)
+        if (savedUrl != null) {
+            session.loadUrl(savedUrl)
+        }
+        current.add(session)
+        _sessions.value = current
+        _selectedSessionIndex.value = current.size - 1
+        saveState()
+        return session
+    }
+
+    fun selectSession(index: Int) {
+        if (index in _sessions.value.indices) {
+            _selectedSessionIndex.value = index
+            _sessions.value = _sessions.value.toList()
+        }
+    }
+
+    fun closeSession(index: Int) {
+        val current = _sessions.value.toMutableList()
+        if (index !in current.indices) return
+        val session = current.removeAt(index)
+        // 保存 URL 以便后续恢复
+        val url = session.currentUrl.value
+        if (url.isNotEmpty()) savedUrls[session.id] = url
+        session.destroy()
+        _sessions.value = current
+        if (current.isEmpty()) {
+            _selectedSessionIndex.value = 0
+        } else if (index <= _selectedSessionIndex.value) {
+            _selectedSessionIndex.value = (_selectedSessionIndex.value - 1).coerceAtLeast(0)
+        }
+        saveState()
+    }
+
+    fun releaseAllSessions() {
+        // 释放前保存 URL
+        _sessions.value.forEach { session ->
+            val url = session.currentUrl.value
+            if (url.isNotEmpty()) savedUrls[session.id] = url
+            session.destroy()
+        }
+        _sessions.value = emptyList()
+        _selectedSessionIndex.value = 0
+        saveState()
+    }
+
+    // ── 浏览历史（全局，跨会话共享，对标 OpenMinis BrowserHistoryStore） ──
+    private val _history = MutableStateFlow<List<BrowserHistoryEntry>>(emptyList())
+    val historyFlow: StateFlow<List<BrowserHistoryEntry>> = _history.asStateFlow()
+
+    private const val HISTORY_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000L // 7 天
+    private const val HISTORY_MAX_ENTRIES = 500
+
+    fun addHistoryStatic(url: String, title: String) {
+        if (url.isBlank() || url == "about:blank") return
+        // 去重连续访问
+        val current = _history.value
+        if (current.firstOrNull()?.url == url) return
+        val domain = runCatching { URI(url).host }.getOrNull() ?: ""
+        val entry = BrowserHistoryEntry(url, title, System.currentTimeMillis(), domain)
+        // 去重 + 7天清理 + 上限
+        val pruned = (listOf(entry) + current.filter { it.url != url })
+            .filter { System.currentTimeMillis() - it.timestamp < HISTORY_MAX_AGE_MS }
+            .take(HISTORY_MAX_ENTRIES)
+        _history.value = pruned
+    }
 
     /**
-     * Serialises every read-modify-write of [mode] and [streamDedupe]. The bind/unbind
-     * entry points and the per-conv de-dupe map mutate shared state from multiple coroutines
-     * (cron worker, sub-agent), so a plain `@Volatile` on [mode] is
-     * not enough to make "check the current binding, then replace it" atomic. Without it, two
-     * concurrent headless conversations can both pass [bindHeadless]'s clobber check and the
-     * second silently overwrites the first — a later screenshot then routes to the wrong chat.
+     * 搜索历史记录。
+     * 对标 OpenMinis BrowserHistoryStore.search
      */
+    fun searchHistory(query: String): List<BrowserHistoryEntry> {
+        if (query.isBlank()) return _history.value
+        val q = query.lowercase()
+        return _history.value.filter {
+            it.title.lowercase().contains(q) || it.url.lowercase().contains(q)
+        }
+    }
+
+    /**
+     * 获取历史记录中的唯一域名列表（用于 cookie 管理）。
+     * 对标 OpenMinis BrowserHistoryStore.uniqueDomains
+     */
+    fun uniqueHistoryDomains(): List<String> {
+        return _history.value.map { it.domain }.filter { it.isNotEmpty() }.distinct().sorted()
+    }
+
+    fun clearHistory() {
+        _history.value = emptyList()
+    }
+
+    fun removeHistoryEntry(url: String) {
+        _history.value = _history.value.filter { it.url != url }
+    }
+
+    // ── 状态读取（委托给当前会话） ──
+
+    fun isBound(): Boolean = selectedSession != null
+    fun isEmbeddedMode(): Boolean = _sessions.value.isNotEmpty()
+    fun currentUrl(): String? = selectedSession?.webView?.url
+    fun currentTitle(): String? = selectedSession?.webView?.title
+    fun hasActivePage(): Boolean = selectedSession?.hasActivePage == true
+
+    // ── 流（委托给当前会话，安全返回空值） ──
+
+    val recentActions: StateFlow<List<String>>
+        get() = selectedSession?.recentActions ?: MutableStateFlow(emptyList())
+
+    val screenshotEvent: SharedFlow<Unit>
+        get() = selectedSession?.screenshotEvent ?: MutableSharedFlow()
+
+    val tabs: StateFlow<List<BrowserSession>>
+        get() = _sessions
+
+    val selectedTabIndex: StateFlow<Int>
+        get() = _selectedSessionIndex
+
+    val selectedTab: BrowserSession?
+        get() = selectedSession
+
+    fun taskWindowActiveFlow(): StateFlow<Boolean> =
+        selectedSession?.taskWindowActive ?: MutableStateFlow(false)
+
+    fun recentActionsFlow(): StateFlow<List<String>> =
+        selectedSession?.recentActions ?: MutableStateFlow(emptyList())
+
+    // ── 动作委托 ──
+
+    /**
+     * 判断某个工具是否属于「打开新页面」类型。
+     * 对标 OpenMinis BrowserAction.opensNewPage
+     */
+    fun isOpensNewPage(toolName: String): Boolean = toolName in BrowserToolDefaults.OPENS_NEW_PAGE_TOOLS
+
+
+    /**
+     * 判断某个工具是否属于「视觉变化」类型（执行后应自动截图）。
+     * 对标 OpenMinis BrowserAction.visualChangeActions
+     */
+    fun isVisualChange(toolName: String): Boolean = toolName in BrowserToolDefaults.VISUAL_CHANGE_TOOLS
+
+    fun appendAction(label: String) {
+        selectedSession?.appendAction(label)
+    }
+
+    fun touchActivity() {
+        selectedSession?.let { it.lastActivityDate = System.currentTimeMillis() }
+    }
+
+    fun startTaskWindow() {
+        selectedSession?.startTaskWindow()
+    }
+
+    fun clearTaskWindow() {
+        selectedSession?.clearTaskWindow()
+    }
+
+    fun isWithinTaskWindow(): Boolean = selectedSession?.isWithinTaskWindow() == true
+
+    fun stopCurrentTask() {
+        selectedSession?.stopCurrentTask()
+    }
+
+    var lastActivityDate: Long
+        get() = selectedSession?.lastActivityDate ?: System.currentTimeMillis()
+        set(value) { selectedSession?.lastActivityDate = value }
+
+    var currentTaskStartedAt: Long?
+        get() = selectedSession?.currentTaskStartedAt
+        set(value) { selectedSession?.currentTaskStartedAt = value }
+
+    var pendingTaskJob: Job?
+        get() = selectedSession?.pendingTaskJob
+        set(value) { selectedSession?.pendingTaskJob = value }
+
+    // ── 兼容旧接口（供 BrowserPreviewSheet 等调用） ──
+
+    fun createTab(context: Context): BrowserSession? = createSession(context)
+    fun selectTab(index: Int) { selectSession(index) }
+    fun closeTab(index: Int) { closeSession(index) }
+    fun releaseAllTabs() { releaseAllSessions() }
+    fun ensureTab(context: Context): BrowserSession {
+        return selectedSession ?: createSession(context) ?: error("Failed to create session")
+    }
+
+    // ── 空闲回收（对标 OpenMinis BrowserTabPool.evictionJob） ──
+
+    private var evictionJob: Job? = null
+
+    /** 空闲超时（毫秒），默认 15 分钟 */
+    @Volatile
+    var idleTimeoutMs: Long = 15 * 60 * 1000L
+
+    /**
+     * 启动空闲回收定时器（每 60 秒检查一次）。
+     * 对标 OpenMinis BrowserTabPool.evictionJob
+     */
+    fun startIdleSweep() {
+        if (evictionJob?.isActive == true) return
+        evictionJob = CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
+            while (isActive) {
+                delay(60_000L)
+                evictIdleSessions()
+            }
+        }
+    }
+
+    /**
+     * 回收空闲标签页。
+     * 对标 OpenMinis BrowserTabPool.evictIdleTabs
+     */
+    private fun evictIdleSessions() {
+        val now = System.currentTimeMillis()
+        val current = _sessions.value.toMutableList()
+        val toRemove = current.filter { (now - it.lastActivityDate) >= idleTimeoutMs }
+        if (toRemove.isEmpty()) return
+        for (session in toRemove) {
+            val url = session.currentUrl.value
+            if (url.isNotEmpty()) savedUrls[session.id] = url
+            session.destroy()
+            current.remove(session)
+            android.util.Log.i(TAG, "Evicted idle session ${session.id}")
+        }
+        _sessions.value = current
+        if (current.isNotEmpty() && current.none { it.id == _sessions.value.getOrNull(_selectedSessionIndex.value)?.id }) {
+            _selectedSessionIndex.value = 0
+        }
+        saveState()
+    }
+
+    /**
+     * 设置空闲超时（分钟）。
+     * 对标 OpenMinis BrowserTabPool.setIdleTimeoutMinutes
+     */
+    fun setIdleTimeoutMinutes(minutes: Int) {
+        idleTimeoutMs = (minutes.coerceIn(1, 240) * 60_000L).coerceAtLeast(60_000L)
+    }
+
+    // ── 截图 ──
+
+    // ── Viewport 管理（对标 OpenMinis BrowserTabPool.setGlobalViewport / resolvedViewportSize） ──
+
+    private val _customViewportWidth = MutableStateFlow(0)
+    val customViewportWidth: StateFlow<Int> = _customViewportWidth.asStateFlow()
+
+    private val _customViewportHeight = MutableStateFlow(0)
+    val customViewportHeight: StateFlow<Int> = _customViewportHeight.asStateFlow()
+
+    /**
+     * 设置全局 Viewport。宽/高为 0 时恢复为 UA 默认值。
+     * 对标 OpenMinis: tabPool.setGlobalViewport(width, height)
+     */
+    fun setGlobalViewport(width: Int, height: Int) {
+        _customViewportWidth.value = width
+        _customViewportHeight.value = height
+        val session = selectedSession ?: return
+        if (width > 0 && height > 0) {
+            session.applyViewport(width, height)
+        }
+    }
+
+    /**
+     * 返回当前生效的 Viewport 尺寸（自定义优先，否则 UA 默认）。
+     * 对标 OpenMinis: tabPool.resolvedViewportSize()
+     */
+    fun resolvedViewportSize(): Pair<Int, Int> {
+        val cw = _customViewportWidth.value
+        val ch = _customViewportHeight.value
+        if (cw > 0 && ch > 0) return cw to ch
+        return 412 to 915
+    }
+
+    /**
+     * 根据 UA 配置返回默认 Viewport
+     */
+    fun defaultViewportForUA(profile: UserAgentProfile): Pair<Int, Int> = profile.viewportSize
+
+    /**
+     * 是否有自定义 Viewport
+     */
+    fun hasCustomViewport(): Boolean = _customViewportWidth.value > 0 && _customViewportHeight.value > 0
+
+    suspend fun captureLiveSnapshot(): Bitmap? = selectedSession?.captureLiveSnapshot()
+
+    // ── 头戴模式 ──
+
+    private val streamDedupe = mutableMapOf<String, StreamMark>()
+    private data class StreamMark(val url: String?, val atMs: Long)
+    private const val STREAM_CACHE_SUBDIR = "browser-stream"
+    private const val STREAM_DEDUPE_WINDOW_MS = 30_000L
+    private const val PAINT_SETTLE_MS = 600L
+
     private val bindLock = Any()
-
-    /**
-     * Pass 2 publishes a fresh deferred each time the binding is cleared, so a tool that
-     * fires `browser_open` can `awaitBind` after starting the Activity. The Volatile lets
-     * the awaiting coroutine see the new instance the moment unbind() swaps it in.
-     */
     @Volatile
     private var bindDeferred: CompletableDeferred<Unit> = CompletableDeferred()
 
-    /** Set on the first browser_open of a task. null = no task in flight. */
-    @Volatile
-    var currentTaskStartedAt: Long? = null
-
-    /**
-     * Pass 2: the in-flight tool dispatch coroutine, stored so the user-facing "Stop AI"
-     * UI button can cancel a run mid-action (the visible Activity calls [stopCurrentTask]
-     * which cancels this Job). Tool factories register their dispatch into here on entry
-     * and clear on completion.
-     */
-    @Volatile
-    var pendingTaskJob: Job? = null
-
-    /**
-     * De-dupe state for [streamScreenshotIfHeadless], keyed by [Mode.Headless.callerConvId].
-     * When the LLM bounces between the same/very-similar URL (e.g. minimax-m2.7 occasionally
-     * calls browser_open 5x in a row trying to find a page) every state-changing tool fires
-     * the streamer, flooding the user's remote chat with near-identical PNGs. Skip the send
-     * when the URL is the same as that conversation's last stream AND the last stream was
-     * within [STREAM_DEDUPE_WINDOW_MS]. A click that didn't change the URL is also caught by
-     * this rule (URL stays equal).
-     *
-     * **Why keyed per conv.** A single global last-URL/last-time pair let two concurrent
-     * headless conversations clobber each other's de-dupe memory: conv A streams page X, conv
-     * B then streams the same X within the window and gets wrongly suppressed (or vice-versa,
-     * A's stale mark suppresses B's legitimate first frame). Keying on the caller conv id
-     * isolates the windows. Entries are dropped on [unbindHeadless] so a finished conversation
-     * doesn't retain memory. Guarded by [bindLock] for the same reason [mode] is.
-     */
-    private data class StreamMark(val url: String?, val atMs: Long)
-
-    private val streamDedupe = mutableMapOf<String, StreamMark>()
-
-    private val _recentActions = MutableStateFlow<List<String>>(emptyList())
-
-    /** Compose-friendly observable of the last [MAX_RECENT_ACTIONS] AI actions, newest first. */
-    fun recentActionsFlow(): StateFlow<List<String>> = _recentActions.asStateFlow()
-
-    /** Returns the current execution mode. */
-    fun currentMode(): Mode = mode
-
-    // --- Foreground bindings ----------------------------------------------------------
-
-    /**
-     * Activity calls this in onCreate. Replaces any prior binding (only one BrowserActivity
-     * at a time). Pass 3 also routes around an existing [Mode.Headless] — installing a
-     * foreground binding while a headless session is live is undefined; the headless session
-     * MUST `unbindHeadless` before the foreground Activity binds.
-     */
-    fun bindForeground(webView: WebView) {
-        mode = Mode.Foreground(WeakReference(webView))
-        if (!bindDeferred.isCompleted) {
-            bindDeferred.complete(Unit)
-        }
-        // Trim stale screenshots from any prior session (including ones killed by
-        // process-stop). Doing this on bind catches both the clean-end and crash-end
-        // cases — by the time the new session writes its first capture, there are at
-        // most `keepLast` files in each cache subdir.
-        runCatching { BrowserCacheSweeper.sweep(webView.context.applicationContext) }
-    }
-
-    /** Activity calls this in onDestroy. Only clears if the live ref still points at the same WebView. */
-    fun unbindForeground(webView: WebView) {
-        val current = (mode as? Mode.Foreground)?.activityRef?.get()
-        if (current === webView || current == null) {
-            mode = Mode.Idle
-            // Reset task timer + action log when the visible Activity is torn down. Headless
-            // mode has its own teardown via [unbindHeadless]; this branch is foreground-only.
-            currentTaskStartedAt = null
-            _recentActions.value = emptyList()
-            // Swap in a fresh deferred so the NEXT browser_open's awaitBind blocks correctly
-            // until the next bind() — without this, a stale "completed" deferred from the
-            // prior session would let awaitBind return immediately on a dead WebView.
-            bindDeferred = CompletableDeferred()
-        }
-    }
-
-    /** Pass 1/2 API surface — kept as a thin wrapper over [bindForeground] so call sites compile. */
-    fun bind(webView: WebView) = bindForeground(webView)
-
-    /** Pass 1/2 API surface — kept as a thin wrapper over [unbindForeground]. */
-    fun unbind(webView: WebView) = unbindForeground(webView)
-
-    // --- Headless bindings ------------------------------------------------------------
-
-    /**
-     * Pass 3: bind a headless WebView for the conversation identified by [callerConvId].
-     * The WebView is held by hard reference because the [HeadlessBrowserSession] is its
-     * only owner — losing it to GC mid-task would silently lose the session.
-     *
-     * Sets the Mode to [Mode.Headless] and completes the bind deferred, mirroring the
-     * foreground path so [awaitBind] can be reused if needed.
-     *
-     * Returns false WITHOUT mutating state if a DIFFERENT conversation already holds a live
-     * headless (or foreground) binding — the controller's [mode] is a single global slot, so
-     * letting a second concurrent conversation overwrite it would route the first's streamed
-     * screenshots into the wrong chat. The caller (browser_open) surfaces a clean
-     * [bindBusyEnvelope] in that case. Re-binding the SAME conv id is always allowed (the
-     * normal per-task reuse where browser_open fires again on a session that's already bound).
-     */
     fun bindHeadless(callerConvId: String, webView: WebView): Boolean {
         synchronized(bindLock) {
-            when (val current = mode) {
-                is Mode.Headless ->
-                    // A DIFFERENT conversation may take over the single controller slot only
-                    // while the current owner's task is genuinely in flight — i.e. browser_open
-                    // armed the task window and browser_done hasn't cleared it (and it hasn't
-                    // expired). During that window a second conversation would clobber the
-                    // owner's screenshot routing, so reject it (bindBusyEnvelope). Once the owner
-                    // finishes (window cleared), its window expires (forgetful model), or its
-                    // idle session is swept, the slot is free to hand off — without this the
-                    // binding would pin to the finished conversation until its /new and block
-                    // every other conversation forever. Same-conv re-bind always refreshes the ref.
-                    if (current.callerConvId != callerConvId &&
-                        currentTaskStartedAt != null && isWithinTaskWindow()
-                    ) return false
-                is Mode.Foreground ->
-                    // The visible Activity is using the controller; don't steal it from under
-                    // the user. (bindForeground itself routes around an existing headless bind
-                    // per its own contract.) Reject only if the foreground WebView is still live.
-                    if (current.activityRef.get() != null) return false
-                Mode.Idle -> Unit
-            }
-            mode = Mode.Headless(callerConvId, webView)
-            // Fresh session for this conv — drop its de-dupe memory so the first stream of a
-            // new task isn't suppressed by a URL match against a previous task on the same id.
+            if (_sessions.value.isNotEmpty()) return false
+            val session = BrowserSession(1, webView.context)
+            _sessions.value = listOf(session)
+            _selectedSessionIndex.value = 0
             streamDedupe.remove(callerConvId)
         }
         if (!bindDeferred.isCompleted) {
             bindDeferred.complete(Unit)
         }
-        // Trim stale screenshots — same reasoning as bindForeground. Headless sessions
-        // produce streamer PNGs in `browser-stream/` after every state-changing tool, so
-        // a long bot conversation can put real pressure on cacheDir without this.
         runCatching { BrowserCacheSweeper.sweep(webView.context.applicationContext) }
         return true
     }
 
-    /**
-     * Non-mutating peek: would [bindHeadless] for [callerConvId] currently succeed?
-     * Mirrors [bindHeadless]'s reject rule EXACTLY (a different live headless owner whose
-     * task is genuinely in flight, or a live foreground binding) so browser_open can avoid
-     * allocating a ~30 MB WebView session it would only have to discard on rejection.
-     *
-     * This is advisory: [bindHeadless] stays authoritative and re-checks under [bindLock],
-     * so a race between the peek and the bind can only cost the (now closed) allocation, not
-     * a wrong binding. Reads [mode] / [currentTaskStartedAt] under the lock for a coherent
-     * snapshot, matching how the real bind decides.
-     */
-    fun canBindHeadless(callerConvId: String): Boolean {
-        synchronized(bindLock) {
-            return when (val current = mode) {
-                is Mode.Headless ->
-                    !(current.callerConvId != callerConvId &&
-                        currentTaskStartedAt != null && isWithinTaskWindow())
-                is Mode.Foreground -> current.activityRef.get() == null
-                Mode.Idle -> true
-            }
-        }
+    fun canBindHeadless(callerConvId: String): Boolean = synchronized(bindLock) {
+        _sessions.value.isEmpty()
     }
 
-    /**
-     * Tear down the headless binding for [callerConvId]. Idempotent: if the current mode
-     * isn't headless or doesn't match the conv id, this is a no-op (someone else already
-     * tore it down or we're racing a foreground bind).
-     */
     fun unbindHeadless(callerConvId: String) {
         synchronized(bindLock) {
-            val m = mode
-            if (m is Mode.Headless && m.callerConvId == callerConvId) {
-                mode = Mode.Idle
-                currentTaskStartedAt = null
-                _recentActions.value = emptyList()
-                bindDeferred = CompletableDeferred()
-            }
-            // Drop the conversation's de-dupe memory regardless of which mode is live, so a
-            // finished conv can't leave a stale URL mark that suppresses a future reuse.
+            releaseAllSessions()
             streamDedupe.remove(callerConvId)
+            bindDeferred = CompletableDeferred()
         }
     }
 
-    /**
-     * Reset [mode] to [Mode.Idle] iff it is currently [Mode.Headless] for [callerConvId].
-     * Called by [HeadlessBrowserSessionPool]'s idle sweep when it evicts (and destroys) a
-     * session: without this the controller's [mode] keeps pointing at the now-destroyed
-     * WebView, so the next tool call would dispatch onto a dead view (evaluateJavascript
-     * throws, screenshots stream white) instead of cleanly returning `browser_session_lost`.
-     *
-     * Mirrors [unbindHeadless]'s teardown (task timer, action log, fresh bind deferred, de-dupe
-     * memory) but ONLY when this conv still owns the slot — a different live owner or a
-     * foreground binding is left untouched. Guarded by [bindLock] so it composes safely with
-     * concurrent bind/unbind; the pool calls it while holding its OWN (separate) pool lock, and
-     * this method never reaches back into the pool, so the two locks never nest in conflicting
-     * order.
-     */
-    fun clearModeIfHeadless(callerConvId: String) {
+    fun clearSession(callerConvId: String) {
         synchronized(bindLock) {
-            val m = mode
-            if (m is Mode.Headless && m.callerConvId == callerConvId) {
-                mode = Mode.Idle
-                currentTaskStartedAt = null
-                _recentActions.value = emptyList()
-                bindDeferred = CompletableDeferred()
-            }
+            releaseAllSessions()
             streamDedupe.remove(callerConvId)
+            bindDeferred = CompletableDeferred()
         }
     }
 
-    // --- Status reads -----------------------------------------------------------------
-
-    /** True iff a WebView is currently bound (foreground or headless) and not GC'd. */
-    fun isBound(): Boolean = activeWebView() != null
-
-    /** Cheap read for tools / UI status — null when no WebView is bound. */
-    fun currentUrl(): String? = activeWebView()?.url
-
-    /** Cheap read for tools / UI status — null when no WebView is bound. */
-    fun currentTitle(): String? = activeWebView()?.title
-
-    /**
-     * Append a one-line description of an AI-driven action to the recent-actions log.
-     * The BrowserAiStripe observes the resulting flow and renders the trail.
-     */
-    fun appendAction(label: String) {
-        val trimmed = label.trim()
-        if (trimmed.isEmpty()) return
-        val current = _recentActions.value
-        val next = (listOf(trimmed) + current).take(MAX_RECENT_ACTIONS)
-        _recentActions.value = next
-    }
-
-    /**
-     * Cancel the in-flight tool dispatch (if any) and clear the single-task timer. Wired
-     * to the Activity's "Stop AI" kebab item; the cancelled coroutine surfaces as a normal
-     * CancellationException inside the tool's withTimeoutOrNull and the LLM gets a clean
-     * envelope instead of a stack trace.
-     */
-    fun stopCurrentTask() {
-        pendingTaskJob?.cancel()
-        pendingTaskJob = null
-        currentTaskStartedAt = null
-        appendAction("AI task stopped by user")
-    }
-
-    /**
-     * Start (or refresh) the single-task window. browser_open calls this on every successful
-     * navigation; once a task starts, every browser_* call after the window expires gets
-     * [taskTimeoutEnvelope] until browser_done fires (which clears the timer). The window
-     * length is [singleTaskTimeoutMs] — user-configurable in Settings → Browser.
-     */
-    fun startTaskWindow() {
-        currentTaskStartedAt = System.currentTimeMillis()
-    }
-
-    /** browser_done clears the task window (and stops the in-flight job log). */
-    fun clearTaskWindow() {
-        currentTaskStartedAt = null
-    }
-
-    /**
-     * Returns true if no task is in flight OR the in-flight task hasn't yet exhausted its
-     * configured single-task budget ([singleTaskTimeoutMs]). Tools call this BEFORE doing any
-     * work so a runaway loop costs at most one envelope per call after the cap.
-     */
-    fun isWithinTaskWindow(): Boolean {
-        val started = currentTaskStartedAt ?: return true
-        return System.currentTimeMillis() - started < singleTaskTimeoutMs
-    }
-
-    /**
-     * Suspend until a bind happens or [timeoutMs] elapses. browser_open uses this after
-     * firing the BrowserActivity launch intent — the Activity's onCreate publishes its
-     * WebView, the deferred completes, and the tool can then call loadUrl. 5 s is the
-     * spec-mandated cap; on a slow device the user's click on Settings → Open Browser
-     * also takes about that long.
-     */
     suspend fun awaitBind(timeoutMs: Long = 5_000L): Boolean {
         if (isBound()) return true
         return withTimeoutOrNull(timeoutMs) { bindDeferred.await(); true } ?: false
     }
 
-    /**
-     * Internal accessor used by [BrowserControllerHandle]. Returns the live WebView or null
-     * (the WeakReference has been GC'd, no Activity, or no headless session).
-     */
-    internal fun activeWebView(): WebView? = when (val m = mode) {
-        is Mode.Foreground -> m.activityRef.get()
-        is Mode.Headless -> m.webView
-        Mode.Idle -> null
-    }
-
-    fun notOpenEnvelope(): JsonObject = buildJsonObject {
-        put("error", "browser_not_open")
-        put("recovery", "Call browser_open with a URL to launch the browser before invoking this tool.")
-    }
-
-    /** Returned when the 5-min single-task window has elapsed without a browser_done call. */
-    fun taskTimeoutEnvelope(): JsonObject = buildJsonObject {
-        put("error", "browser_task_timeout")
-        put("recovery", "Call browser_done with a summary; the per-task 5-minute cap has been reached.")
-    }
-
-    /**
-     * Returned when a headless session was torn down mid-task (the calling FGS died) and a
-     * subsequent tool call lands on an Idle controller. Distinct from `browser_not_open`
-     * so the LLM can tell the user "your remote session ended" rather than retry forever.
-     */
-    fun sessionLostEnvelope(): JsonObject = buildJsonObject {
-        put("error", "browser_session_lost")
-        put("recovery", "The headless browser session ended (the calling foreground service was killed). Ask the user to retry.")
-    }
-
-    /**
-     * Returned when a headless browser_open lands while a DIFFERENT conversation already
-     * holds the (single, global) controller binding. The controller can drive one WebView at
-     * a time; binding a second concurrently would route the first conversation's streamed
-     * screenshots into the wrong chat, so the second is rejected here instead.
-     */
-    fun bindBusyEnvelope(): JsonObject = buildJsonObject {
-        put("error", "browser_busy")
-        put("recovery", "Another conversation is currently driving the browser. Wait for it to finish (it calls browser_done), then retry browser_open.")
-    }
-
-    /**
-     * Pass 3 auto-stream hook: every state-changing tool calls this AFTER its action
-     * completes (and after [awaitReadyState]) so the remote user gets a screenshot.
-     * No-op when the controller isn't in [Mode.Headless] — foreground users watch the
-     * Activity directly and don't need a streamed copy.
-     *
-     * Failures are swallowed at the streamer level (a missing chat mapping, a remote
-     * outage, etc.) so a screenshot send error never bubbles up to fail the tool itself.
-     * The LLM has already produced its envelope by the time we get here.
-     *
-     * Wiring: the streamer is resolved lazily through Koin so the controller doesn't take
-     * a constructor dep on it (would create a cycle through the streamer → Koin →
-     * LocalTools → BrowserController). [BrowserScreenshotStreamer.NoOp] is the safe
-     * fallback if no implementation is registered (e.g. from a JVM unit test).
-     */
     suspend fun streamScreenshotIfHeadless(actionLabel: String) {
-        val m = mode
-        if (m !is Mode.Headless) return
-        val webView = m.webView
+        val session = selectedSession ?: return
+        val webView = session.webView
         val context = webView.context.applicationContext ?: return
-        // Capture on the main thread (WebView APIs all require it). Read webView.url here
-        // too — accessing it off the main thread tripped StrictMode and threw, which the
-        // outer runCatching silently swallowed; the user saw "no screenshot in chat" with
-        // no obvious error.
-        data class Capture(val path: String, val url: String?)
-        // Read the current URL on the main thread first. If it matches the last streamed
-        // URL within STREAM_DEDUPE_WINDOW_MS, skip everything — bitmap allocation, file
-        // write, and remote upload. Catches three real-world cases that flood the user's
-        // chat with redundant PNGs:
-        //   1. Click that didn't navigate (URL unchanged → diff helper marks it unchanged
-        //      but the streamer still fires for the action label).
-        //   2. browser_open + immediately some other write tool on the same page.
-        //   3. Confused model that calls browser_open 5x in a row trying to find a page.
+
         val currentUrl = runCatching {
             withContext(Dispatchers.Main) { webView.url }
-        }.onFailure {
-            // A throw reading webView.url (StrictMode off-main-thread, destroyed WebView)
-            // would otherwise vanish — the de-dupe check then treats the URL as null and
-            // streams anyway. Log so the cause is recoverable from logcat.
-            android.util.Log.w(TAG, "streamScreenshotIfHeadless: reading webView.url failed", it)
         }.getOrNull()
+
         val now = System.currentTimeMillis()
-        // Per-conv de-dupe: only this conversation's own prior stream can suppress this one,
-        // so a concurrent conversation streaming the same URL can't wrongly gate it.
-        val lastMark = synchronized(bindLock) { streamDedupe[m.callerConvId] }
-        if (
-            currentUrl != null &&
-            currentUrl == lastMark?.url &&
+        val lastMark = synchronized(bindLock) { streamDedupe["headless"] }
+        if (currentUrl != null && currentUrl == lastMark?.url &&
             (now - lastMark.atMs) < STREAM_DEDUPE_WINDOW_MS
-        ) {
-            android.util.Log.d(TAG, "streamScreenshotIfHeadless: skipping duplicate URL $currentUrl within ${STREAM_DEDUPE_WINDOW_MS}ms")
-            return
-        }
-        // Paint settle: awaitReadyState ensures HTML+resources, NOT first paint. Without
-        // this delay, the very first browser_open screenshot streams an empty white frame
-        // because draw(canvas) ran before the renderer flushed.
+        ) { return }
+
         kotlinx.coroutines.delay(PAINT_SETTLE_MS)
+
+        data class Capture(val path: String, val url: String?)
         val capture = runCatching {
             withContext(Dispatchers.Main) {
                 val w = webView.width.coerceAtLeast(1)
@@ -547,75 +568,218 @@ object BrowserController {
                 webView.draw(canvas)
                 val cacheDir = File(context.cacheDir, STREAM_CACHE_SUBDIR).apply { mkdirs() }
                 val out = File(cacheDir, "stream-${System.currentTimeMillis()}.webp")
-                // Recycle in a finally block so a FileOutputStream failure doesn't leak
-                // the ~8 MB native backing. Without this, any IO error mid-capture leaves
-                // the bitmap alive until the next GC (the outer runCatching swallows
-                // the exception before the bitmap variable goes out of scope).
                 try {
                     FileOutputStream(out).use { os ->
                         bitmap.compress(Bitmap.CompressFormat.WEBP, 85, os)
                     }
-                } finally {
-                    bitmap.recycle()
-                }
+                } finally { bitmap.recycle() }
                 Capture(out.absolutePath, currentUrl)
             }
-        }.onFailure { android.util.Log.w(TAG, "streamScreenshotIfHeadless: capture failed", it) }
-            .getOrNull() ?: return
-        // Record what we just streamed AFTER the bitmap path succeeds so a transient
-        // capture failure doesn't lock out a subsequent attempt for the dedupe window.
-        synchronized(bindLock) { streamDedupe[m.callerConvId] = StreamMark(capture.url, now) }
+        }.getOrNull() ?: return
+
+        synchronized(bindLock) { streamDedupe["headless"] = StreamMark(capture.url, now) }
 
         val streamer: BrowserScreenshotStreamer? = runCatching {
             org.koin.java.KoinJavaComponent.getKoin().getOrNull<BrowserScreenshotStreamer>()
         }.getOrNull()
         runCatching {
             (streamer ?: BrowserScreenshotStreamer.NoOp)
-                .send(m.callerConvId, capture.path, actionLabel, capture.url)
-        }.onFailure { android.util.Log.w(TAG, "streamScreenshotIfHeadless: streamer.send failed", it) }
+                .send("headless", capture.path, actionLabel, capture.url)
+        }
+    }
+
+    // ── 错误信封 ──
+
+    // ── 下载管理（对标 OpenMinis BrowserTabPool.downloads） ──
+
+    data class DownloadState(
+        val url: String,
+        val filename: String,
+        val progress: Float = 0f,       // 0..1, -1 = indeterminate
+        val completed: Boolean = false,
+        val formattedSize: String = "",
+        val bytesDone: Long = 0L,
+        val totalBytes: Long = 0L,
+    )
+
+    private val _downloads = MutableStateFlow<List<DownloadState>>(emptyList())
+    val downloadsFlow: StateFlow<List<DownloadState>> = _downloads.asStateFlow()
+
+    /**
+     * 注册一个下载（从 WebView 的 DownloadListener 触发）。
+     */
+    fun startDownload(url: String, filename: String, totalBytes: Long = -1L) {
+        val entry = DownloadState(
+            url = url,
+            filename = filename,
+            progress = if (totalBytes > 0) 0f else -1f,
+            totalBytes = totalBytes,
+        )
+        _downloads.value = listOf(entry) + _downloads.value
+        appendAction("Download: $filename")
+    }
+
+    /**
+     * 更新下载进度。
+     */
+    fun updateDownloadProgress(url: String, bytesDone: Long, totalBytes: Long) {
+        _downloads.value = _downloads.value.map {
+            if (it.url == url) {
+                val progress = if (totalBytes > 0) (bytesDone.toFloat() / totalBytes).coerceIn(0f, 1f) else -1f
+                it.copy(progress = progress, bytesDone = bytesDone, totalBytes = totalBytes)
+            } else it
+        }
+    }
+
+    /**
+     * 完成下载。
+     */
+    fun finishDownload(url: String, formattedSize: String) {
+        _downloads.value = _downloads.value.map {
+            if (it.url == url) it.copy(completed = true, progress = 1f, formattedSize = formattedSize)
+            else it
+        }
+    }
+
+    /**
+     * 获取未读下载数量（用于 badge）。
+     */
+    fun unreadDownloadCount(): Int = _downloads.value.count { !it.completed }
+
+    /**
+     * 清除已完成下载。
+     */
+    fun clearCompletedDownloads() {
+        _downloads.value = _downloads.value.filter { !it.completed }
+    }
+
+    /**
+     * 处理 blob: 下载（通过 JS bridge 读取）。
+     * 对标 OpenMinis BrowserUseManager.fetchBlobDownload
+     */
+    fun handleBlobDownload(blobUrl: String, filename: String) {
+        startDownload(blobUrl, filename)
+        val session = selectedSession ?: return
+        // 通过 JS bridge 读取 blob（不需要 withContext，evaluateJavascript 可以直接在主线程调用）
+        val js = """
+            (async function() {
+                try {
+                    const resp = await fetch(${kotlinx.serialization.json.JsonPrimitive(blobUrl)});
+                    const blob = await resp.blob();
+                    const reader = new FileReader();
+                    reader.onloadend = function() {
+                        __rikkahub__.saveBlobDownload(reader.result, ${kotlinx.serialization.json.JsonPrimitive(filename)});
+                    };
+                    reader.onerror = function() { __rikkahub__.blobDownloadError('FileReader error'); };
+                    reader.readAsDataURL(blob);
+                } catch(e) {
+                    __rikkahub__.blobDownloadError(String(e));
+                }
+            })();
+        """.trimIndent()
+        session.webView.post { session.webView.evaluateJavascript(js, null) }
+    }
+
+    /**
+     * 在 WebView 中设置 DownloadListener，拦截下载请求。
+     * 在创建会话时调用。
+     */
+    fun setupDownloadListener(webView: WebView) {
+        webView.setDownloadListener { url, userAgent, contentDisposition, mimetype, contentLength ->
+            val filename = android.webkit.URLUtil.guessFileName(url, contentDisposition, mimetype)
+            when {
+                url.startsWith("blob:") -> handleBlobDownload(url, filename)
+                else -> {
+                    startDownload(url, filename, contentLength)
+                    // 启动后台下载线程，保存到 workspace
+                    Thread {
+                        try {
+                            val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+                            conn.connectTimeout = 15_000
+                            conn.readTimeout = 30_000
+                            conn.instanceFollowRedirects = true
+                            userAgent?.takeIf { it.isNotEmpty() }?.let { conn.setRequestProperty("User-Agent", it) }
+                            val total = if (contentLength > 0) contentLength else conn.contentLengthLong
+                            // 保存到 workspace 目录（~ 或 filesDir/workspace/）
+                            val workspaceDir = java.io.File(webView.context.filesDir, "workspace").apply { mkdirs() }
+                            val dest = java.io.File(workspaceDir, filename).let { f ->
+                                var i = 1; var file = f
+                                while (file.exists()) { file = java.io.File(workspaceDir, "${filename.substringBeforeLast('.')}-$i.${filename.substringAfterLast('.')}"); i++ }
+                                file
+                            }
+                            conn.inputStream.use { input ->
+                                dest.outputStream().use { out ->
+                                    val buf = ByteArray(64 * 1024)
+                                    var copied = 0L
+                                    while (true) {
+                                        val n = input.read(buf)
+                                        if (n < 0) break
+                                        out.write(buf, 0, n)
+                                        copied += n
+                                        updateDownloadProgress(url, copied, if (total > 0) total else copied)
+                                    }
+                                }
+                            }
+                            conn.disconnect()
+                            val sizeText = android.text.format.Formatter.formatShortFileSize(webView.context, dest.length())
+                            finishDownload(url, sizeText)
+                            appendAction("Downloaded: $filename ($sizeText) → workspace/")
+                        } catch (e: Exception) {
+                            android.util.Log.w(TAG, "Download failed: ${e.message}")
+                        }
+                    }.start()
+                }
+            }
+        }
+    }
+
+    fun notOpenEnvelope(): JsonObject = buildJsonObject {
+        put("error", "browser_not_open")
+        put("recovery", "Call browser_open with a URL to launch the browser before invoking this tool.")
+    }
+
+    fun taskTimeoutEnvelope(): JsonObject = buildJsonObject {
+        put("error", "browser_task_timeout")
+        put("recovery", "Call browser_done with a summary; the per-task 5-minute cap has been reached.")
+    }
+
+    fun sessionLostEnvelope(): JsonObject = buildJsonObject {
+        put("error", "browser_session_lost")
+        put("recovery", "The headless browser session ended (the calling foreground service was killed). Ask the user to retry.")
+    }
+
+    fun bindBusyEnvelope(): JsonObject = buildJsonObject {
+        put("error", "browser_busy")
+        put("recovery", "Another conversation is currently driving the browser. Wait for it to finish (it calls browser_done), then retry browser_open.")
     }
 }
 
-/**
- * Handle / dispatch helper for the browser tools. Mirrors
- * [me.rerere.rikkahub.data.ai.tools.local.AccessibilityServiceHandle.withService] in
- * shape: tools wrap their entire execute body in [withController], get the WebView if
- * one is bound, and uniformly fall back to the [BrowserController.notOpenEnvelope] error
- * shape if not.
- *
- * Pass 2 also exposes [WithControllerScope] so the per-tool helpers in BrowserTools can
- * round-trip JS via `webView.evaluateJavascript` on the main thread without each tool
- * re-implementing the bridge.
- */
 object BrowserControllerHandle {
 
     /**
-     * Scope passed into [withController]'s block. Carries the controller (for
-     * appendAction / startTaskWindow) and the live WebView. Helpers that need the main
-     * thread should use [me.rerere.rikkahub.browser.evaluateJavascriptAsync] which posts
-     * onto the WebView's looper directly.
+     * 在串行锁保护下执行浏览器操作。
+     * 对标 OpenMinis BrowserTabPool.runAcquiredAction
      */
+    suspend fun withSerializedController(
+        block: suspend WithControllerScope.() -> JsonObject,
+    ): JsonObject {
+        val session = BrowserController.selectedSession
+        if (session == null) return BrowserController.notOpenEnvelope()
+        if (!BrowserController.isWithinTaskWindow()) {
+            return BrowserController.taskTimeoutEnvelope()
+        }
+        return BrowserController.withSessionLock(session.id) {
+            withContext(Dispatchers.Main) {
+                WithControllerScope(BrowserController, session.webView).block()
+            }
+        }
+    }
+
     data class WithControllerScope(
         val controller: BrowserController,
         val webView: WebView,
     )
 
-    /**
-     * Runs [block] with a [WithControllerScope] if a WebView is bound; otherwise returns
-     * the standard browser_not_open envelope. The 5-minute single-task cap is enforced up
-     * front — browser_open re-arms it via [BrowserController.startTaskWindow] and
-     * browser_done clears it via [BrowserController.clearTaskWindow] (both routed through
-     * tool factories, so they remain reachable inside the cap).
-     *
-     * The block runs on [Dispatchers.Main]. WebView APIs are main-thread-only and will
-     * throw `WebViewMethodCalledOnWrongThreadViolation` from any other dispatcher, so
-     * baking the bridge in here means every tool author gets safe direct access to
-     * `webView.url`, `webView.title`, `webView.canGoBack()`, etc. without re-wrapping.
-     * For network or heavy CPU work that must run off-main, suspend out of [block] via
-     * `withContext(Dispatchers.IO)` explicitly. The async JS helpers
-     * ([evaluateJavascriptAsync], [awaitReadyState]) post via the WebView's looper and
-     * suspend on a `CompletableDeferred`, so they stay non-blocking even from main.
-     */
     suspend fun withController(
         block: suspend WithControllerScope.() -> JsonObject,
     ): JsonObject {
@@ -629,34 +793,12 @@ object BrowserControllerHandle {
     }
 }
 
-/**
- * Run [code] on the WebView's required main thread and return the JSON-encoded result
- * string the page produced (or "null" on any error / timeout). `evaluateJavascript`
- * itself is documented as main-thread only and routes its result callback onto the UI
- * thread; the [withContext] gets us there and the [CompletableDeferred] bridges the
- * callback back into a coroutine.
- *
- * **Why no `webView.post { ... }` wrapper.** The earlier version posted into the
- * WebView's run-queue. For an unattached WebView (the headless `HeadlessBrowserSession`
- * parent LinearLayout never reaches a Window), `View.post` queues the runnable until
- * attach — which never happens, so `evaluateJavascript` was never called and the
- * deferred timed out at 8 s on every call. Calling `evaluateJavascript` directly from
- * the main-thread context fixes both attached and unattached cases.
- *
- * The result is the raw string evaluateJavascript returns: a valid JSON value (number,
- * "string", true, null, [...], {...}). Callers parse it themselves, since JSON shape
- * varies per tool.
- */
 suspend fun WebView.evaluateJavascriptAsync(code: String, timeoutMs: Long = 8_000L): String? {
     val deferred = CompletableDeferred<String?>()
     withContext(Dispatchers.Main) {
         try {
             evaluateJavascript(code) { result -> deferred.complete(result) }
         } catch (e: Exception) {
-            // evaluateJavascript can throw if the WebView has been destroyed underneath
-            // us (Activity finished, headless session stopped). Log so the cause is
-            // visible — the caller still gets a clean null and falls back. Narrowed from
-            // Throwable so JVM Errors (OOM etc.) still propagate.
             android.util.Log.w("BrowserController", "evaluateJavascriptAsync: evaluateJavascript threw", e)
             deferred.complete(null)
         }
@@ -664,20 +806,10 @@ suspend fun WebView.evaluateJavascriptAsync(code: String, timeoutMs: Long = 8_00
     return withTimeoutOrNull(timeoutMs) { deferred.await() }
 }
 
-/**
- * Wait for `document.readyState === "complete"` for up to [timeoutMs] ms. Used after
- * state-changing tools (click, type, submit) so the next read tool sees the post-action
- * page rather than a half-rendered intermediate state. Polls every 200 ms, exits early
- * on first complete reading.
- */
 suspend fun WebView.awaitReadyState(timeoutMs: Long = 8_000L): Boolean {
     val deadline = System.currentTimeMillis() + timeoutMs
     while (System.currentTimeMillis() < deadline) {
         val raw = evaluateJavascriptAsync("(function(){return document.readyState;})()", 1_500L)
-        // evaluateJavascript wraps string returns in JSON quotes — `"complete"` comes
-        // back as the 10-char literal `"\"complete\""`. Match the exact form so a page
-        // that overrides document.readyState to a string merely containing "complete"
-        // (e.g. "incomplete", or some adversarial value) doesn't trip the early-exit.
         if (raw != null && raw.trim() == "\"complete\"") return true
         kotlinx.coroutines.delay(200)
     }

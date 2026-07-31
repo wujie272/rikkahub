@@ -32,10 +32,12 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dokar.sonner.ToastType
 import me.rerere.rikkahub.R
-import me.rerere.rikkahub.browser.BrowserActivity
+import android.content.Intent
+import me.rerere.rikkahub.browser.BrowserController
 import me.rerere.rikkahub.browser.BrowserToolDefaults
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
+import me.rerere.rikkahub.ui.components.ui.Select
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.theme.CustomColors
 import org.koin.androidx.compose.koinViewModel
@@ -47,13 +49,13 @@ import org.koin.androidx.compose.koinViewModel
  *     manual use like signing into a site before the AI takes over) + "Clear browsing
  *     data" (wipes WebView profile dir + cookies; does NOT clear per-tool toggles —
  *     those are user config, not browsing data).
- *  2. Tools enabled — 17 individually-togglable browser tools. Read tools default ON,
+ *  2. Tools enabled — 31 individually-togglable browser tools. Read tools default ON,
  *     write tools default OFF, loop-control ON. Per the spec, the per-tool granularity
  *     is intentional — the AI controlling a real browser is the highest-trust surface
  *     in the app, so the user must be able to grant only what they trust.
- *  3. Defaults & limits — search engine (forward-compat dropdown, no-op in v1),
- *     per-tool timeout, single-task timeout. The two timeouts are editable (GitHub issue
- *     #4): values are clamped into a generous-but-bounded range in BrowserPreferences.
+ *  3. Defaults & limits — search engine, per-tool timeout, single-task timeout.
+ *     The two timeouts are editable (GitHub issue #4): values are clamped into a
+ *     generous-but-bounded range in BrowserPreferences.
  */
 @Composable
 fun SettingBrowserPage(
@@ -118,7 +120,7 @@ fun SettingBrowserPage(
             ) {
                 item(
                     onClick = {
-                        ctx.startActivity(BrowserActivity.intent(ctx, "about:blank"))
+                        runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse("about:blank"))) }
                     },
                     headlineContent = { Text(stringResource(R.string.setting_browser_open)) },
                     supportingContent = { Text(stringResource(R.string.setting_browser_open_desc)) },
@@ -169,6 +171,27 @@ fun SettingBrowserPage(
                 item(
                     headlineContent = { Text(stringResource(R.string.setting_browser_search_engine)) },
                     supportingContent = { Text(stringResource(R.string.setting_browser_search_engine_desc)) },
+                    trailingContent = {
+                        val searchEngines = BrowserToolDefaults.SEARCH_ENGINES
+                        val prefs = remember { ctx.getSharedPreferences("browser_settings", android.content.Context.MODE_PRIVATE) }
+                        var currentIndex by remember {
+                            mutableStateOf(
+                                prefs.getInt("search_engine_index", BrowserToolDefaults.DEFAULT_SEARCH_ENGINE_INDEX)
+                                    .coerceIn(0, searchEngines.size - 1)
+                            )
+                        }
+                        me.rerere.rikkahub.ui.components.ui.Select(
+                            options = searchEngines.indices.toList(),
+                            selectedOption = currentIndex,
+                            onOptionSelected = { idx ->
+                                currentIndex = idx
+                                BrowserController.searchEngineIndex = idx
+                                prefs.edit().putInt("search_engine_index", idx).apply()
+                            },
+                            optionToString = { searchEngines[it].name },
+                            modifier = Modifier.width(150.dp),
+                        )
+                    },
                 )
                 // Per-tool timeout — editable, expressed in seconds. Clamped to 10 s..10 min
                 // in BrowserPreferences before persist (GitHub issue #4).
@@ -272,44 +295,28 @@ private fun ToolCategorySection(
 
 @Composable
 private fun toolDisplayTitle(toolName: String): String = when (toolName) {
-    BrowserToolDefaults.OPEN -> stringResource(R.string.setting_browser_tool_open_title)
-    BrowserToolDefaults.CURRENT_URL -> stringResource(R.string.setting_browser_tool_current_url_title)
+    BrowserToolDefaults.NAVIGATE -> stringResource(R.string.setting_browser_tool_open_title)
+    BrowserToolDefaults.GET_PAGE_INFO -> stringResource(R.string.setting_browser_tool_current_url_title)
     BrowserToolDefaults.SCREENSHOT -> stringResource(R.string.setting_browser_tool_screenshot_title)
     BrowserToolDefaults.GET_TEXT -> stringResource(R.string.setting_browser_tool_get_text_title)
-    BrowserToolDefaults.GET_DOM -> stringResource(R.string.setting_browser_tool_get_dom_title)
-    BrowserToolDefaults.GET_LINKS -> stringResource(R.string.setting_browser_tool_get_links_title)
-    BrowserToolDefaults.BACK -> stringResource(R.string.setting_browser_tool_back_title)
-    BrowserToolDefaults.FORWARD -> stringResource(R.string.setting_browser_tool_forward_title)
-    BrowserToolDefaults.WAIT_FOR -> stringResource(R.string.setting_browser_tool_wait_for_title)
+    BrowserToolDefaults.WAIT_FOR_DOM_STABLE -> stringResource(R.string.setting_browser_tool_wait_for_title)
     BrowserToolDefaults.CLICK -> stringResource(R.string.setting_browser_tool_click_title)
     BrowserToolDefaults.TYPE -> stringResource(R.string.setting_browser_tool_type_title)
     BrowserToolDefaults.SCROLL -> stringResource(R.string.setting_browser_tool_scroll_title)
-    BrowserToolDefaults.SUBMIT -> stringResource(R.string.setting_browser_tool_submit_title)
-    BrowserToolDefaults.SELECT -> stringResource(R.string.setting_browser_tool_select_title)
-    BrowserToolDefaults.PRESS_KEY -> stringResource(R.string.setting_browser_tool_press_key_title)
-    BrowserToolDefaults.EVAL_JS -> stringResource(R.string.setting_browser_tool_eval_js_title)
-    BrowserToolDefaults.DONE -> stringResource(R.string.setting_browser_tool_done_title)
+    BrowserToolDefaults.EXECUTE_JS -> stringResource(R.string.setting_browser_tool_eval_js_title)
     else -> toolName
 }
 
 @Composable
 private fun toolDisplayDesc(toolName: String): String = when (toolName) {
-    BrowserToolDefaults.OPEN -> stringResource(R.string.setting_browser_tool_open_desc)
-    BrowserToolDefaults.CURRENT_URL -> stringResource(R.string.setting_browser_tool_current_url_desc)
+    BrowserToolDefaults.NAVIGATE -> stringResource(R.string.setting_browser_tool_open_desc)
+    BrowserToolDefaults.GET_PAGE_INFO -> stringResource(R.string.setting_browser_tool_current_url_desc)
     BrowserToolDefaults.SCREENSHOT -> stringResource(R.string.setting_browser_tool_screenshot_desc)
     BrowserToolDefaults.GET_TEXT -> stringResource(R.string.setting_browser_tool_get_text_desc)
-    BrowserToolDefaults.GET_DOM -> stringResource(R.string.setting_browser_tool_get_dom_desc)
-    BrowserToolDefaults.GET_LINKS -> stringResource(R.string.setting_browser_tool_get_links_desc)
-    BrowserToolDefaults.BACK -> stringResource(R.string.setting_browser_tool_back_desc)
-    BrowserToolDefaults.FORWARD -> stringResource(R.string.setting_browser_tool_forward_desc)
-    BrowserToolDefaults.WAIT_FOR -> stringResource(R.string.setting_browser_tool_wait_for_desc)
+    BrowserToolDefaults.WAIT_FOR_DOM_STABLE -> stringResource(R.string.setting_browser_tool_wait_for_desc)
     BrowserToolDefaults.CLICK -> stringResource(R.string.setting_browser_tool_click_desc)
     BrowserToolDefaults.TYPE -> stringResource(R.string.setting_browser_tool_type_desc)
     BrowserToolDefaults.SCROLL -> stringResource(R.string.setting_browser_tool_scroll_desc)
-    BrowserToolDefaults.SUBMIT -> stringResource(R.string.setting_browser_tool_submit_desc)
-    BrowserToolDefaults.SELECT -> stringResource(R.string.setting_browser_tool_select_desc)
-    BrowserToolDefaults.PRESS_KEY -> stringResource(R.string.setting_browser_tool_press_key_desc)
-    BrowserToolDefaults.EVAL_JS -> stringResource(R.string.setting_browser_tool_eval_js_desc)
-    BrowserToolDefaults.DONE -> stringResource(R.string.setting_browser_tool_done_desc)
+    BrowserToolDefaults.EXECUTE_JS -> stringResource(R.string.setting_browser_tool_eval_js_desc)
     else -> ""
 }

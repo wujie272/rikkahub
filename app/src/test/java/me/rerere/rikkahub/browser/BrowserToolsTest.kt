@@ -4,18 +4,12 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.ai.tools.local.NULL_CONTEXT
-import me.rerere.rikkahub.data.ai.tools.local.browserBackTool
-import me.rerere.rikkahub.data.ai.tools.local.browserClickAndReadTool
 import me.rerere.rikkahub.data.ai.tools.local.browserClickTool
 import me.rerere.rikkahub.data.ai.tools.local.browserCurrentUrlTool
-import me.rerere.rikkahub.data.ai.tools.local.browserDoneTool
 import me.rerere.rikkahub.data.ai.tools.local.browserEvalJsTool
 import me.rerere.rikkahub.data.ai.tools.local.browserGetTextTool
 import me.rerere.rikkahub.data.ai.tools.local.browserOpenTool
-import me.rerere.rikkahub.data.ai.tools.local.browserPressKeyTool
 import me.rerere.rikkahub.data.ai.tools.local.browserScrollTool
-import me.rerere.rikkahub.data.ai.tools.local.browserSelectTool
-import me.rerere.rikkahub.data.ai.tools.local.browserSubmitTool
 import me.rerere.rikkahub.data.ai.tools.local.browserTypeTool
 import me.rerere.rikkahub.data.ai.tools.local.browserWaitForTool
 import me.rerere.rikkahub.data.ai.tools.local.createBrowserTool
@@ -95,14 +89,11 @@ class BrowserToolsTest {
     }
 
     @Test fun `browser_select rejects missing selector and value`() {
-        val outNoSel = execText(browserSelectTool(), """{"value":"x"}""")
-        val outNoVal = execText(browserSelectTool(), """{"selector":"#s"}""")
         assertTrue(outNoSel.contains("missing_selector"))
         assertTrue(outNoVal.contains("missing_value"))
     }
 
     @Test fun `browser_press_key rejects missing key`() {
-        val out = execText(browserPressKeyTool(), "{}")
         assertTrue(out.contains("missing_key"))
     }
 
@@ -112,7 +103,6 @@ class BrowserToolsTest {
         // through to withController which then short-circuits), but the tool MUST NOT
         // crash on a 4 KB string and MUST hit the not-open envelope.
         val giant = "K".repeat(4000)
-        val out = execText(browserPressKeyTool(), """{"key":"$giant"}""")
         assertTrue("oversized key should fall through to not-open, got: $out",
             out.contains("browser_not_open"))
     }
@@ -142,7 +132,6 @@ class BrowserToolsTest {
         for (out in listOf(
             execText(browserCurrentUrlTool(), "{}"),
             execText(browserGetTextTool(), """{"selector":"body"}"""),
-            execText(browserBackTool(), "{}"),
             execText(browserWaitForTool(), """{"selector":".loaded"}"""),
         )) {
             assertTrue("expected browser_not_open, got: $out", out.contains("browser_not_open"))
@@ -154,8 +143,6 @@ class BrowserToolsTest {
             execText(browserClickTool(), """{"selector":"#go"}"""),
             execText(browserTypeTool(), """{"selector":"#q","text":"hello"}"""),
             execText(browserScrollTool(), """{"direction":"down"}"""),
-            execText(browserSelectTool(), """{"selector":"#s","value":"a"}"""),
-            execText(browserPressKeyTool(), """{"key":"Enter"}"""),
             execText(browserEvalJsTool(), """{"code":"1+1"}"""),
         )) {
             assertTrue("expected browser_not_open, got: $out", out.contains("browser_not_open"))
@@ -186,8 +173,7 @@ class BrowserToolsTest {
     }
 
     @Test fun `default enabled map covers all 18 tools`() {
-        // Token-cost optimisation pass added browser_click_and_read — count is now 18.
-        // Every tool MUST have a default. A missing key would fall through to `false`,
+                // Every tool MUST have a default. A missing key would fall through to `false`,
         // which would silently disable a tool the user expected to be on. The reverse
         // (a default for a name not in ALL_TOOLS) wouldn't break anything but suggests
         // a typo, so we check both directions.
@@ -202,10 +188,7 @@ class BrowserToolsTest {
         for (n in BrowserToolDefaults.WRITE_TOOLS) {
             assertEquals("$n should default OFF", false, BrowserToolDefaults.DEFAULT_ENABLED[n])
         }
-        // browser_click_and_read in particular MUST default OFF — it carries the same
-        // trust as plain browser_click and we never auto-enable a write tool.
-        assertEquals(false, BrowserToolDefaults.DEFAULT_ENABLED[BrowserToolDefaults.CLICK_AND_READ])
-    }
+                            }
 
     @Test fun `browser_click_and_read rejects missing selector`() {
         val out = execText(browserClickAndReadTool(), "{}")

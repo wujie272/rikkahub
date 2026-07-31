@@ -1,22 +1,16 @@
 package me.rerere.rikkahub.browser
 
 /**
- * Authoritative list of the 17 browser tools the LLM can drive, plus their default
- * enabled/disabled state. Read tools (cheap, don't touch the page) default ON;
- * write tools (mutate state, can be misused) default OFF; the loop-control tool
- * defaults ON because the AI can't escape the browser loop without it.
+ * 浏览器工具定义 —— 对标 OpenMinis Android BrowserAction 枚举。
  *
- * Pass 1 lays the catalogue. Pass 2's [me.rerere.rikkahub.data.ai.tools.LocalTools]
- * registration block will gate per-tool registration on these defaults via
- * [BrowserPreferences.isToolEnabled].
+ * 工具命名与 OpenMinis 保持一致，方便跨项目对比。
  */
 object BrowserToolDefaults {
 
-    // --- Search engine definitions ---------------------------------------------------
+    // ── 搜索引擎 ──
 
     data class SearchEngine(
         val name: String,
-        /** URL template: the search query will be URL-encoded and appended. */
         val urlTemplate: String,
     )
 
@@ -28,71 +22,86 @@ object BrowserToolDefaults {
         SearchEngine("Startpage", "https://www.startpage.com/do/dsearch?query="),
     )
 
-    const val DEFAULT_SEARCH_ENGINE_INDEX = 0 // DuckDuckGo
+    const val DEFAULT_SEARCH_ENGINE_INDEX = 0
 
-    /** Build a search URL from a query string using the given engine template. */
     fun buildSearchUrl(query: String, engineUrlTemplate: String): String =
         "$engineUrlTemplate${java.net.URLEncoder.encode(query, "UTF-8")}"
 
-    // --- Read tools (default ON) --------------------------------------------------------------
-    const val OPEN = "browser_open"
-    const val CURRENT_URL = "browser_current_url"
-    const val SCREENSHOT = "browser_screenshot"
-    const val GET_TEXT = "browser_get_text"
-    const val GET_DOM = "browser_get_dom"
-    const val GET_LINKS = "browser_get_links"
-    const val BACK = "browser_back"
-    const val FORWARD = "browser_forward"
-    const val WAIT_FOR = "browser_wait_for"
+    // ── 工具常量（对标 OpenMinis BrowserAction） ──
 
-    // --- Write tools (default OFF) -----------------------------------------------------------
-    const val CLICK = "browser_click"
-    const val TYPE = "browser_type"
-    const val SCROLL = "browser_scroll"
-    const val SUBMIT = "browser_submit"
-    const val SELECT = "browser_select"
-    const val PRESS_KEY = "browser_press_key"
-    const val EVAL_JS = "browser_eval_js"
-    /**
-     * Token-cost optimisation pass — composite "click + read" tool. One round trip
-     * instead of click → wait → get_text. Default OFF: it's still a write tool, the
-     * click side carries the same trust footprint as plain browser_click.
-     */
-    const val CLICK_AND_READ = "browser_click_and_read"
-    // --- Browse modes ---
+    const val NAVIGATE = "navigate"
+    const val SCREENSHOT = "screenshot"
+    const val CLICK = "click"
+    const val TYPE = "type"
+    const val GET_TEXT = "get_text"
+    const val SCROLL = "scroll"
+    const val GET_PAGE_INFO = "get_page_info"
+    const val EXECUTE_JS = "execute_js"
+    const val FIND_ELEMENTS = "find_elements"
+    const val HOVER = "hover"
+    const val GET_READABLE = "get_readable"
+    const val SET_USER_AGENT = "set_user_agent"
+    const val SET_VIEWPORT = "set_viewport"
+    const val GET_BACKBONE = "get_backbone"
+    const val FETCH = "fetch"
+    const val NEW_TAB = "new_tab"
+    const val CLOSE_TAB = "close_tab"
+    const val LIST_TABS = "list_tabs"
+    const val GET_COOKIES = "get_cookies"
+    const val SET_COOKIES = "set_cookies"
+    const val SCROLL_AND_COLLECT = "scroll_and_collect"
+    const val WAIT_FOR_DOM_STABLE = "wait_for_dom_stable"
+
+    // ── 浏览模式 ──
+
     const val MODE_AUTO = "auto"
     const val MODE_FOREGROUND = "foreground"
     const val MODE_HEADLESS = "headless"
 
-
-    // --- Loop control (default ON) -----------------------------------------------------------
-    const val DONE = "browser_done"
+    // ── 分类 ──
 
     val READ_TOOLS: Set<String> = setOf(
-        OPEN, CURRENT_URL, SCREENSHOT, GET_TEXT, GET_DOM, GET_LINKS, BACK, FORWARD, WAIT_FOR,
+        NAVIGATE, SCREENSHOT, GET_TEXT, GET_PAGE_INFO, GET_READABLE,
+        GET_BACKBONE, FETCH, GET_COOKIES, LIST_TABS,
+        FIND_ELEMENTS, WAIT_FOR_DOM_STABLE,
     )
 
     val WRITE_TOOLS: Set<String> = setOf(
-        CLICK, TYPE, SCROLL, SUBMIT, SELECT, PRESS_KEY, EVAL_JS, CLICK_AND_READ,
+        CLICK, TYPE, SCROLL, EXECUTE_JS,
+        HOVER, SET_USER_AGENT, SET_VIEWPORT,
+        NEW_TAB, CLOSE_TAB, SET_COOKIES, SCROLL_AND_COLLECT,
     )
 
-    val LOOP_CONTROL_TOOLS: Set<String> = setOf(DONE)
+    val LOOP_CONTROL_TOOLS: Set<String> = emptySet()
 
-    /** Stable display order for the Settings page. Read first, then write, then loop-control. */
-    val ALL_TOOLS: List<String> = listOf(
-        OPEN, CURRENT_URL, SCREENSHOT, GET_TEXT, GET_DOM, GET_LINKS, BACK, FORWARD, WAIT_FOR,
-        CLICK, TYPE, SCROLL, SUBMIT, SELECT, PRESS_KEY, EVAL_JS, CLICK_AND_READ,
-        DONE,
+    /**
+     * 视觉变化动作——执行后页面内容会发生变化，应自动截图。
+     * 对标 OpenMinis BrowserAction.visualChangeActions
+     */
+    val VISUAL_CHANGE_TOOLS: Set<String> = setOf(
+        NAVIGATE, CLICK, SCROLL, TYPE, HOVER,
     )
 
     /**
-     * Defaults baked in. Read tools + the loop-control tool default ON; write tools
-     * default OFF — matches the spec's "highest-trust surface — user must explicitly
-     * grant write access" rule.
+     * 打开新页面的动作——这些动作可以 fanned out 到一个新标签页。
+     * 其他动作（click, get_text 等）必须始终操作当前选中的标签页。
+     * 对标 OpenMinis BrowserAction.opensNewPageActions
      */
+    val OPENS_NEW_PAGE_TOOLS: Set<String> = setOf(
+        NAVIGATE,
+    )
+
+    val ALL_TOOLS: List<String> = listOf(
+        NAVIGATE, SCREENSHOT, GET_TEXT, GET_PAGE_INFO, GET_READABLE,
+        GET_BACKBONE, FETCH, GET_COOKIES, LIST_TABS,
+        FIND_ELEMENTS, WAIT_FOR_DOM_STABLE,
+        CLICK, TYPE, SCROLL, EXECUTE_JS,
+        HOVER, SET_USER_AGENT, SET_VIEWPORT,
+        NEW_TAB, CLOSE_TAB, SET_COOKIES, SCROLL_AND_COLLECT,
+    )
+
     val DEFAULT_ENABLED: Map<String, Boolean> = buildMap {
         READ_TOOLS.forEach { put(it, true) }
-        LOOP_CONTROL_TOOLS.forEach { put(it, true) }
         WRITE_TOOLS.forEach { put(it, false) }
     }
 
@@ -104,33 +113,17 @@ object BrowserToolDefaults {
         else -> Category.READ
     }
 
-    // --- Timeout settings (GitHub issue #4: user-configurable) -------------------------------
-    //
-    // The issue asked for "unlimited", but a truly unbounded task can wedge the bot
-    // (it blocks on generation completing) and burn battery silently — see CLAUDE.md's "every
-    // tool MUST have a hard timeout" rule. So instead of unlimited we expose a generous
-    // configurable range with a hard ceiling. Input from the Settings UI is clamped to these
-    // bounds via [clampPerToolTimeoutMs] / [clampSingleTaskTimeoutMs].
+    // ── 超时设置 ──
 
-    /** Per-tool timeout (`withTimeoutOrNull` around each browser tool dispatch). */
     const val DEFAULT_PER_TOOL_TIMEOUT_MS = 30_000L
-    const val MIN_PER_TOOL_TIMEOUT_MS = 10_000L          // 10 s
-    const val MAX_PER_TOOL_TIMEOUT_MS = 600_000L         // 10 min
+    const val MIN_PER_TOOL_TIMEOUT_MS = 10_000L
+    const val MAX_PER_TOOL_TIMEOUT_MS = 600_000L
 
-    /** Single-task window (hard cap on one AI-driven browser task to bound runaway loops). */
-    const val DEFAULT_SINGLE_TASK_TIMEOUT_MS = 300_000L  // 5 min
-    const val MIN_SINGLE_TASK_TIMEOUT_MS = 60_000L       // 1 min
-    const val MAX_SINGLE_TASK_TIMEOUT_MS = 3_600_000L    // 60 min
+    const val DEFAULT_SINGLE_TASK_TIMEOUT_MS = 900_000L
+    const val MIN_SINGLE_TASK_TIMEOUT_MS = 60_000L
+    const val MAX_SINGLE_TASK_TIMEOUT_MS = 14_400_000L
 
-    /** Clamp a per-tool timeout (ms) into the supported range. */
-    fun clampPerToolTimeoutMs(ms: Long): Long =
-        ms.coerceIn(MIN_PER_TOOL_TIMEOUT_MS, MAX_PER_TOOL_TIMEOUT_MS)
-
-    /** Clamp a single-task timeout (ms) into the supported range. */
-    fun clampSingleTaskTimeoutMs(ms: Long): Long =
-        ms.coerceIn(MIN_SINGLE_TASK_TIMEOUT_MS, MAX_SINGLE_TASK_TIMEOUT_MS)
-
-    /** Clamp a search engine index into the supported range. */
-    fun clampSearchEngineIndex(index: Int): Int =
-        index.coerceIn(0, SEARCH_ENGINES.size - 1)
+    fun clampPerToolTimeoutMs(ms: Long): Long = ms.coerceIn(MIN_PER_TOOL_TIMEOUT_MS, MAX_PER_TOOL_TIMEOUT_MS)
+    fun clampSingleTaskTimeoutMs(ms: Long): Long = ms.coerceIn(MIN_SINGLE_TASK_TIMEOUT_MS, MAX_SINGLE_TASK_TIMEOUT_MS)
+    fun clampSearchEngineIndex(index: Int): Int = index.coerceIn(0, SEARCH_ENGINES.size - 1)
 }

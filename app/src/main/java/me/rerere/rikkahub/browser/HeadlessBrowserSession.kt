@@ -286,12 +286,11 @@ object HeadlessBrowserSessionPool {
             // teardown can't pin a dead entry in the pool forever.
             runCatching { entry.session.stop() }
             sessions.remove(id)
-            // The controller's single mode slot may still be Mode.Headless for this conv,
-            // pointing at the WebView stop() just destroyed. Reset it to Idle so the next tool
-            // call returns browser_session_lost instead of dispatching onto a dead view.
-            // clearModeIfHeadless only acts when this conv still owns the slot and never calls
+            // The controller's session may still point at the WebView stop() just destroyed.
+            // Clear it so the next tool call returns browser_session_lost.
+            // clearSession only acts when this conv still owns the slot and never calls
             // back into the pool, so holding `lock` here is safe (no lock-order inversion).
-            runCatching { BrowserController.clearModeIfHeadless(id) }
+            runCatching { BrowserController.clearSession(id) }
         }
     }
 

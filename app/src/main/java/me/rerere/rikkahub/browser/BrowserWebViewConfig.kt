@@ -50,12 +50,12 @@ internal fun configureWebViewForRikka(webView: WebView) {
         allowContentAccess = false
         useWideViewPort = true
         loadWithOverviewMode = true
-        setSupportMultipleWindows(false)
+        setSupportMultipleWindows(true)
         javaScriptCanOpenWindowsAutomatically = false
         mediaPlaybackRequiresUserGesture = false
-        builtInZoomControls = true
+        builtInZoomControls = false
         displayZoomControls = false
-        mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
+        mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
         userAgentString = userAgentString.replace("; wv)", ")")
     }
     // Hardware layer hint. For the foreground Activity's WebView this fixes a Compose
@@ -64,4 +64,11 @@ internal fun configureWebViewForRikka(webView: WebView) {
     // software path automatically — calling this is harmless either way and keeps the
     // two code paths identical.
     webView.setLayerType(View.LAYER_TYPE_HARDWARE, null)
+
+    // 启用第三方 Cookie（对标 OpenMinis），否则 hCaptcha/Turnstile/reCAPTCHA 会卡住
+    // 验证码 widget 在跨域 iframe 中通过 Set-Cookie 回传 token
+    android.webkit.CookieManager.getInstance().apply {
+        setAcceptCookie(true)
+        setAcceptThirdPartyCookies(webView, true)
+    }
 }

@@ -160,11 +160,34 @@ class ChatVM(
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     // MCP管理器
+
+    // 工具详情 Sheet 状态（Minis Computer）
+
+    // 最新的工具块列表（用于 ToolStatusBar）
+    val latestToolBlocks: StateFlow<List<UIMessagePart.Tool>> = conversation.map { conv ->
+        conv.currentMessages.lastOrNull { it.role == me.rerere.ai.core.MessageRole.ASSISTANT }
+            ?.getTools()
+            ?: emptyList()
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    private val _selectedToolDetailBlocks = MutableStateFlow<List<UIMessagePart.Tool>>(emptyList())
+    val selectedToolDetailBlocks: StateFlow<List<UIMessagePart.Tool>> = _selectedToolDetailBlocks.asStateFlow()
+
+    private val _selectedToolDetailIndex = MutableStateFlow(0)
+    val selectedToolDetailIndex: StateFlow<Int> = _selectedToolDetailIndex.asStateFlow()
+
+    fun openToolDetail(blocks: List<UIMessagePart.Tool>, index: Int) {
+        _selectedToolDetailBlocks.value = blocks
+        _selectedToolDetailIndex.value = index
+    }
+
+    fun closeToolDetail() {
+        _selectedToolDetailBlocks.value = emptyList()
+    }
     val mcpManager = chatService.mcpManager
 
     // 更新设置
-    fun updateSettings(newSettings: Settings) {
-        viewModelScope.launch {
+    fun updateSettings(newSettings: Settings): Job {
+        return viewModelScope.launch {
             val oldSettings = settings.value
             // 检查用户头像是否有变化，如果有则删除旧头像
             checkUserAvatarDelete(oldSettings, newSettings)
@@ -312,11 +335,10 @@ class ChatVM(
         }
     }
 
-    fun deleteConversation(conversation: Conversation) {
+    fun deleteConversation(conversation: Conversation): Job =
         viewModelScope.launch {
             conversationRepo.deleteConversation(conversation)
         }
-    }
 
     fun updatePinnedStatus(conversation: Conversation) {
         viewModelScope.launch {

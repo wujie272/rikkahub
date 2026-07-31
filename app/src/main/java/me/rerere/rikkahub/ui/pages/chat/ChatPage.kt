@@ -38,6 +38,7 @@ import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -73,6 +74,7 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.LeftToRightListBullet
 import me.rerere.hugeicons.stroke.Menu03
+import me.rerere.hugeicons.stroke.Globe
 import me.rerere.hugeicons.stroke.MessageAdd01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
@@ -82,6 +84,9 @@ import me.rerere.rikkahub.data.datastore.getCurrentChatModel
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.browser.BrowserController
+import me.rerere.rikkahub.ui.components.message.ToolDetailSheet
+import me.rerere.rikkahub.browser.BrowserPreviewSheet
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.ui.components.ai.ChatInput
@@ -301,6 +306,27 @@ private fun ChatPageContent(
     // 群聊运行状态
     var showFilesSheet by remember { mutableStateOf(false) }
 
+    // 浏览器预览 Sheet 状态
+    // 工具详情 Sheet 状态（Minis Computer）
+    val toolDetailBlocks by vm.selectedToolDetailBlocks.collectAsStateWithLifecycle()
+    val toolDetailIndex by vm.selectedToolDetailIndex.collectAsStateWithLifecycle()
+    // 最新工具块（ToolStatusBar）
+    val latestToolBlocks by vm.latestToolBlocks.collectAsStateWithLifecycle()
+    var showBrowserPreview by remember { mutableStateOf(false) }
+    var pendingBrowserUrl by remember { mutableStateOf<String?>(null) }
+
+    // 监听 BrowserController 的嵌入请求（AI 调用 browser_open 时自动弹出）
+    LaunchedEffect(Unit) {
+        BrowserController.onShowEmbeddedRequest = {
+            showBrowserPreview = true
+        }
+    }
+    DisposableEffect(Unit) {
+        onDispose {
+            BrowserController.onShowEmbeddedRequest = null
+        }
+    }
+
     val completionProviders = remember(assistant.workspaceId, conversation.workspaceCwd, workspaceRepository) {
         assistant.workspaceId?.let { workspaceId ->
             listOf(
@@ -337,6 +363,9 @@ private fun ChatPageContent(
                     },
                     onClickMenu = {
                         previewMode = !previewMode
+                    },
+                    onBrowserClick = {
+                        showBrowserPreview = true
                     },
                     onUpdateTitle = {
                         vm.updateTitle(it)
@@ -489,6 +518,8 @@ private fun ChatPageContent(
                             vm.handleToolApproval(toolCallId, approved, reason, scope, toolName)
                         },
                         onToolAnswer = { toolCallId, answer -> vm.handleToolAnswer(toolCallId, answer) },
+                        latestToolBlocks = latestToolBlocks,
+                        onOpenToolDetail = { blocks, index -> vm.openToolDetail(blocks, index) },
                         onToggleFavorite = { node -> vm.toggleMessageFavorite(node) },
                         knowledgeSources = vm.knowledgeSources.collectAsStateWithLifecycle().value,
                         onConversationSystemPromptChange = { newPrompt ->
@@ -499,6 +530,31 @@ private fun ChatPageContent(
                 }
             }
         }
+
+    // 浏览器预览 Sheet
+    if (showBrowserPreview) {
+        BrowserPreviewSheet(
+            onDismiss = {
+                showBrowserPreview = false
+                pendingBrowserUrl = null
+            },
+            initialUrl = pendingBrowserUrl,
+        )
+    }
+
+    // 工具详情 Sheet（Minis Computer）
+    if (toolDetailBlocks.isNotEmpty()) {
+        ToolDetailSheet(
+            toolBlocks = toolDetailBlocks,
+            initialIndex = toolDetailIndex,
+            onDismiss = { vm.closeToolDetail() },
+            onOpenBrowserForUrl = { url ->
+                vm.closeToolDetail()
+                pendingBrowserUrl = url
+                showBrowserPreview = true
+            },
+        )
+    }
 
         if (showFilesSheet) {
             ChatFilesPickerSheet(
@@ -729,6 +785,7 @@ private fun TopBar(
     bigScreen: Boolean,
     previewMode: Boolean,
     onClickMenu: () -> Unit,
+    onBrowserClick: () -> Unit,
     onNewChat: () -> Unit,
     onUpdateTitle: (String) -> Unit
 ) {
@@ -788,19 +845,13 @@ private fun TopBar(
             }
         },
         actions = {
-            IconButton(
-                onClick = {
-                    onClickMenu()
-                }
-            ) {
+            IconButton(onClick = { onBrowserClick() }) {
+                Icon(HugeIcons.Globe, "Browser")
+            }
+            IconButton(onClick = { onClickMenu() }) {
                 Icon(if (previewMode) HugeIcons.Cancel01 else HugeIcons.LeftToRightListBullet, "Chat Options")
             }
-
-            IconButton(
-                onClick = {
-                    onNewChat()
-                }
-            ) {
+            IconButton(onClick = { onNewChat() }) {
                 Icon(HugeIcons.MessageAdd01, "New Message")
             }
         },

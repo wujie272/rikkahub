@@ -126,6 +126,7 @@ fun ChatMessage(
     onClearTranslation: (UIMessage) -> Unit = {},
     onToolApproval: ((toolCallId: String, approved: Boolean, reason: String, scope: me.rerere.rikkahub.service.ChatService.ApprovalScope, toolName: String) -> Unit)? = null,
     onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
+    onOpenToolDetail: ((toolBlocks: List<UIMessagePart.Tool>, index: Int) -> Unit)? = null,
     knowledgeSources: List<KnowledgeSource> = emptyList(),
 ) {
     val message = node.messages[node.selectIndex]
@@ -188,6 +189,7 @@ fun ChatMessage(
                 model = model,
                 onToolApproval = onToolApproval,
                 onToolAnswer = onToolAnswer,
+                onOpenToolDetail = onOpenToolDetail,
                 onUserMessageClick = if (message.role == MessageRole.USER) onEdit else null,
             )
 
@@ -292,6 +294,7 @@ private fun MessagePartsBlock(
     loading: Boolean,
     onToolApproval: ((toolCallId: String, approved: Boolean, reason: String, scope: me.rerere.rikkahub.service.ChatService.ApprovalScope, toolName: String) -> Unit)? = null,
     onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
+    onOpenToolDetail: ((toolBlocks: List<UIMessagePart.Tool>, index: Int) -> Unit)? = null,
     onUserMessageClick: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
@@ -377,11 +380,16 @@ private fun MessagePartsBlock(
 
                             is ThinkingStep.ToolStep -> {
                                 key(step.tool.toolCallId.ifBlank { step.hashCode().toString() }) {
+                                    val toolBlocks = block.steps.filterIsInstance<ThinkingStep.ToolStep>().map { it.tool }
+                                    val toolIdx = toolBlocks.indexOfFirst { it.toolCallId == step.tool.toolCallId }
                                     ChatMessageToolStep(
                                         tool = step.tool,
                                         loading = loading && !step.tool.isExecuted,
                                         onToolApproval = onToolApproval,
                                         onToolAnswer = onToolAnswer,
+                                        allToolBlocks = toolBlocks,
+                                        currentToolIndex = toolIdx.coerceAtLeast(0),
+                                        onOpenToolDetail = onOpenToolDetail,
                                     )
                                 }
                             }
