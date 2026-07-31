@@ -10,8 +10,8 @@ import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dokar.sonner.Toaster
 import com.dokar.sonner.rememberToasterState
-import me.rerere.highlight.Highlighter
-import me.rerere.highlight.LocalHighlighter
+import me.rerere.highlight.CodeHighlighter
+import me.rerere.highlight.LocalCodeHighlighter
 import me.rerere.rikkahub.DIRECT_CHAT_TARGET_TYPE_ASSISTANT
 import me.rerere.rikkahub.DIRECT_CHAT_TARGET_TYPE_GROUP_CHAT
 import me.rerere.rikkahub.EXTRA_DIRECT_CHAT_AUTO_SEND
@@ -30,7 +30,7 @@ import org.koin.android.ext.android.inject
 import org.koin.androidx.viewmodel.ext.android.viewModel
 
 class TextSelectionActivity : ComponentActivity() {
-    private val highlighter by inject<Highlighter>()
+    private val highlighter = CodeHighlighter()
     private val settingsStore by inject<SettingsStore>()
     private val viewModel: TextSelectionVM by viewModel()
 
@@ -53,7 +53,7 @@ class TextSelectionActivity : ComponentActivity() {
             RikkahubTheme {
                 CompositionLocalProvider(
                     LocalSettings provides settings,
-                    LocalHighlighter provides highlighter,
+                    LocalCodeHighlighter provides highlighter,
                     LocalToaster provides toastState,
                     LocalDarkMode provides false,
                 ) {

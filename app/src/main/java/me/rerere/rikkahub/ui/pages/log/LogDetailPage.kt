@@ -42,7 +42,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.serialization.json.JsonElement
-import me.rerere.highlight.HighlightText
+import me.rerere.highlight.CodeHighlightText
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.AIRequestSource
 import me.rerere.rikkahub.data.ai.requestlog.AIRequestLogEntity
@@ -396,7 +396,7 @@ private fun CodeCard(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
     ) {
         SelectionContainer {
-            HighlightText(
+            CodeHighlightText(
                 code = code.ifBlank { "-" },
                 language = language,
                 modifier = Modifier

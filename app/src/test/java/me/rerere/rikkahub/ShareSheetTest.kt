@@ -12,7 +12,7 @@ import kotlin.uuid.Uuid
 
 class ShareSheetTest {
     @Test
-    fun `decode should restore OpenAI provider correctly`() {
+    fun `share round trip should restore OpenAI settings without models`() {
         val originalId = Uuid.random()
         val original = ProviderSetting.OpenAI(
             id = originalId,
@@ -40,14 +40,7 @@ class ShareSheetTest {
         assertEquals("Test OpenAI", decodedOpenAI.name)
         assertEquals("sk-test-key", decodedOpenAI.apiKey)
         assertEquals("https://api.openai.com/v1", decodedOpenAI.baseUrl)
-        // encodeForShare INTENTIONALLY strips the models list — share semantics are
-        // "credentials only, not the curated model list". See ShareSheet.encodeForShare:93
-        // (`copyProvider(models = emptyList())`). The decoded receiver discovers / pins
-        // their own models on import.
-        assertTrue(
-            "models must be stripped on share — got ${decodedOpenAI.models.size}",
-            decodedOpenAI.models.isEmpty(),
-        )
+        assertTrue(decodedOpenAI.models.isEmpty())
     }
 
     @Test
