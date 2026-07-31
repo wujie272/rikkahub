@@ -36,6 +36,7 @@ enum class DoctorCategory(val displayName: String) {
     Database("数据库"),
     Network("网络与供应商"),
     Termux("Termux 集成"),
+    Shizuku("Shizuku 集成"),
     Maintenance("维护"),
     Diagnostics("诊断摘要"),
 }

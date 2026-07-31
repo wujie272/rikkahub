@@ -1,251 +1,95 @@
 <div align="center">
+  <img src="docs/icon.png" alt="App Icon" width="100" />
+  <h1>RikkaHub</h1>
 
-<img src="docs/icon.png" width="96" height="96" alt="RikkaHub Agent" style="border-radius: 24px" />
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/rikkahub/rikkahub)
+[![Ask DeepWiki](https://img.shields.io/badge/zread.ai-blue?style=flat&logo=readthedocs)](https://zread.ai/rikkahub/rikkahub)
 
-# RikkaHub Agent
+A native Android LLM chat client that supports switching between different providers for
+conversations 🤖💬
 
-**On-device LLM agent for Android.**
+Click to join our Discord server 👉 [【RikkaHub】](https://discord.gg/9weBqxe5c4)
 
-A fork of [RikkaHub](https://github.com/rikkahub/rikkahub) that turns the native Android LLM chat client into a real on-device agent: 80+ device tools, AI-authored workflows, scheduled jobs, an in-app browser the AI drives, SSH, screen automation, file manager, music player, voice transcription, and downloadable on-device LLMs. All opt-in.
-
-<p>
-  <a href="https://github.com/ExTV/rikkahub-agent/releases"><img src="https://img.shields.io/github/v/release/ExTV/rikkahub-agent?include_prereleases&style=flat-square&label=release&color=blue" alt="Release" /></a>
-  <a href="https://github.com/ExTV/rikkahub-agent/releases"><img src="https://img.shields.io/github/downloads/ExTV/rikkahub-agent/total?style=flat-square&color=brightgreen" alt="Downloads" /></a>
-  <a href="https://github.com/ExTV/rikkahub-agent/stargazers"><img src="https://img.shields.io/github/stars/ExTV/rikkahub-agent?style=flat-square&color=yellow" alt="Stars" /></a>
-  <img src="https://img.shields.io/badge/platform-Android%208%2B-3DDC84?style=flat-square&logo=android&logoColor=white" alt="Android 8+" />
-</p>
-
-<a href="https://extv.github.io/rikkahub-agent/"><strong>Website</strong></a> ·
-<a href="https://github.com/ExTV/rikkahub-agent/releases/latest"><strong>Download</strong></a> ·
-<a href="#-features"><strong>Features</strong></a> ·
-<a href="#-quick-start"><strong>Quick Start</strong></a> ·
-<a href="#-building-from-source"><strong>Build</strong></a>
-
+[简体中文](README_ZH_CN.md) | [繁體中文](README_ZH_TW.md) | English
 </div>
 
----
+<div align="center">
+  <img src="docs/img/chat.png" alt="Chat Interface" width="150" />
+  <img src="docs/img/desktop.png" alt="Models Picker" width="450" />
+</div>
 
-## Why
+## 🚀 Download
 
-Vanilla LLM chat apps can answer questions. They can't open your apps, send your messages, watch your notifications, run scheduled jobs, or SSH into your server. RikkaHub Agent can. Tell it what to do in plain language, walk away, and it runs in the background, on your phone, on your terms.
+🔗 [Download from Website](https://rikka-ai.com/download) (Recommended)
 
-> *"Every weekday at 9am, summarize my unread WhatsApp into one notification."*
->
-> *"If my home server's disk fills up, ping me."*
->
-> *"Watch my notifications. If anything from my boss comes in, notify me. Quietly ignore the rest."*
->
-> *"Find the PDF on my phone that mentions 'invoice' and read me the first paragraph."*
->
-> *"Take a screenshot every 30 minutes for the next 4 hours so I can see what I actually did all afternoon."*
->
-> *"Use Termux to build me a webpage listing everything you can do, then open it in my browser."*
->
-> *"When I plug in headphones at home WiFi after 7pm, start my evening playlist."*
->
-> *"Open my router's admin page, sign in with the saved password, and tell me which devices are eating the most bandwidth right now."*
->
-> *"Spin up two researches in parallel: one finds the cheapest one-way flight to Tokyo this month, the other lists hotels in Shibuya under $100. Tell me when both finish."*
-
-Each of those is a one-line setup. The phone runs them in the background while you live your life.
+🔗 [Download from Google Play](https://play.google.com/store/apps/details?id=me.rerere.rikkahub)
 
 > [!WARNING]
 > There are many forked versions of RikkaHub. Issues with forks are unrelated to RikkaHub, so please use forks with caution to avoid privacy leaks or excessive permission requests.
 
+## 💖 Sponsors
+
+|                                         Sponsor                                         | Description                                                                                                                                                                                                                                         |
+|:---------------------------------------------------------------------------------------:|:----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| <img src="docs/sponsors/aihubmix.png" alt="Aihubmix" width="50" /><br /><b>Aihubmix</b> | Thanks to <a href="https://aihubmix.com?aff=pG7r">aihubmix.com</a> for their financial support. We recommend using aihubmix as a one-stop shop for mainstream models worldwide. (OpenAI, Claude, Google Gemini, DeepSeek, Qwen, and hundreds more). |
+| <img src="docs/sponsors/suixiang.jpg" alt="随想AI中转" width="50" /><br /><b><a href="https://sui-xiang.com">随想AI中转</a></b> | 感谢<a href="https://sui-xiang.com">随想AI中转</a>对本项目的赞助！随想AI中转 是一家可靠高效的 API 中继服务提供商，提供 Claude、Codex、Gemini 等的中继服务。注重隐私的中转站·无数据倒卖·无模型掺水，隐私，透明，极速售后。新账户注册每日签到就送 0.5 元测试额度，充值额度 1:1，无需订阅，按量付费。多线路冗余、跨区域容灾、自动故障切换，长链路 SSE 不中断。99.9% 可用性，关键调用从不掉队。 |
+| <img src="docs/sponsors/ztest.png" alt="真测 ztest.ai" width="50" /><br /><b><a href="https://ztest.ai">真测 ztest.ai</a></b> | 感谢<a href="https://ztest.ai">真测 ztest.ai</a>对本项目的赞助！真测 ztest.ai 是一个 AI 中转站模型检测平台，检测结果数据全公开，23 项探针覆盖协议、身份、能力、内容完整性、安全性、性能六大维度，交叉印证识别伪造与降级。作为独立第三方验证平台，实时监测 AI 中转站的模型真实性、响应质量与服务可用性。 |
+
 ## ✨ Features
 
-<table>
-<tr>
-<td width="50%" valign="top">
+- 🎨 Material You Design and 🌙 Dark mode
+- 📦 Workspace: a proot-based Linux agent environment
+- 🔄 Multiple AI Provider Support: custom API / URL / models (all OpenAI, Google, Anthropic compatible api)
+- 🖼️ Multimodal input support (Image, Text Documentation, PDF, Docx)
+- 🖥️ Web access for multi-platform use
+- 🛠️ MCP support
+- 📝 Markdown Rendering (with code highlighting, Latex formulas, tables, Mermaid)
+- 🪾 Message Branching
+- 🔍 Search capabilities (Exa, Tavily, Zhipu, LinkUp, Brave, Perplexity, etc.)
+- 🧩 Prompt variables (model name, time, etc.)
+- 🤳 QR code export and import for providers
+- 🤖 Agent customization
+- 🧠 ChatGPT-like memory feature
+- 📝 AI Translation
+- 🌐 Custom HTTP request headers and request bodies
+- 💌 Silly Tavern character card import
 
-### Control your phone
+## ✨ Contributing
 
-Ask the AI to tap, swipe, scroll, type, take screenshots, open apps, turn the torch on, change brightness or volume, post a notification, vibrate, share something, or read your battery, WiFi, signal, location, sensors, contacts, and SMS. It can also send an SMS, set the wallpaper, read and write NFC tags, sign and encrypt data with the Android Keystore, reach external storage and SD cards, and zip or unzip archives. Over 80 tools, all built into Android, no extra apps required. Each one stays off until you flip it on.
+This project is developed using [Android Studio](https://developer.android.com/studio). PRs are
+welcome!
 
-</td>
-<td width="50%" valign="top">
+Technology stack documentation:
 
+- [Kotlin](https://kotlinlang.org/) (Development language)
+- [Koin](https://insert-koin.io/) (Dependency Injection)
+- [Jetpack Compose](https://developer.android.com/jetpack/compose) (UI framework)
+- [DataStore](https://developer.android.com/topic/libraries/architecture/datastore) (Preference data
+  storage)
+- [Room](https://developer.android.com/training/data-storage/room) (Database)
+- [Coil](https://coil-kt.github.io/coil/) (Image loading)
+- [Material You](https://m3.material.io/) (UI design)
+- [Navigation 3](https://developer.android.com/guide/navigation/navigation-3) (Navigation)
+- [Okhttp](https://square.github.io/okhttp/) (HTTP client)
+- [kotlinx.serialization](https://github.com/Kotlin/kotlinx.serialization) (JSON serialization)
 
-### In-app browser
+> [!TIP]
+> You need a `google-services.json` file at `app` folder to build the app.
 
-> [!IMPORTANT]
+> [!IMPORTANT]  
 > The following PRs will be rejected:
 > 1. Translation related changes, such as adding new languages or updating existing translations
 > 2. Adding new features, this project is opinionated and will not accept pull requests for new features
 > 3. Large-scale refactoring and changes generated by AI
 
-The agent has a real browser built into the app. Watch it open URLs, click through cookie banners, fill in search boxes, scroll, and read the page back to you. It streams a fresh screenshot after every step. There's a floating chat pill on the browser screen so you can keep talking to the AI without ever leaving the page. Built-in article extraction and diff-after-action keep the token cost low even on long browse sessions.
+## 💰 Donate
 
-</td>
-<td valign="top">
+* [Patreon](https://patreon.com/rikkahub)
+* [爱发电](https://afdian.com/a/reovo)
 
-### Workflows
+## ⭐ Star History
 
-Tasker-style automation, but the AI writes the rules for you. Just describe the trigger and the action: *"when I get home, turn the ringer off"*; *"every weekday at 8am if battery is over 50%, check my email and ping me if anything's urgent"*. 19 triggers (WiFi, Bluetooth, headphones, geofence, app launch, notifications received, time, charging, screen on/off, and more) and 14 conditions (battery thresholds, sunrise/sunset, day-of-week, current foreground app, screen state) decide when each one fires. Receivers register only when a workflow actually needs them, so battery drain stays minimal.
-
-</td>
-</tr>
-<tr>
-<td valign="top">
-
-### Schedule anything
-
-Set tasks to run on a schedule and forget about them. "Every Monday morning at 8", "every two hours", "next Friday at 3pm". The phone keeps everything running through reboots and battery saver. Pick how each task fires: let the AI think at the moment and decide what to do (good for "watch X and ping me if Y"), or pre-bake a fixed action that runs without using AI tokens (good for plain reminders).
-
-</td>
-<td valign="top">
-
-### Find and manage files
-
-The AI has its own file manager. Find files, read them, save new ones, copy, move, rename, delete. Same things you'd do in a regular file manager, except you describe what you want and it does it. "Find every PDF mentioning 'invoice' on my phone" works in one sentence. System folders that don't belong to you are off-limits, even if you ask.
-
-</td>
-</tr>
-<tr>
-<td valign="top">
-
-### SSH from your pocket
-
-Save your servers once and the AI can SSH into any of them on demand. Run a command, upload a file, pull down a backup, check disk space, tail a log. Pipe input straight into a command or write a remote file in one shot, and launch a long-running server in the background so the call returns its process ID instead of hanging on the connection. Works whether you're on WiFi or cell. Watch your home server from a coffee shop without opening a terminal.
-
-</td>
-<td valign="top">
-
-### Termux + voice transcription
-
-If you have Termux installed, the AI can run real Linux commands on your phone: installing packages, building software, running scripts, or starting a background service that keeps running after the command returns. A dedicated Settings → Termux page lets you tune the command timeout, the per-turn time budget, and other Termux limits when a long install or build needs more room. On top of that, voice notes get transcribed automatically on-device. Everything runs on your phone, no cloud transcription, no API key, no internet needed.
-
-</td>
-</tr>
-<tr>
-<td valign="top">
-
-### Music + media
-
-Ask for music and the AI plays it through Android's normal media controls: lock-screen art, headphone keys, the works. Pause, resume, lower the volume for a meeting and bring it back later, all from chat. Even after a force-stop the AI can pick up where you left off, same track, same position, via a snapshot fallback. No "you killed the player so it's gone forever". Your queue survives.
-
-</td>
-<td valign="top">
-
-### Skills
-
-Drop a Markdown skill file into the app and the AI gains a new playbook it'll follow step-by-step: auto-reply to a contact, summarise a notification stack, or run a JavaScript mini-app whose result opens right in the in-app browser. A bundled featured catalog ships with a QR generator, a Wikipedia query box, a piano you can play, an interactive map, and more. Two skills are enabled out of the box: an always-on agent playbook that keeps the assistant proactive and self-improving across sessions, and a converter that adapts OpenClaw skills to run here. Add new skills from a URL, a markdown file you share into the app, or pick from the bundled catalog.
-
-</td>
-</tr>
-<tr>
-<td valign="top">
-
-### Sub-agents
-
-For long tasks the main assistant can dispatch a focused **sub-agent** into a clean side-context, optionally on a smaller and cheaper model. Two or more run in parallel: one researches a topic while another updates your server. Each result comes back as a single summary so the main chat doesn't drown in irrelevant tool output, and `/stop` cascades cancellation through every active child in one tick.
-
-</td>
-<td valign="top">
-
-### Doctor
-
-A built-in health checkup for the app. Tap Settings, then Doctor, and it runs a top-to-bottom audit of permissions, background services, database integrity, network, Termux, and diagnostics. Missing something? Tap the auto-fix button next to the row to grant the permission, restart the service, or rebuild the chat search index. The same report runs remotely via `/doctor` for troubleshooting. It checks every permission your enabled tools actually rely on, including overlay, system-settings, Bluetooth, nearby-WiFi, and background-location, and stays quiet about the ones for tools you haven't turned on.
-
-</td>
-</tr>
-<tr>
-<td valign="top">
-
-### MCP servers
-
-Connect the assistant to [Model Context Protocol](https://modelcontextprotocol.io) servers and the AI gains whatever tools those servers expose. The AI can add, update, and manage MCP connections itself — every connection change is approval-gated, so a server can't be wired in behind your back.
-
-</td>
-<td valign="top">
-
-### Notifications + external triggers
-
-Pick which apps the AI is allowed to watch, and it can read, summarize, and forward incoming notifications — the whitelist starts empty, so nothing leaves your phone until you choose. Other apps (Tasker, automation tools, ADB) can also hand the agent a task through the External Automation Intent API, so RikkaHub Agent slots into automation flows you already run.
-
-</td>
-</tr>
-<tr>
-<td colspan="2" align="center" valign="top">
-
-### Safety + privacy
-
-Three layers of protection, in order of strictness:
-
-**Per-assistant toggles**. Every tool starts off. Flip on only what you want.
-
-**Per-call approval**. Tools that change something on your phone ask before running. Allow once, for this chat, always, or deny.
-
-**HARDLINE floor**. A short list of genuinely dangerous commands (wipe everything, reboot, fork bombs, system file destruction, and known shell tricks to bypass the rule) is blocked unconditionally. Even if you accidentally tell the AI to do one of these, it won't.
-
-Plus: passwords and API keys never make it into log files. Cloud backups skip your saved server credentials. The notification listener starts with an empty whitelist, so nothing leaves your phone until you pick the apps to forward.
-
-</td>
-</tr>
-</table>
-
----
-
-## 🚀 Quick Start
-
-1. **Install**: download the latest **`*-release.apk`** from [Releases](https://github.com/ExTV/rikkahub-agent/releases/latest). Allow install from unknown sources, then open. (One-time note: if you still have an old debug build of RikkaHub Agent installed, uninstall it first — the release build is signed differently and won't upgrade over it.)
-   - **Upgrading from a build before `2.3.1-agent.0`?** The app id changed to `jaye.rikkahub` so the fork installs alongside upstream RikkaHub instead of clashing with it. Android treats the new id as a separate app, so it won't update over an older agent build automatically. To carry your data across: open the old app, make a backup (Settings → Backup), install this release, then restore that backup. Once you've confirmed everything moved over, uninstall the old build.
-2. **Add an LLM provider**: Settings, then Providers, pick one, paste your API key. **OpenRouter** is first-class (auto-detected model capabilities and pricing, provider routing controls), and you can sign in to **Codex** with your ChatGPT account to use your OpenAI plan through OAuth instead of an API key. For fully on-device inference with no key and no network, open the **Local · LiteRT** provider and download a local model (Gemma, Qwen) — it runs on any device and uses the GPU automatically where supported. Multimodal Gemma builds can also read images you attach, decoded on-device where the device's vision encoder is supported (otherwise the model replies from text only). Pixel 8/9/10 users can also flip on the built-in **AICore** card for Gemini Nano.
-3. **Turn on what you want**: Settings, then Assistants, tap your assistant, then **Local Tools**, and flip the categories you want enabled.
-
-If you don't turn anything on, the app behaves exactly like vanilla RikkaHub.
-
----
-
-## 📋 Requirements
-
-|              |                                                              |
-| ------------ | ------------------------------------------------------------ |
-| Architecture | arm64 or x86_64                                              |
-| Android      | 8.0+ (API 26), targets API 37                                |
-| Storage      | ~80 MB app                                                   |
-| LLM provider | OpenAI, Google, Anthropic, OpenRouter, Codex (ChatGPT OAuth), Ollama, or any OpenAI-compatible endpoint. OR Gemini Nano via AICore on Pixel 8/9/10+ |
-
----
-
-## 🌍 Languages
-
-The interface ships in **English, 简体中文, 繁體中文, 日本語, 한국어, Русский, and العربية**. The app follows your system language automatically and falls back to English for anything not yet translated. Right-to-left languages render correctly in chat and markdown — code blocks stay left-to-right — and Arabic, Persian, and Urdu are available as translator languages.
-
----
-
-## 🔧 Building from source
-
-Requires the [bun](https://bun.sh) JavaScript runtime on PATH. The build chain
-runs `bun install` and `bun run build` in `web-ui/` to produce the in-app web
-UI bundle before packaging the APK.
-
-```bash
-git clone https://github.com/ExTV/rikkahub-agent.git
-
-cd rikkahub-agent
-
-./gradlew :app:installDebug   # build + install on a connected device
-```
-
----
-
-## 🙏 Credits
-
-Stands on the shoulders of giants:
-
-| Project                                                              | Role                                                |
-| -------------------------------------------------------------------- | --------------------------------------------------- |
-| [RikkaHub](https://github.com/rikkahub/rikkahub)                     | The beautiful upstream chat client this forks       |
-| [cron-utils](https://github.com/jmrozanec/cron-utils)                | 5-field cron parser for the scheduler               |
-| [whisper.cpp](https://github.com/ggerganov/whisper.cpp)              | On-device speech-to-text via Termux                 |
-| [Termux](https://github.com/termux/termux-app)                       | Shell + package manager the agent uses for shell-out |
-| [JSch (mwiede fork)](https://github.com/mwiede/jsch)                 | Native SSH client                                   |
-| [FlorisBoard](https://github.com/florisboard/florisboard)            | Base for the optional [agent-keyboard](https://github.com/ExTV/agent-keyboard) companion |
-
-This fork is unaffiliated with the upstream RikkaHub maintainers. All credit for the underlying chat client, provider abstraction, and UI design goes to the upstream team.
-
----
+If you like this project, please give it a star ⭐
 
 <a href="https://www.star-history.com/?type=date&repos=re-ovo%2Frikkahub">
  <picture>

@@ -326,7 +326,7 @@ dependencies {
 
     // modules
     implementation(project(":ai"))
-    implementation(project(":local-llm"))
+
     implementation(project(":web"))
     implementation(project(":document"))
     implementation(project(":highlight"))
@@ -340,6 +340,10 @@ dependencies {
 
     // SSH client (Mwiede fork — maintained, Android-friendly)
     implementation("com.github.mwiede:jsch:0.2.21")
+
+    // Shizuku — 特权级 Shell 执行（无障碍服务备选引擎）
+    implementation(libs.shizuku.api)
+    implementation(libs.shizuku.provider)
 
     // Cron utilities (expression parsing & validation)
     implementation("com.cronutils:cron-utils:9.2.1")

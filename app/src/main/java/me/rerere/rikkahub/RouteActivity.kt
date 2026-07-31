@@ -122,6 +122,7 @@ import me.rerere.rikkahub.ui.pages.setting.SettingAccessibilityPage
 import me.rerere.rikkahub.ui.pages.setting.SettingAndroidIntegrationPage
 import me.rerere.rikkahub.ui.pages.setting.SettingNotificationsPage
 import me.rerere.rikkahub.ui.pages.setting.SettingPermissionsPage
+import me.rerere.rikkahub.ui.pages.setting.SettingShizukuPage
 import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesPage
 import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesThemePage
 import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesNotificationPage
@@ -653,10 +654,6 @@ class RouteActivity : ComponentActivity() {
                                 me.rerere.rikkahub.ui.pages.setting.browser.SettingBrowserPage()
                             }
 
-                            entry<Screen.SettingAppDataBridge> {
-                                me.rerere.rikkahub.ui.pages.setting.appdatabridge.SettingAppDataBridgePage()
-                            }
-
                             entry<Screen.SettingTermux> {
                                 me.rerere.rikkahub.ui.pages.setting.termux.SettingTermuxPage()
                             }
@@ -682,6 +679,10 @@ class RouteActivity : ComponentActivity() {
 
                             entry<Screen.SettingNotifications> {
                                 SettingNotificationsPage()
+                            }
+
+                            entry<Screen.SettingShizuku> {
+                                SettingShizukuPage()
                             }
 
                             entry<Screen.SettingPermissions> {
@@ -966,9 +967,6 @@ sealed interface Screen : NavKey {
     data object SettingBrowser : Screen
 
     @Serializable
-    data object SettingAppDataBridge : Screen
-
-    @Serializable
     data object SettingTermux : Screen
 
     @Serializable
@@ -991,6 +989,9 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object SettingPermissions : Screen
+
+    @Serializable
+    data object SettingShizuku : Screen
 
     @Serializable
     data object Developer : Screen

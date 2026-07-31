@@ -23,7 +23,6 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.ai.tools.local.BiometricResultBuffer
 import me.rerere.rikkahub.data.ai.tools.local.CameraResultBuffer
 import me.rerere.rikkahub.data.ai.tools.local.InteractiveToolStreamer
-import me.rerere.rikkahub.data.ai.tools.local.AppDataBridge
 import me.rerere.rikkahub.data.ai.tools.local.getDeviceInfoTool
 import me.rerere.rikkahub.data.ai.tools.local.readSensorTool
 import me.rerere.rikkahub.data.ai.tools.local.callLogTool
@@ -76,6 +75,8 @@ import me.rerere.rikkahub.data.ai.tools.local.showImageTool
 import me.rerere.rikkahub.data.ai.tools.local.openFileTool
 import me.rerere.rikkahub.data.ai.tools.local.transcribeAudioFileTool
 import me.rerere.rikkahub.data.ai.tools.local.whisperStatusTool
+import me.rerere.rikkahub.data.ai.tools.local.shizukuRunCommandTool
+import me.rerere.rikkahub.data.ai.tools.local.shizukuCliTool
 import me.rerere.rikkahub.data.ai.tools.local.listFilesTool
 import me.rerere.rikkahub.data.ai.tools.local.readFileTool
 import me.rerere.rikkahub.data.ai.tools.local.writeBinaryFileTool
@@ -234,7 +235,6 @@ class LocalTools(
     // Injected rather than Koin-resolved inside each factory so JVM tests can pass a mock.
     private val interactiveToolStreamer: InteractiveToolStreamer,
     // Phase 25 — NFC / SAF Activity-bridge buffers + the SAF tree-grant store.
-    private val nfcResultBuffer: me.rerere.rikkahub.data.ai.tools.local.NfcResultBuffer,
     private val safPickerResultBuffer: me.rerere.rikkahub.data.ai.tools.local.SafPickerResultBuffer,
     private val storageVolumeGrantStore: me.rerere.rikkahub.data.storage.StorageVolumeGrantStore,
     // Shared OkHttp singleton (NetworkChangeMonitor-registered) — backs the web_fetch tool.
@@ -242,8 +242,6 @@ class LocalTools(
     // agent-keyboard IPC client — backs the keyboard_* tools (drives the active text field).
     private val keyboardApiClient: me.rerere.rikkahub.data.keyboard.KeyboardApiClient,
     // Text-to-speech engine — backs the text_to_speech tool.
-    // AppDataBridge — 自动发现并注册外部 App 数据查询插件
-    private val appDataBridge: AppDataBridge,
     private val ttsManager: TTSManager,
 ) {
     val javascriptTool by lazy { buildJavascriptTool() }
@@ -282,9 +280,7 @@ class LocalTools(
         if (options.contains(LocalToolOption.ScreenTime)) {
             tools.add(screenTimeTool)
         }
-        if (options.contains(LocalToolOption.AppDataBridge)) {
-            tools.addAll(appDataBridge.toTools())
-        }
+
         if (options.contains(LocalToolOption.Calendar)) {
             tools.add(calendarQueryTool)
             tools.add(calendarCreateTool)
@@ -398,6 +394,10 @@ class LocalTools(
             tools.add(me.rerere.rikkahub.data.ai.tools.local.launchAppTool(context, invocationContext, interactiveToolStreamer))
             tools.add(me.rerere.rikkahub.data.ai.tools.local.listInstalledAppsTool(context))
             tools.add(me.rerere.rikkahub.data.ai.tools.local.openUrlTool(context, invocationContext, interactiveToolStreamer))
+        }
+        if (options.contains(LocalToolOption.Shizuku)) {
+            tools.add(shizukuCliTool())
+            tools.add(shizukuRunCommandTool())
         }
         if (options.contains(LocalToolOption.Termux)) {
             tools.add(me.rerere.rikkahub.data.ai.tools.local.termuxRunCommandTool(context))
@@ -536,9 +536,6 @@ class LocalTools(
         if (options.contains(LocalToolOption.SmsSend)) {
             tools.add(me.rerere.rikkahub.data.ai.tools.local.smsSendTool(context))
         }
-        if (options.contains(LocalToolOption.Wallpaper)) {
-            tools.add(me.rerere.rikkahub.data.ai.tools.local.setWallpaperTool(context))
-        }
         if (options.contains(LocalToolOption.Keystore)) {
             tools.add(me.rerere.rikkahub.data.ai.tools.local.keystoreGenerateKeyTool())
             tools.add(me.rerere.rikkahub.data.ai.tools.local.keystoreSignTool())
@@ -547,10 +544,6 @@ class LocalTools(
             tools.add(me.rerere.rikkahub.data.ai.tools.local.keystoreDecryptTool())
             tools.add(me.rerere.rikkahub.data.ai.tools.local.keystoreDeleteKeyTool())
             tools.add(me.rerere.rikkahub.data.ai.tools.local.keystoreListKeysTool())
-        }
-        if (options.contains(LocalToolOption.Nfc)) {
-            tools.add(me.rerere.rikkahub.data.ai.tools.local.nfcReadTagTool(context, nfcResultBuffer, invocationContext))
-            tools.add(me.rerere.rikkahub.data.ai.tools.local.nfcWriteTagTool(context, nfcResultBuffer, invocationContext))
         }
         if (options.contains(LocalToolOption.ExternalStorage)) {
             tools.add(me.rerere.rikkahub.data.ai.tools.local.listStorageVolumesTool(context))

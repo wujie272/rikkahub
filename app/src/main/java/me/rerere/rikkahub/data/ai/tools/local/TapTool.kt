@@ -13,6 +13,7 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.ai.AgentTurnTracker
 import me.rerere.rikkahub.data.ai.tools.ToolInvocationContext
 import me.rerere.rikkahub.service.ActionLogEntry
+import me.rerere.rikkahub.service.ShizukuShell
 
 private const val DEFAULT_LONG_PRESS_MS = 600L
 
@@ -66,7 +67,10 @@ fun tapTool(
             val gesture = GestureDescription.Builder()
                 .addStroke(GestureDescription.StrokeDescription(path, 0L, 50L))
                 .build()
-            val ok = svc.dispatchGestureAsync(gesture)
+            var ok = svc.dispatchGestureAsync(gesture)
+            if (!ok && ShizukuShell.isAvailable) {
+                ok = ShizukuShell.inputTap(x.toInt(), y.toInt())
+            }
             svc.appendLog(
                 ActionLogEntry(
                     type = "tap",

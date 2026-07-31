@@ -77,15 +77,16 @@
        allow-external-apps=true in ~/.termux/termux.properties on their side. -->
   <uses-permission android:name="com.termux.permission.RUN_COMMAND" />
 
-  <!-- AppDataBridge: read external app data (e.g. attendance logs) -->
   <uses-permission android:name="com.jaye.didadida.permission.READ_DATA" />
 
   <!-- Phase 25 — Phase 3 second cut. SEND_SMS is a runtime (dangerous) permission granted
-       at toggle-on for the send_sms tool. SET_WALLPAPER and NFC are install-time. SAF and
+       at toggle-on for the send_sms tool. SET_WALLPAPER is install-time. SAF and
        the archive tools need no manifest change (SAF is grant-driven; zip is pure JDK). -->
   <uses-permission android:name="android.permission.SEND_SMS" />
-  <uses-permission android:name="android.permission.SET_WALLPAPER" />
-  <uses-permission android:name="android.permission.NFC" />
+  <!-- Shizuku / AXManager 兼容：API_V23 权限，AXManager 需要这个才能识别客户端 -->
+  <uses-permission android:name="moe.shizuku.manager.permission.API_V23" />
+  <!-- INTERACT_ACROSS_USERS_FULL：ShizukuProvider 标准声明，AXManager 兼容需要 -->
+  <uses-permission android:name="android.permission.INTERACT_ACROSS_USERS_FULL" />
 
   <!-- Signature-protected permission exposed by the co-signed agent-keyboard IME. Granted
        at install time because both apps are signed with the same key; lets RikkaHub bind
@@ -93,7 +94,6 @@
   <uses-permission android:name="dev.patrickgold.florisboard.permission.AGENT_KEYBOARD_API" />
 
   <uses-feature
-    android:name="android.hardware.nfc"
     android:required="false" />
   <uses-feature
     android:name="android.hardware.camera"
@@ -122,6 +122,9 @@
          the agent-keyboard package. Without this the bind silently fails on API 30+. -->
     <package android:name="dev.patrickgold.florisboard" />
     <package android:name="com.jaye.didadida" />
+    <!-- Shizuku 包可见性，用于检测 Shizuku / AXManager 是否安装 -->
+    <package android:name="moe.shizuku.privileged.api" />
+    <package android:name="frb.axeron.manager" />
     <!-- 用于识别桌面 launcher 以便在屏幕使用时间中排除 -->
     <intent>
       <action android:name="android.intent.action.MAIN" />
@@ -381,7 +384,18 @@
         android:name="androidx.work.WorkManagerInitializer"
         android:value="androidx.startup"
         tools:node="remove" />
+
     </provider>
+
+    <!-- Shizuku in-process content provider。Shizuku SDK >=12 需要此 provider 来接收 Binder。
+         multiprocess=false 防止 :acra 等子进程重复注册。 -->
+    <provider
+      android:name="rikka.shizuku.ShizukuProvider"
+      android:authorities="${applicationId}.shizuku"
+      android:multiprocess="false"
+      android:enabled="true"
+      android:exported="true"
+      android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
   </application>
 
 </manifest>

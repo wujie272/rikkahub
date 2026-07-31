@@ -24,7 +24,6 @@ import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspaceVM
 import me.rerere.rikkahub.ui.pages.setting.SettingVM
 import me.rerere.rikkahub.ui.pages.setting.browser.SettingBrowserViewModel
 import me.rerere.rikkahub.ui.pages.setting.termux.SettingTermuxViewModel
-import me.rerere.rikkahub.ui.pages.setting.locallm.SettingLocalLlmViewModel
 import me.rerere.rikkahub.ui.pages.share.handler.ShareHandlerVM
 import me.rerere.rikkahub.ui.activity.TextSelectionVM
 import me.rerere.rikkahub.ui.pages.translator.TranslatorVM
@@ -113,16 +112,4 @@ val viewModelModule = module {
     viewModelOf(::DoctorViewModel)
     viewModelOf(::SettingBrowserViewModel)
     viewModelOf(::SettingTermuxViewModel)
-
-    // 群聊已集成到 ChatPage 中，GroupChatVM 已移除
-    // Phase 22A: parameterised by LocalRuntime — one VM instance per provider tile.
-    viewModel<SettingLocalLlmViewModel> { params ->
-        SettingLocalLlmViewModel(
-            runtime = params.get(),
-            context = get(),
-            prefs = get(),
-            httpClient = get(),
-            settingsStore = get(),
-        )
-    }
 }

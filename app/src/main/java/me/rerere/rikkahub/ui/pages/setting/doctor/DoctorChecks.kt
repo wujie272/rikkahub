@@ -1,6 +1,8 @@
 package me.rerere.rikkahub.ui.pages.setting.doctor
 
 import android.Manifest
+import android.content.Intent
+import android.net.Uri
 import android.content.Context
 import android.os.Build
 import kotlinx.coroutines.Dispatchers
@@ -22,6 +24,8 @@ import me.rerere.rikkahub.workflow.repository.WorkflowRepository
 import me.rerere.rikkahub.browser.BrowserPreferences
 import me.rerere.rikkahub.browser.BrowserToolDefaults
 import java.net.InetAddress
+import me.rerere.rikkahub.service.ShizukuManager
+import me.rerere.rikkahub.service.ShizukuBackend
 import java.io.File
 
 /**
@@ -67,12 +71,12 @@ private object Capability {
     val Browser: Set<LocalToolOption> = setOf(
         LocalToolOption.Browser,             // 31 browser tools (in-app WebView)
     )
+    val Shizuku: Set<LocalToolOption> = setOf(
+        LocalToolOption.Shizuku,
+    )
     // Phase 25 — Phase 3 second cut.
     val SendSms: Set<LocalToolOption> = setOf(
         LocalToolOption.SmsSend,
-    )
-    val Nfc: Set<LocalToolOption> = setOf(
-        LocalToolOption.Nfc,
     )
     // Permissions that previously had no Doctor check at all. Each is gated on the tool that
     // actually needs it, so a denied perm only WARNs when its feature is enabled (opt-in) and
@@ -110,11 +114,11 @@ private fun LocalToolOption.shortName(): String = when (this) {
     LocalToolOption.Files -> "文件"
     LocalToolOption.Browser -> "浏览器"
     LocalToolOption.SmsSend -> "发送短信"
-    LocalToolOption.Wallpaper -> "壁纸"
     LocalToolOption.Keystore -> "密钥库"
-    LocalToolOption.Nfc -> "NFC"
     LocalToolOption.ExternalStorage -> "外部存储"
     LocalToolOption.Archive -> "压缩(归档)"
+
+    LocalToolOption.Shizuku -> "Shizuku"
     else -> this::class.simpleName ?: "?"
 }
 
@@ -145,10 +149,7 @@ class DoctorChecks(
     // Phase 25 — SAF tree-grant store, backs the "granted directories" Doctor row.
     // Nullable + defaulted so legacy test paths that don't build the full DI graph compile.
     private val storageVolumeGrantStore: me.rerere.rikkahub.data.storage.StorageVolumeGrantStore? = null,
-    // Surface the persisted LiteRT accelerator decision so the user can see whether their
-    // local models actually engaged GPU/NPU or silently fell back to CPU.
-    // Nullable + defaulted same as the others above for legacy test path compatibility.
-    private val localRuntimePreferences: me.rerere.locallm.LocalRuntimePreferences? = null,
+
 ) {
     suspend fun runAll(): List<DoctorCheck> = withContext(Dispatchers.IO) {
         // Aggregate enabled tools across every assistant. A tool is "in use" if at least
@@ -165,6 +166,8 @@ class DoctorChecks(
             addAll(databaseChecks(enabled))
             addAll(networkChecks())
             addAll(termuxChecks(enabled))
+
+            addAll(shizukuChecks(enabled))
             addAll(browserChecks(enabled))
             addAll(maintenanceChecks())
             addAll(diagnosticsChecks(enabled))
@@ -359,48 +362,6 @@ class DoctorChecks(
                     fix = FixAction.OpenAppRoute("打开应用权限", AppRouteKey.SettingPermissions),
                 )
             )
-        }
-        run {
-            val adapter = android.nfc.NfcAdapter.getDefaultAdapter(context)
-            val nfcNeeders = requirersOf(Capability.Nfc, enabled)
-            when {
-                adapter == null -> add(
-                    DoctorCheck(
-                        id = "perm.nfc_enabled",
-                        category = DoctorCategory.Permissions,
-                        label = "NFC",
-                        detail = "设备没有 NFC 硬件。",
-                        severity = Severity.INFO,
-                    )
-                )
-                !adapter.isEnabled -> add(
-                    DoctorCheck(
-                        id = "perm.nfc_enabled",
-                        category = DoctorCategory.Permissions,
-                        label = "NFC",
-                        detail = if (nfcNeeders.isEmpty())
-                            "NFC 在系统设置中已关闭。当前启用的工具不需要此功能。"
-                        else
-                            "NFC 在系统设置中已关闭。需要此功能的工具：" +
-                                nfcNeeders.joinToString(", ") { it.shortName() } + "。",
-                        severity = if (nfcNeeders.isEmpty()) Severity.INFO else Severity.WARN,
-                        fix = if (nfcNeeders.isEmpty()) null else FixAction.OpenIntent(
-                            label = "打开 NFC 设置",
-                            intent = android.content.Intent(android.provider.Settings.ACTION_NFC_SETTINGS)
-                                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
-                        ),
-                    )
-                )
-                else -> add(
-                    DoctorCheck(
-                        id = "perm.nfc_enabled",
-                        category = DoctorCategory.Permissions,
-                        label = "NFC",
-                        detail = "NFC 硬件存在且已启用。",
-                        severity = Severity.OK,
-                    )
-                )
-            }
         }
     }
 
@@ -697,11 +658,6 @@ class DoctorChecks(
                     is me.rerere.ai.provider.ProviderSetting.OpenAI -> p.apiKey.isNotBlank()
                     is me.rerere.ai.provider.ProviderSetting.Google -> p.apiKey.isNotBlank()
                     is me.rerere.ai.provider.ProviderSetting.Claude -> p.apiKey.isNotBlank()
-                    is me.rerere.ai.provider.ProviderSetting.AICore -> p.enabled  // on-device, no API key
-                    // Local provider (LiteRT): usable when enabled AND at least one model has
-                    // been loaded/downloaded. A disabled provider with no models is the factory
-                    // default — don't count it.
-                    is me.rerere.ai.provider.ProviderSetting.LiteRtLocal -> p.enabled && p.models.isNotEmpty()
                     is me.rerere.ai.provider.ProviderSetting.Codex -> p.enabled  // OAuth, no API key
                 }
             }
@@ -710,114 +666,11 @@ class DoctorChecks(
                     id = "net.providers",
                     category = DoctorCategory.Network,
                     label = "已配置的 LLM 供应商",
-                    detail = "${configured} 个供应商已配置（API 密钥已设置、AICore 已启用或本地模型已加载），共 ${provs.size} 个。",
+                    detail = "${configured} 个供应商已配置，共 ${provs.size} 个。",
                     severity = if (configured > 0) Severity.OK else Severity.WARN,
                     fix = FixAction.OpenAppRoute("打开供应商设置", AppRouteKey.SettingProvider),
                 )
             )
-        }
-        // LiteRT accelerator status. The runtime's GPU -> CPU fallback is silent today:
-        // if the device's OpenCL/OpenGL delegate fails to init (e.g. MLDrift's
-        // "CreateSharedMemoryManager is not implemented" on some Adreno drivers), the
-        // model loads on CPU and the user has no UI indication. LiteRtProvider now
-        // persists the actually-chosen accelerator after every load; surface that here
-        // so the user can confirm GPU is engaged.
-        runCatching {
-            val prefs = localRuntimePreferences
-            if (prefs != null) {
-                val accel = prefs.acceleratorFlow(me.rerere.locallm.LocalRuntime.LiteRT).first()
-                val forceCpu = prefs.forceCpu(me.rerere.locallm.LocalRuntime.LiteRT)
-                val detail = when {
-                    accel == null -> "尚未探测。加速器在首次加载模型时决定。"
-                    forceCpu && accel == "CPU" ->
-                        "CPU（设置 → 本地 LiteRT 中的「尝试 GPU」开关已关闭）。" +
-                            "打开开关，下次加载时重试设备的 GPU。"
-                    accel == "CPU" ->
-                        "CPU（回退：GPU 委托在此设备上初始化失败，" +
-                            "可能是 MLDrift 问题。点击设置 → 本地 LiteRT 中的「重新检测」" +
-                            "以重新探测。）"
-                    accel == "GPU" -> "GPU（OpenCL 或 OpenGL，由 LiteRT 内部探测选择）。"
-                    accel == "QNN" || accel == "NPU" -> "NPU（高通 QNN 委托）。"
-                    accel == "NNAPI" -> "NNAPI。"
-                    else -> "后端标签：$accel"
-                }
-                val severity = when {
-                    accel == null -> Severity.INFO
-                    accel == "CPU" && !forceCpu -> Severity.WARN  // unexpected fallback
-                    else -> Severity.OK
-                }
-                add(
-                    DoctorCheck(
-                        id = "net.litert_accel",
-                        category = DoctorCategory.Network,
-                        label = "LiteRT 加速器",
-                        detail = detail,
-                        severity = severity,
-                        fix = FixAction.OpenAppRoute(
-                            "打开本地 LiteRT 设置",
-                            AppRouteKey.SettingProvider,
-                        ),
-                    )
-                )
-                // Performance telemetry — surface the last-known prefill/decode tok/s for
-                // each model so the user (and the support team triaging a slow report)
-                // can see at a glance whether the runtime is hitting expected rates. We
-                // INFO when present; WARN never (the model could legitimately be slow on a
-                // weak device — the user knows their hardware better than we do).
-                val perfMap = prefs.perfTelemetryFlow(me.rerere.locallm.LocalRuntime.LiteRT).first()
-                if (perfMap.isNotEmpty()) {
-                    val rows = perfMap.values.sortedByDescending { it.sampledAtMs }
-                    val detail = rows.joinToString("\n") { s ->
-                        val spec = if (s.specDecodingEngaged) ", MTP 开启" else ""
-                        "${s.modelId}: prefill ${"%.1f".format(s.prefillTps)} tok/s, " +
-                            "decode ${"%.1f".format(s.decodeTps)} tok/s$spec"
-                    }
-                    add(
-                        DoctorCheck(
-                            id = "net.litert_perf",
-                            category = DoctorCategory.Network,
-                            label = "LiteRT 性能",
-                            detail = "各模型最近已知速率（基于字符估算，" +
-                                "英文文本准确率约 10%）：\n$detail",
-                            severity = Severity.INFO,
-                            fix = FixAction.OpenAppRoute(
-                                "打开本地 LiteRT 设置",
-                                AppRouteKey.SettingProvider,
-                            ),
-                        )
-                    )
-                }
-                // Vision-encoder availability — surface any models the runtime had to drop
-                // to text-only on this device's GPU. The provider's vision-CPU fallback
-                // means a multimodal model still works for chat, but the user has lost
-                // image input on this chip. Most common cause: Adreno 7xx + restrictive
-                // OEM linker namespace (One UI / OriginOS) hitting upstream LiteRT-LM
-                // issue #2292 (gpu_backend_opengl.cc:CreateSharedMemoryManager UNIMPLEMENTED).
-                val visionUnavailable = prefs
-                    .visionUnavailableFlow(me.rerere.locallm.LocalRuntime.LiteRT).first()
-                if (visionUnavailable.isNotEmpty()) {
-                    add(
-                        DoctorCheck(
-                            id = "net.litert_vision",
-                            category = DoctorCategory.Network,
-                            label = "LiteRT 视觉编码器",
-                            detail = "此设备上视觉编码器不可用，影响以下模型：" +
-                                visionUnavailable.joinToString(", ") +
-                                "。这些多模态模型以纯文本模式运行 — 聊天正常，" +
-                                "图像输入不可用。通常可通过未来的 LiteRT-LM SDK 更新修复" +
-                                "（OpenGL 回退路径的 CreateSharedMemoryManager 在" +
-                                "上游目前未实现）。点击模型旁边的「重试视觉」" +
-                                "（设置 → 本地 LiteRT）在 GPU 驱动更新后" +
-                                "清除该标记。",
-                            severity = Severity.WARN,
-                            fix = FixAction.OpenAppRoute(
-                                "打开本地 LiteRT 设置",
-                                AppRouteKey.SettingProvider,
-                            ),
-                        )
-                    )
-                }
-            }
         }
         // DNS sanity — confirms the OkHttp clients aren't stuck on a stale resolver.
         val dnsOk = withTimeoutOrNull(2_500L) {
@@ -874,6 +727,102 @@ class DoctorChecks(
     }
 
     // ----- Browser (Pass 3) ------------------------------------------------------------
+
+    // ----- Shizuku ---------------------------------------------------------------------
+
+    private fun shizukuChecks(enabled: Set<LocalToolOption>): List<DoctorCheck> = buildList {
+        val needers = requirersOf(Capability.Shizuku, enabled)
+
+        // 1. 是否安装 Shizuku 或 AXManager（始终显示，不依赖开关）
+        val installed = ShizukuManager.isInstalled
+        val toolNeeded = needers.isNotEmpty()
+        add(
+            DoctorCheck(
+                id = "shizuku.installed",
+                category = DoctorCategory.Shizuku,
+                label = "Shizuku 已安装",
+                detail = if (installed)
+                    "已检测到 ${ShizukuManager.installedManagerPackage ?: "Shizuku/AXManager"}。"
+                else if (toolNeeded)
+                    "未安装 Shizuku 或 AXManager。需要此功能的工具：${needers.joinToString(", ") { it.shortName() }}。"
+                else
+                    "未安装 Shizuku 或 AXManager。当前未启用需要此功能的工具。",
+                severity = if (installed) Severity.OK
+                    else if (toolNeeded) Severity.WARN else Severity.INFO,
+                fix = if (!installed && toolNeeded) FixAction.OpenIntent(
+                    label = "安装 Shizuku",
+                    intent = Intent(Intent.ACTION_VIEW, Uri.parse(ShizukuBackend.SHIZUKU_GITHUB_URL)),
+                ) else null,
+            )
+        )
+        if (!installed) return@buildList
+
+        // 2. Binder 是否存活
+        val binderAlive = ShizukuManager.snapshot.value.state != ShizukuManager.State.NOT_RUNNING &&
+            ShizukuManager.snapshot.value.state != ShizukuManager.State.NOT_INSTALLED
+        add(
+            DoctorCheck(
+                id = "shizuku.binder",
+                category = DoctorCategory.Shizuku,
+                label = "Shizuku 服务运行中",
+                detail = if (binderAlive)
+                    "Binder 连接正常 — Shizuku 服务正在运行。"
+                else if (toolNeeded)
+                    "Shizuku 已安装但服务未启动。请在 Shizuku 应用中点击「启动」。" +
+                    "需要此功能的工具：${needers.joinToString(", ") { it.shortName() }}。"
+                else
+                    "Shizuku 已安装但服务未启动。",
+                severity = if (binderAlive) Severity.OK
+                    else if (toolNeeded) Severity.WARN else Severity.INFO,
+                fix = if (!binderAlive && toolNeeded) FixAction.OpenIntent(
+                    label = "打开 Shizuku",
+                    intent = context.packageManager.getLaunchIntentForPackage(
+                        ShizukuManager.installedManagerPackage ?: ShizukuBackend.SHIZUKU_PACKAGE
+                    )?.apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) } ?: Intent(Intent.ACTION_VIEW, Uri.parse(ShizukuBackend.SHIZUKU_GITHUB_URL)),
+                ) else null,
+            )
+        )
+        if (!binderAlive) return@buildList
+
+        // 3. 权限是否已授予
+        val granted = ShizukuManager.snapshot.value.state == ShizukuManager.State.READY
+        add(
+            DoctorCheck(
+                id = "shizuku.permission",
+                category = DoctorCategory.Shizuku,
+                label = "Shizuku 权限已授予",
+                detail = if (granted)
+                    "RikkaHub 已获得 Shizuku 授权。"
+                else if (toolNeeded)
+                    "Shizuku 服务运行中但未授权 RikkaHub。请在 Shizuku 应用中将 RikkaHub 加入授权列表。" +
+                    "需要此功能的工具：${needers.joinToString(", ") { it.shortName() }}。"
+                else
+                    "Shizuku 服务运行中但未授权 RikkaHub。",
+                severity = if (granted) Severity.OK
+                    else if (toolNeeded) Severity.WARN else Severity.INFO,
+                fix = if (!granted && toolNeeded) FixAction.AutoFix(
+                    label = "请求授权",
+                    run = {
+                        ShizukuManager.requestPermission()
+                        AutoFixResult(ok = true, message = "已发送授权请求，请在 Shizuku 中确认。")
+                    },
+                ) else null,
+            )
+        )
+
+        // 4. 整体状态摘要
+        val snap = ShizukuManager.snapshot.value
+        add(
+            DoctorCheck(
+                id = "shizuku.status",
+                category = DoctorCategory.Shizuku,
+                label = "Shizuku 状态",
+                detail = "状态：${snap.state}，版本：${snap.version}，UID：${snap.uid}。" +
+                    if (snap.state == ShizukuManager.State.READY) "一切就绪。" else "",
+                severity = if (snap.state == ShizukuManager.State.READY) Severity.OK else Severity.INFO,
+            )
+        )
+    }
 
     /**
      * Pass 3: Doctor rows for the in-app browser feature.

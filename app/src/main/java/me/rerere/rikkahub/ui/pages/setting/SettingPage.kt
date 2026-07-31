@@ -265,12 +265,7 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         supportingContent = { Text(stringResource(R.string.setting_page_browser_desc)) },
                         headlineContent = { Text(stringResource(R.string.setting_page_browser)) },
                     )
-                    item(
-                        onClick = { navController.navigate(Screen.SettingAppDataBridge) },
-                        leadingContent = { Icon(HugeIcons.Connect, null) },
-                        supportingContent = { Text(stringResource(R.string.setting_page_app_data_bridge_desc)) },
-                        headlineContent = { Text(stringResource(R.string.setting_page_app_data_bridge)) },
-                    )
+
                     item(
                         onClick = { navController.navigate(Screen.SettingTermux) },
                         leadingContent = { Icon(HugeIcons.Console, null) },
@@ -282,6 +277,12 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         leadingContent = { Icon(HugeIcons.Wrench01, null) },
                         supportingContent = { Text(stringResource(R.string.setting_page_doctor_desc)) },
                         headlineContent = { Text(stringResource(R.string.setting_page_doctor)) },
+                    )
+                    item(
+                        onClick = { navController.navigate(Screen.SettingShizuku) },
+                        leadingContent = { Icon(HugeIcons.Shield01, null) },
+                        supportingContent = { Text("Shizuku privilege engine — shell, input, screencap") },
+                        headlineContent = { Text(stringResource(R.string.setting_shizuku_title)) },
                     )
                     item(
                         onClick = { navController.navigate(Screen.SettingToolApprovals) },

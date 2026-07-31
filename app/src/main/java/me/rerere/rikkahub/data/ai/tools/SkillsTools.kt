@@ -95,7 +95,7 @@ fun createSkillTools(
                 )
             },
             execute = {
-                // Return structured error envelopes instead of throwing. AICore /
+                // Return structured error envelopes instead of throwing.
                 // small models hit `use_skill` with `{}` (no name) regularly; before
                 // this fix the LLM saw a 20-frame Java stack trace and gave up. The
                 // recovery hint + available_skills list lets the model self-correct

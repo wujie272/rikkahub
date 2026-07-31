@@ -357,31 +357,10 @@ class SettingsStore(
             var providers = it.providers.ifEmpty {
                 DEFAULT_PROVIDERS.filter { p -> p.id !in deletedDefaultIds }
             }.toMutableList()
-            // For existing installs that pre-date the on-device AICore provider being
-            // promoted to first-place, hoist it to the top so the user does not have to
-            // scroll past every legacy aggregator to find it.
-            val aicoreIndex = providers.indexOfFirst { it is ProviderSetting.AICore }
-            if (aicoreIndex > 0) {
-                val aicoreRow = providers.removeAt(aicoreIndex)
-                providers.add(0, aicoreRow)
-            }
             DEFAULT_PROVIDERS.forEach { defaultProvider ->
                 if (defaultProvider.id in deletedDefaultIds) return@forEach
                 if (providers.none { it.id == defaultProvider.id }) {
-                    // On-device built-in providers (AICore, LiteRT) are pinned to the top of
-                    // the list in the order they appear in DEFAULT_PROVIDERS. Remote provider
-                    // defaults continue to append at the end so existing users see no
-                    // reordering of their configured remote providers.
-                    when (defaultProvider) {
-                        is ProviderSetting.AICore -> providers.add(0, defaultProvider.copyProvider())
-                        is ProviderSetting.LiteRtLocal -> {
-                            // Insert right after AICore, or at 0 if AICore is absent.
-                            // indexOfFirst returns -1 when absent; -1 + 1 = 0, so insert at 0.
-                            val insertAt = providers.indexOfFirst { it is ProviderSetting.AICore } + 1
-                            providers.add(insertAt, defaultProvider.copyProvider())
-                        }
-                        else -> providers.add(defaultProvider.copyProvider())
-                    }
+                    providers.add(defaultProvider.copyProvider())
                 }
             }
             providers = providers.map { provider ->
@@ -455,14 +434,6 @@ class SettingsStore(
                         )
 
                         is ProviderSetting.Claude -> provider.copy(
-                            models = provider.models.distinctBy { model -> model.id }
-                        )
-
-                        is ProviderSetting.AICore -> provider.copy(
-                            models = provider.models.distinctBy { model -> model.id }
-                        )
-
-                        is ProviderSetting.LiteRtLocal -> provider.copy(
                             models = provider.models.distinctBy { model -> model.id }
                         )
 

@@ -62,18 +62,8 @@
 -dontwarn org.ietf.jgss.**
 -dontwarn org.newsclub.net.unix.**
 
-# LiteRT-LM (com.google.ai.edge.litertlm:litertlm-android): the native side does
-# JNI GetMethodID lookups by name against the Kotlin SamplerConfig / Conversation
-# / Engine / etc. classes to read their fields. R8 strips/renames those methods
-# on release, JNI gets a null jmethodID, and the next CallIntMethodV aborts the
-# process with "JNI DETECTED ERROR IN APPLICATION: mid == null" the first time
-# the user sends a message to a local LiteRT model. Keep the whole package; the
-# Google AI Edge SDK is small and the cost is negligible vs. the crash.
--keep class com.google.ai.edge.litertlm.** { *; }
--keep class com.google.ai.edge.litert.** { *; }
-
 # requery sqlite-android (forked as com.github.rikkahub:sqlite-android, used for the
-# FTS-enabled SQLite that backs message search). Same shape as JSch + LiteRT-LM —
+# FTS-enabled SQLite that backs message search). Same shape as JSch —
 # the native SQLite shim does GetMethodID lookups by name on
 # io.requery.android.database.*. JitPack-built AARs can ship inconsistent
 # consumer-rules; explicit keeps make the next FTS query / DB open survive R8.

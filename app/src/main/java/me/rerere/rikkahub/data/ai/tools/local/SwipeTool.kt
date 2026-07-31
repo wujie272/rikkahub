@@ -13,6 +13,7 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.ai.AgentTurnTracker
 import me.rerere.rikkahub.data.ai.tools.ToolInvocationContext
 import me.rerere.rikkahub.service.ActionLogEntry
+import me.rerere.rikkahub.service.ShizukuShell
 
 private const val DEFAULT_SWIPE_MS = 300L
 
@@ -75,7 +76,10 @@ fun swipeTool(
             val gesture = GestureDescription.Builder()
                 .addStroke(GestureDescription.StrokeDescription(path, 0L, duration))
                 .build()
-            val ok = svc.dispatchGestureAsync(gesture)
+            var ok = svc.dispatchGestureAsync(gesture)
+            if (!ok && ShizukuShell.isAvailable) {
+                ok = ShizukuShell.inputSwipe(sx.toInt(), sy.toInt(), ex.toInt(), ey.toInt(), duration)
+            }
             svc.appendLog(
                 ActionLogEntry(
                     type = "swipe",

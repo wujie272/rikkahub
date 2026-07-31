@@ -45,6 +45,7 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.tools.local.LocalToolOption
 import me.rerere.rikkahub.data.ai.tools.local.PermissionHelper
 import me.rerere.rikkahub.data.ai.tools.local.TermuxIntegration
+import me.rerere.rikkahub.service.ShizukuManager
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
@@ -139,6 +140,18 @@ private fun AssistantLocalToolContent(
             calendarPermissionState.requestPermissions()
             return
         }
+
+        // Shizuku: 打开开关时如果 Shizuku 未就绪，尝试请求权限
+        if (enabled && option == LocalToolOption.Shizuku) {
+            val snap = ShizukuManager.snapshot.value
+            if (snap.state == ShizukuManager.State.NEED_PERMISSION) {
+                ShizukuManager.requestPermission()
+            } else if (snap.state == ShizukuManager.State.NOT_RUNNING) {
+                ShizukuManager.openManagerApp(context)
+            } else if (snap.state == ShizukuManager.State.NOT_INSTALLED) {
+                ShizukuManager.openInstallPage(context)
+            }
+        }
         // Use the transform path so rapid taps (especially through a permission-grant
         // round-trip to system Settings) all serialise against the actual current state
         // instead of whatever stale snapshot the recomposition was holding.
@@ -161,9 +174,6 @@ private fun AssistantLocalToolContent(
     // Hardware-availability gate for the NFC toggle: a device with no NFC chip can never
     // run the nfc tools, so the toggle is shown disabled with a "no NFC hardware" subtitle
     // rather than letting the user enable a tool that would only ever error.
-    val hasNfc = remember {
-        ctx.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_NFC)
-    }
 
     var showTermuxPostGrantDialog by remember { mutableStateOf(false) }
     var showWorkflowsHintDialog by remember { mutableStateOf(false) }
@@ -957,20 +967,7 @@ private fun AssistantLocalToolContent(
                     )
                 }
             )
-            item(
-                headlineContent = {
-                    Text(stringResource(R.string.assistant_page_local_tools_app_data_bridge_title))
-                },
-                supportingContent = {
-                    Text(stringResource(R.string.assistant_page_local_tools_app_data_bridge_desc))
-                },
-                trailingContent = {
-                    PermissionedSwitch(
-                        checked = assistant.localTools.contains(LocalToolOption.AppDataBridge),
-                        onCheckedChange = { toggleLocalTool(LocalToolOption.AppDataBridge, it) },
-                    )
-                }
-            )
+
         }
 
         // Phase 25 — Phase 3 second cut + ExternalStorage + Archive.
@@ -997,20 +994,6 @@ private fun AssistantLocalToolContent(
             )
             item(
                 headlineContent = {
-                    Text(stringResource(R.string.assistant_page_local_tools_wallpaper_title))
-                },
-                supportingContent = {
-                    Text(stringResource(R.string.assistant_page_local_tools_wallpaper_desc))
-                },
-                trailingContent = {
-                    PermissionedSwitch(
-                        checked = assistant.localTools.contains(LocalToolOption.Wallpaper),
-                        onCheckedChange = { toggleLocalTool(LocalToolOption.Wallpaper, it) },
-                    )
-                }
-            )
-            item(
-                headlineContent = {
                     Text(stringResource(R.string.assistant_page_local_tools_keystore_title))
                 },
                 supportingContent = {
@@ -1020,26 +1003,6 @@ private fun AssistantLocalToolContent(
                     PermissionedSwitch(
                         checked = assistant.localTools.contains(LocalToolOption.Keystore),
                         onCheckedChange = { toggleLocalTool(LocalToolOption.Keystore, it) },
-                    )
-                }
-            )
-            item(
-                headlineContent = {
-                    Text(stringResource(R.string.assistant_page_local_tools_nfc_title))
-                },
-                supportingContent = {
-                    Text(
-                        if (hasNfc) stringResource(R.string.assistant_page_local_tools_nfc_desc)
-                        else stringResource(R.string.assistant_page_local_tools_nfc_unavailable)
-                    )
-                },
-                trailingContent = {
-                    PermissionedSwitch(
-                        checked = hasNfc && assistant.localTools.contains(LocalToolOption.Nfc),
-                        // Guard the callback too: even if the switch is somehow toggled,
-                        // a device with no NFC chip never gets the tool enabled.
-                        onCheckedChange = { if (hasNfc) toggleLocalTool(LocalToolOption.Nfc, it) },
-                        enabled = hasNfc,
                     )
                 }
             )
@@ -1068,6 +1031,20 @@ private fun AssistantLocalToolContent(
                     PermissionedSwitch(
                         checked = assistant.localTools.contains(LocalToolOption.Archive),
                         onCheckedChange = { toggleLocalTool(LocalToolOption.Archive, it) },
+                    )
+                }
+            )
+            item(
+                headlineContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_shizuku_title))
+                },
+                supportingContent = {
+                    ShizukuStatusRowSubtitle()
+                },
+                trailingContent = {
+                    PermissionedSwitch(
+                        checked = assistant.localTools.contains(LocalToolOption.Shizuku),
+                        onCheckedChange = { toggleLocalTool(LocalToolOption.Shizuku, it) },
                     )
                 }
             )
@@ -1238,6 +1215,57 @@ private fun KeyboardStatusRowSubtitle() {
 }
 
 private const val KEYBOARD_PACKAGE = "dev.patrickgold.florisboard"
+
+
+/**
+ * Status subtitle for the Shizuku toggle. Shows a colored dot summarising whether
+ * Shizuku is installed, running, and authorized. Re-evaluated on every onResume.
+ */
+@Composable
+private fun ShizukuStatusRowSubtitle() {
+    val ctx = LocalContext.current
+
+    var resumeTick by remember { mutableStateOf(0) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val obs = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) resumeTick++
+        }
+        lifecycleOwner.lifecycle.addObserver(obs)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
+    }
+
+    val snap = remember(resumeTick) { ShizukuManager.snapshot.value }
+
+    val (dotColor, label) = when (snap.state) {
+        ShizukuManager.State.NOT_INSTALLED ->
+            androidx.compose.ui.graphics.Color(0xFFEF4444) to
+                stringResource(R.string.assistant_page_local_tools_shizuku_status_not_installed)
+        ShizukuManager.State.NOT_RUNNING ->
+            androidx.compose.ui.graphics.Color(0xFFF59E0B) to
+                stringResource(R.string.assistant_page_local_tools_shizuku_status_not_running)
+        ShizukuManager.State.NEED_PERMISSION ->
+            androidx.compose.ui.graphics.Color(0xFFF59E0B) to
+                stringResource(R.string.assistant_page_local_tools_shizuku_status_no_permission)
+        ShizukuManager.State.READY ->
+            androidx.compose.ui.graphics.Color(0xFF22C55E) to
+                stringResource(R.string.assistant_page_local_tools_shizuku_status_ok)
+    }
+
+    androidx.compose.foundation.layout.Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        androidx.compose.foundation.Canvas(modifier = Modifier.size(10.dp)) {
+            drawCircle(color = dotColor)
+        }
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
 
 @Composable
 private fun PermissionedSwitch(

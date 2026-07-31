@@ -41,7 +41,6 @@ val appModule = module {
     single { BiometricResultBuffer() }
     // Phase 25 — NFC reader-mode + SAF directory-picker Activity bridges, and the SAF
     // tree-grant store backing the ExternalStorage tools.
-    single { me.rerere.rikkahub.data.ai.tools.local.NfcResultBuffer() }
     single { me.rerere.rikkahub.data.ai.tools.local.SafPickerResultBuffer() }
     single { me.rerere.rikkahub.data.storage.StorageVolumeGrantStore(get()) }
 
@@ -54,8 +53,6 @@ val appModule = module {
 
     single { me.rerere.rikkahub.browser.BrowserPreferences(get()) }
     single { me.rerere.rikkahub.data.preferences.TermuxPreferences(get()) }
-
-    single { me.rerere.rikkahub.data.ai.tools.local.AppDataBridge(get()) }
 
 
     // Pass 3 — NoOp implementations for headless screenshot streaming. The real
@@ -187,11 +184,10 @@ val appModule = module {
             browserPreferences = get(),
             termuxPreferences = get(),
             interactiveToolStreamer = get(),
-            nfcResultBuffer = get(),
             safPickerResultBuffer = get(),
             storageVolumeGrantStore = get(),
             okHttpClient = get(),
-            appDataBridge = get(),
+
             keyboardApiClient = get(),
             ttsManager = get(),
         )
@@ -232,10 +228,6 @@ val appModule = module {
     single {
         AILoggingManager(get(), get(), get())
     }
-
-    // Phase 22A: Local-LLM on-device providers
-    single { me.rerere.locallm.LocalRuntimePreferences(get()) }
-    single { me.rerere.locallm.litert.LiteRtRuntime(get()) }
 
     single {
         ChatService(
@@ -285,9 +277,6 @@ val appModule = module {
             browserPreferences = get(),
             // Phase 25: surface the SAF granted-directories live count.
             storageVolumeGrantStore = get(),
-            // LiteRT accelerator status row in the Doctor: shows the persisted backend
-            // decision so a silent GPU -> CPU fallback is visible.
-            localRuntimePreferences = get(),
         )
     }
 }

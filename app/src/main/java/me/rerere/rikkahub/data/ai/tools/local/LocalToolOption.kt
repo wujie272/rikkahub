@@ -65,13 +65,12 @@ sealed class LocalToolOption {
     @Serializable @SerialName("web_fetch")           data object WebFetch           : LocalToolOption()
 
     @Serializable @SerialName("sms_send")             data object SmsSend             : LocalToolOption()
-    @Serializable @SerialName("wallpaper")            data object Wallpaper           : LocalToolOption()
     @Serializable @SerialName("keystore")             data object Keystore            : LocalToolOption()
-    @Serializable @SerialName("nfc")                  data object Nfc                 : LocalToolOption()
     @Serializable @SerialName("external_storage")     data object ExternalStorage     : LocalToolOption()
     @Serializable @SerialName("archive")              data object Archive             : LocalToolOption()
     @Serializable @SerialName("keyboard_control")     data object KeyboardControl     : LocalToolOption()
     @Serializable @SerialName("screen_time")          data object ScreenTime           : LocalToolOption()
-    @Serializable @SerialName("app_data_bridge")   data object AppDataBridge   : LocalToolOption()
     @Serializable @SerialName("calendar")           data object Calendar             : LocalToolOption()
+
+    @Serializable @SerialName("shizuku")           data object Shizuku             : LocalToolOption()
 }

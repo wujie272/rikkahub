@@ -18,6 +18,7 @@ import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.service.ActionLogEntry
 import me.rerere.rikkahub.service.RikkaAccessibilityService
+import me.rerere.rikkahub.service.ShizukuShell
 import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
@@ -57,6 +58,15 @@ fun takeScreenshotTool(context: Context): Tool = Tool(
             val res = svc.captureScreenshot(displayId)
             when (res) {
                 is RikkaAccessibilityService.ScreenshotOutcome.Failure -> {
+                    // Shizuku fallback：当 A11y 截图限流或失败时，尝试 screencap
+                    if (ShizukuShell.isAvailable) {
+                        val shizukuBitmap = runCatching { ShizukuShell.captureScreencap() }.getOrNull()
+                        if (shizukuBitmap != null) {
+                            return@withService handleScreenshotBitmap(
+                                svc, context, cacheDir, shizukuBitmap, displayId, ts = System.currentTimeMillis()
+                            )
+                        }
+                    }
                     svc.appendLog(
                         ActionLogEntry(
                             type = "take_screenshot",
@@ -72,47 +82,9 @@ fun takeScreenshotTool(context: Context): Tool = Tool(
                 }
 
                 is RikkaAccessibilityService.ScreenshotOutcome.Success -> {
-                    val ts = System.currentTimeMillis()
-                    val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date(ts))
-                    val displayName = "Screenshot_${timestamp}.png"
-
-                    // 1) Always write a cache copy — this is the path attached to the LLM as
-                    //    inline vision (file:// uri readable by the encoder; reliable across
-                    //    Android versions, regardless of MediaStore success).
-                    val cacheFile = File(File(context.cacheDir, SCREENSHOT_CACHE_DIR), "screen-$ts.png")
-                    try {
-                        FileOutputStream(cacheFile).use { os ->
-                            res.bitmap.compress(Bitmap.CompressFormat.PNG, 100, os)
-                        }
-                    } catch (t: Throwable) {
-                        res.bitmap.recycle()
-                        return@withService buildJsonObject {
-                            put("error", "write_failed")
-                            put("reason", t.message ?: t::class.simpleName ?: "unknown")
-                        }
-                    }
-
-                    // 2) Save a user-visible copy to Pictures/RikkaHub/Screenshots — visible in
-                    //    Gallery, the Files app, and the list_files / find_files tools.
-                    val galleryPath: String? = saveToGallery(context, res.bitmap, displayName)
-                    res.bitmap.recycle()
-
-                    svc.appendLog(
-                        ActionLogEntry(
-                            type = "take_screenshot",
-                            paramsSummary = "ok ${cacheFile.length() / 1024}KB display=$displayId" +
-                                if (galleryPath != null) " gallery=$galleryPath" else " gallery=fail",
-                            success = true,
-                            timestampMs = ts,
-                        )
+                    return@withService handleScreenshotBitmap(
+                        svc, context, cacheDir, res.bitmap, displayId, ts = System.currentTimeMillis()
                     )
-
-                    buildJsonObject {
-                        put("success", true)
-                        put("file_path", cacheFile.absolutePath)
-                        put("gallery_path", galleryPath ?: "(gallery_save_failed)")
-                        put("saved_to", "Pictures/$PICTURES_SUBDIR")
-                    }
                 }
             }
         }
@@ -138,6 +110,55 @@ fun takeScreenshotTool(context: Context): Tool = Tool(
  *
  * Returns the absolute on-device path the user can navigate to, or null on any failure.
  */
+/**
+ * 处理截图 Bitmap：写入缓存 + 保存到相册 + 记录日志。
+ * A11y 截图和 Shizuku screencap 都走这个统一路径。
+ */
+private fun handleScreenshotBitmap(
+    svc: RikkaAccessibilityService,
+    context: Context,
+    cacheDir: File,
+    bitmap: Bitmap,
+    displayId: Int,
+    ts: Long = System.currentTimeMillis(),
+): kotlinx.serialization.json.JsonObject {
+    val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date(ts))
+    val displayName = "Screenshot_${timestamp}.png"
+
+    val cacheFile = File(File(context.cacheDir, SCREENSHOT_CACHE_DIR), "screen-$ts.png")
+    try {
+        FileOutputStream(cacheFile).use { os ->
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, os)
+        }
+    } catch (t: Throwable) {
+        bitmap.recycle()
+        return buildJsonObject {
+            put("error", "write_failed")
+            put("reason", t.message ?: t::class.simpleName ?: "unknown")
+        }
+    }
+
+    val galleryPath: String? = saveToGallery(context, bitmap, displayName)
+    bitmap.recycle()
+
+    svc.appendLog(
+        ActionLogEntry(
+            type = "take_screenshot",
+            paramsSummary = "ok ${cacheFile.length() / 1024}KB display=$displayId" +
+                if (galleryPath != null) " gallery=$galleryPath" else " gallery=fail",
+            success = true,
+            timestampMs = ts,
+        )
+    )
+
+    return buildJsonObject {
+        put("success", true)
+        put("file_path", cacheFile.absolutePath)
+        put("gallery_path", galleryPath ?: "(gallery_save_failed)")
+        put("saved_to", "Pictures/$PICTURES_SUBDIR")
+    }
+}
+
 private fun saveToGallery(context: Context, bitmap: Bitmap, displayName: String): String? {
     return runCatching {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {

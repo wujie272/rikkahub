@@ -85,7 +85,7 @@ fun UIMessagePart.Image.encodeBase64(withPrefix: Boolean = true): Result<Encoded
 
 /**
  * Decode this image part into a [Bitmap] suitable for handing to a local on-device runtime
- * (e.g. LiteRT-LM's [com.google.ai.edge.litertlm.Content.ImageBytes]). Supports `file://`,
+ * (e.g. on-device ML engine's image content API). Supports `file://`,
  * `content://`, `data:`, and `http(s)://` (the http path reads via Android's content
  * resolver-shaped fallback; pass an OkHttp client externally if you need a richer http
  * fetcher). Returns null when the bitmap cannot be decoded — callers should treat that as
@@ -148,7 +148,7 @@ fun UIMessagePart.Image.toBitmap(
 /**
  * Read this audio part's raw container bytes (mp3 / wav / flac / m4a) into a [ByteArray]
  * the on-device runtime can hand off to its audio executor. We do NOT decode to PCM here
- * — LiteRT-LM's [com.google.ai.edge.litertlm.Content.AudioBytes] accepts the encoded
+ * — the on-device audio content API accepts the encoded
  * container; the runtime decodes internally. Returns null when the URL can't be opened.
  */
 fun UIMessagePart.Audio.audioBytes(context: Context): ByteArray? {

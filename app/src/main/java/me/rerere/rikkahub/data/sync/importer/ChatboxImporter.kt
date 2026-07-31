@@ -570,8 +570,7 @@ object ChatboxImporter {
         is ProviderSetting.OpenAI -> "openai"
         is ProviderSetting.Google -> "gemini"
         is ProviderSetting.Claude -> "claude"
-        is ProviderSetting.AICore -> "aicore"
-        is ProviderSetting.LiteRtLocal -> "litert"
+
         is ProviderSetting.Codex -> "codex"
     }
 

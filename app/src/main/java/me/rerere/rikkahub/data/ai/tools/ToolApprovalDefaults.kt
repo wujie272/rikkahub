@@ -29,6 +29,7 @@ object ToolApprovalDefaults {
     val ALWAYS_ASK: Set<String> = setOf(
         // Shell / arbitrary code execution
         "termux_run_command",
+        "shizuku_run_command",
         "termux_session_start",  // opens a persistent interactive shell; the meaningful consent moment
         "transcribe_audio_file",  // shells out to whisper-cli via Termux; reads arbitrary audio files
         "eval_javascript",
@@ -207,14 +208,11 @@ object ToolApprovalDefaults {
         // read-only tools (keystore_verify, keystore_list_keys, list_storage_volumes,
         // list_granted_directories, list_zip_contents) are deliberately NOT in this set.
         "send_sms",                 // sends a real SMS — costs money / leaves the device
-        "set_wallpaper",            // changes a visible device setting
         "keystore_generate_key",    // creates a hardware key (NO_ALWAYS_ALLOW below)
         "keystore_sign",            // signs arbitrary data with the user's key
         "keystore_encrypt",         // encrypts with the user's key
         "keystore_decrypt",         // decrypts ciphertext (NO_ALWAYS_ALLOW below)
         "keystore_delete_key",      // destroys a key
-        "nfc_read_tag",             // opens a foreground reader session
-        "nfc_write_tag",            // writes NDEF to a physical tag (NO_ALWAYS_ALLOW below)
         "grant_directory_access",   // persistent read+write to a whole tree (NO_ALWAYS_ALLOW below)
         "zip_files",                // writes an archive to disk / a granted tree
         "unzip_file",               // writes extracted files to disk / a granted tree
@@ -263,12 +261,10 @@ object ToolApprovalDefaults {
         // Phase 25 — privilege-escalation surfaces that must confirm every single call:
         //  - keystore_generate_key: mints a hardware key that later sign/encrypt calls trust
         //  - keystore_decrypt: turns ciphertext back into plaintext the model then reads
-        //  - nfc_write_tag: permanently rewrites a physical tag's contents
         //  - grant_directory_access: persistent read+write to an entire storage tree,
         //    possibly cloud / Downloads / Pictures
         "keystore_generate_key",
         "keystore_decrypt",
-        "nfc_write_tag",
         "grant_directory_access",
     )
 

@@ -286,17 +286,6 @@ val dataSourceModule = module {
         val json: Json = get()
         ProviderManager(client = get(), context = get()).also { pm ->
             pm.registerProvider(
-                "local_litert",
-                me.rerere.locallm.litert.LiteRtProvider(
-                    context = get(),
-                    runtime = get(),
-                    prefs = get(),
-                    settingsUpdater = { transform ->
-                        settingsStore.update { old -> old.copy(providers = transform(old.providers)) }
-                    },
-                ),
-            )
-            pm.registerProvider(
                 "codex",
                 CodexProvider(
                     context = get(),
