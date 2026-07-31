@@ -47,6 +47,7 @@ data class Assistant(
     val modeInjectionIds: Set<Uuid> = emptySet(),      // 关联的模式注入 ID
     val lorebookIds: Set<Uuid> = emptySet(),            // 关联的 Lorebook ID
     val enabledSkills: Set<String> = emptySet(),        // 启用的 skill 名称列表
+    val enabledKnowledgeBaseIds: Set<kotlin.uuid.Uuid> = emptySet(), // 启用的知识库 ID 列表
     val enableTimeReminder: Boolean = false,            // 时间间隔提醒注入
     // Phase 11 — Sub-agents settings. Defaults to "inherit from main" (null model id +
     // empty system prompt → built-in focused-sub-agent prompt). Each assistant has its

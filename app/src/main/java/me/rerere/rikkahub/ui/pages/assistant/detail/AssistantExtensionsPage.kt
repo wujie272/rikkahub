@@ -3,7 +3,9 @@ package me.rerere.rikkahub.ui.pages.assistant.detail
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+
 import androidx.compose.foundation.layout.padding
+
 import androidx.compose.material3.TextButton
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -25,6 +27,7 @@ import me.rerere.rikkahub.R
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.ui.components.ai.ExtensionEmptyState
+import me.rerere.rikkahub.ui.components.ai.KnowledgeBaseContent
 import me.rerere.rikkahub.ui.components.ai.LorebooksContent
 import me.rerere.rikkahub.ui.components.ai.ModeInjectionsContent
 import me.rerere.rikkahub.ui.components.ai.QuickMessagesContent
@@ -44,7 +47,7 @@ fun AssistantExtensionsPage(id: String) {
     val navController = LocalNavController.current
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val scope = rememberCoroutineScope()
-    val pagerState = rememberPagerState { 4 }
+    val pagerState = rememberPagerState { 5 }
 
     Scaffold(
         topBar = {
@@ -87,6 +90,11 @@ fun AssistantExtensionsPage(id: String) {
                     onClick = { scope.launch { pagerState.animateScrollToPage(3) } },
                     text = { Text(stringResource(R.string.assistant_extensions_page_tab_skills)) }
                 )
+                Tab(
+                    selected = pagerState.currentPage == 4,
+                    onClick = { scope.launch { pagerState.animateScrollToPage(4) } },
+                    text = { Text(stringResource(R.string.assistant_extensions_page_tab_knowledge)) }
+                )
             }
 
             HorizontalPager(
@@ -96,6 +104,36 @@ fun AssistantExtensionsPage(id: String) {
                     .weight(1f),
             ) { page ->
                 when (page) {
+                    4 -> {
+                        val knowledgeBases by vm.knowledgeBases.collectAsStateWithLifecycle()
+                        if (knowledgeBases.isEmpty()) {
+                            ExtensionEmptyState(
+                                message = stringResource(R.string.extension_selector_knowledge_empty),
+                                buttonText = stringResource(R.string.assistant_extensions_page_goto_extensions),
+                                onAction = { navController.navigate(Screen.KnowledgeBase) },
+                            )
+                        } else {
+                            Column {
+                                KnowledgeBaseContent(
+                                    modifier = Modifier.weight(1f),
+                                    knowledgeBases = knowledgeBases,
+                                    enabledIds = assistant.enabledKnowledgeBaseIds.map { it.toString() }.toSet(),
+                                    onToggle = { id, checked ->
+                                        val kbId = kotlin.uuid.Uuid.parse(id)
+                                        val newIds = if (checked) assistant.enabledKnowledgeBaseIds + kbId
+                                        else assistant.enabledKnowledgeBaseIds - kbId
+                                        vm.update(assistant.copy(enabledKnowledgeBaseIds = newIds))
+                                    },
+                                )
+                                TextButton(
+                                    onClick = { navController.navigate(Screen.KnowledgeBase) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Text(stringResource(R.string.assistant_extensions_page_goto_extensions))
+                                }
+                            }
+                        }
+                    }
                     0 -> {
                         if (settings.quickMessages.isEmpty()) {
                             ExtensionEmptyState(

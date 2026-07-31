@@ -27,6 +27,7 @@
   <string name="assistant_extensions_page_tab_mode_injections">模式注入</string>
   <string name="assistant_extensions_page_tab_quick_messages">快捷消息</string>
   <string name="assistant_extensions_page_tab_skills">Skills</string>
+  <string name="assistant_extensions_page_tab_knowledge">知识库</string>
   <string name="assistant_extensions_page_title">扩展管理</string>
   <string name="assistant_importer_import_failed">导入失败</string>
   <string name="assistant_importer_import_tavern_json">导入酒馆角色卡 (JSON)</string>
@@ -241,6 +242,7 @@
   <string name="chat_message_tool_call_title">工具调用</string>
   <string name="chat_message_tool_clipboard_read">读取剪贴板</string>
   <string name="chat_message_tool_clipboard_write">写入剪贴板</string>
+  <string name="chat_message_tool_knowledge_search">知识库搜索: %1$s</string>
   <string name="chat_message_tool_create_memory">创建了记忆</string>
   <string name="chat_message_tool_delete_memory">删除了记忆</string>
   <string name="chat_message_tool_denied">已拒绝</string>
@@ -1269,6 +1271,13 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="assistant_page_local_tools_termux_verify_props_missing">Termux 未响应。打开 Termux 并运行：mkdir -p ~/.termux &amp;&amp; echo \'allow-external-apps=true\' &gt;&gt; ~/.termux/termux.properties — 然后强制停止 Termux 并重新打开。</string>
   <string name="assistant_page_local_tools_termux_verify_unexpected">Termux 已回复，但输出异常：%1$s</string>
   <string name="assistant_page_local_tools_termux_verifying">正在验证集成…</string>
+  <!-- Shizuku 集成 -->
+  <string name="assistant_page_local_tools_shizuku_title">Shizuku 集成</string>
+  <string name="assistant_page_local_tools_shizuku_desc">通过 Shizuku 特权执行 shell 命令。比 Termux 更快，无需打开窗口。需要安装并授权 Shizuku 或 AXManager。</string>
+  <string name="assistant_page_local_tools_shizuku_status_not_installed">Shizuku 未安装</string>
+  <string name="assistant_page_local_tools_shizuku_status_not_running">Shizuku 服务未运行</string>
+  <string name="assistant_page_local_tools_shizuku_status_no_permission">Shizuku 未授权</string>
+  <string name="assistant_page_local_tools_shizuku_status_ok">Shizuku 已就绪</string>
   <string name="assistant_page_local_tools_toast_desc">在当前屏幕内容上方显示一个简短的 toast 弹窗。</string>
   <string name="assistant_page_local_tools_toast_title">Toast 提示</string>
   <string name="assistant_page_local_tools_torch_desc">打开或关闭相机闪光灯。</string>
@@ -1288,16 +1297,6 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="browser_address_bar_placeholder">搜索或输入网址</string>
   <string name="browser_address_bar_refresh">刷新页面</string>
   <string name="browser_address_bar_stop_ai">停止 AI</string>
-  <string name="browser_ai_stripe_active">AI：%1$s</string>
-  <string name="browser_ai_stripe_collapse">隐藏</string>
-  <string name="browser_ai_stripe_expand">显示最近</string>
-  <string name="browser_ai_stripe_idle">AI 就绪</string>
-  <string name="browser_mini_chat_close">关闭 AI 聊天</string>
-  <string name="browser_mini_chat_generating">思考中…</string>
-  <string name="browser_mini_chat_open">打开 AI 聊天</string>
-  <string name="browser_mini_chat_placeholder">告诉 AI 要做什么…</string>
-  <string name="browser_mini_chat_send">发送</string>
-  <string name="browser_mini_chat_title">询问 AI</string>
   <string name="chat_drawer_statistics">统计数据</string>
   <string name="chat_message_tool_schedule_job_warning">⏰ 定时任务自主运行，无需逐个工具授权。批准此项后，任务在每次触发时都能以完整工具访问权限运行。被 HARDLINE 拦截的命令仍然无法运行。</string>
   <string name="chat_select_model_first">请先选择模型</string>
@@ -1334,40 +1333,16 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_browser_section_defaults">默认值 &amp; 限制</string>
   <string name="setting_browser_single_task_timeout">单任务超时</string>
   <string name="setting_browser_title">浏览器</string>
-  <string name="setting_browser_tool_back_desc">在浏览器历史中后退。</string>
-  <string name="setting_browser_tool_back_title">后退</string>
   <string name="setting_browser_tool_click_desc">点击一个元素。</string>
-  <string name="setting_browser_tool_click_title">点击</string>
   <string name="setting_browser_tool_current_url_desc">读取页面的网址和标题。</string>
-  <string name="setting_browser_tool_current_url_title">当前网址</string>
-  <string name="setting_browser_tool_done_desc">让 AI 表示它已完成一项任务。</string>
-  <string name="setting_browser_tool_done_title">浏览器完成</string>
   <string name="setting_browser_tool_eval_js_desc">在页面中执行任意 JS（经 HARDLINE 检查）。</string>
-  <string name="setting_browser_tool_eval_js_title">运行 JavaScript</string>
-  <string name="setting_browser_tool_forward_desc">在浏览器历史中前进。</string>
-  <string name="setting_browser_tool_forward_title">前进</string>
   <string name="setting_browser_tool_get_dom_desc">从页面提取简化的 HTML。</string>
-  <string name="setting_browser_tool_get_dom_title">获取 DOM</string>
-  <string name="setting_browser_tool_get_links_desc">列出所有链接的网址和标签。</string>
-  <string name="setting_browser_tool_get_links_title">获取链接</string>
   <string name="setting_browser_tool_get_text_desc">从页面提取可读文本。</string>
-  <string name="setting_browser_tool_get_text_title">获取文本</string>
   <string name="setting_browser_tool_open_desc">导航到一个网址。</string>
-  <string name="setting_browser_tool_open_title">打开网址</string>
-  <string name="setting_browser_tool_press_key_desc">合成一个键盘事件。</string>
-  <string name="setting_browser_tool_press_key_title">按键</string>
   <string name="setting_browser_tool_screenshot_desc">捕获可见的视口。</string>
-  <string name="setting_browser_tool_screenshot_title">截图</string>
   <string name="setting_browser_tool_scroll_desc">滚动页面。</string>
-  <string name="setting_browser_tool_scroll_title">滚动</string>
-  <string name="setting_browser_tool_select_desc">在 &lt;select&gt; 中选择一个值。</string>
-  <string name="setting_browser_tool_select_title">选择</string>
-  <string name="setting_browser_tool_submit_desc">提交表单。</string>
-  <string name="setting_browser_tool_submit_title">提交</string>
   <string name="setting_browser_tool_type_desc">在输入框中输入。</string>
-  <string name="setting_browser_tool_type_title">输入</string>
   <string name="setting_browser_tool_wait_for_desc">暂停直到某个 CSS 选择器出现。</string>
-  <string name="setting_browser_tool_wait_for_title">等待元素</string>
   <string name="setting_browser_tools_enabled_title">已启用的工具</string>
   <string name="setting_page_accessibility">无障碍</string>
   <string name="setting_page_accessibility_action_ago_hours">%1$d 小时前</string>
@@ -1559,6 +1534,33 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_page_workflow_detail_stat_cooldown_none">冷却时间：无</string>
   <string name="setting_page_workflow_detail_stat_daily_cap">每日上限：%1$d</string>
   <string name="setting_page_workflow_detail_stat_daily_cap_unlimited">每日上限：无限制</string>
+  <string name="setting_page_workflow_detail_edit_form">编辑表单</string>
+  <string name="setting_page_workflow_detail_edit_title">编辑工作流</string>
+  <string name="setting_page_workflow_detail_edit_save">保存</string>
+  <string name="setting_page_workflow_detail_edit_cancel">取消</string>
+  <string name="setting_page_workflow_detail_edit_saved">工作流已保存</string>
+  <string name="setting_page_workflow_detail_edit_trigger_type">触发器类型</string>
+  <string name="setting_page_workflow_detail_edit_trigger_params">触发器参数</string>
+  <string name="setting_page_workflow_detail_edit_condition_type">条件类型</string>
+  <string name="setting_page_workflow_detail_edit_add_condition">添加条件</string>
+  <string name="setting_page_workflow_detail_edit_remove_condition">移除</string>
+  <string name="setting_page_workflow_detail_edit_action_tool">工具</string>
+  <string name="setting_page_workflow_detail_edit_action_timeout">超时（秒）</string>
+  <string name="setting_page_workflow_detail_edit_action_args">参数（JSON）</string>
+  <string name="setting_page_workflow_detail_edit_add_action">添加操作</string>
+  <string name="setting_page_workflow_detail_edit_remove_action">移除</string>
+  <string name="setting_page_workflow_detail_edit_cooldown">冷却时间（秒）</string>
+  <string name="setting_page_workflow_detail_edit_max_runs">每日上限</string>
+  <string name="setting_page_workflow_detail_edit_seconds">秒</string>
+  <string name="setting_page_workflow_detail_edit_unspecified">（未指定）</string>
+  <string name="setting_page_workflow_detail_edit_invert">反向</string>
+  <string name="setting_page_workflow_detail_edit_name">名称</string>
+  <string name="setting_page_workflow_detail_edit_invalid_form">表单数据无效 — 请检查输入</string>
+  <string name="setting_page_workflow_detail_edit_saving">保存中…</string>
+  <string name="setting_page_workflow_detail_edit_cancel_confirm_title">放弃更改？</string>
+  <string name="setting_page_workflow_detail_edit_cancel_confirm_body">您有未保存的更改，确定要放弃吗？</string>
+  <string name="setting_page_workflow_detail_edit_cancel_confirm_yes">放弃</string>
+  <string name="setting_page_workflow_detail_edit_cancel_confirm_no">继续编辑</string>
   <string name="setting_page_workflow_detail_stat_last_run">上次运行：%1$s</string>
   <string name="setting_page_workflow_detail_stat_last_run_never">上次运行：从未</string>
   <string name="setting_page_workflow_detail_stat_runs_today">今天：%1$d 次运行</string>
@@ -1568,6 +1570,8 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_page_workflows_how_it_works">工作流的运作方式</string>
   <string name="setting_page_workflows_how_it_works_dialog_body">工作流由一个触发器加一系列操作组成。触发器是启动它的条件（WiFi 连接、定时触发、你到达某地、通知到达）。操作是按顺序运行的工具调用 — 与你在聊天中能运行的工具相同。\n\n条件用于筛选被触发的工作流是否真正执行（“仅在日落后”、“仅在充电时”）。所有条件都必须通过。\n\n工作流以无头模式运行 — 你的助手在创建工作流时已预先授权这些工具，因此每次触发都不会提示你。无论如何，HARDLINE 过滤器仍会拦截危险的 shell 命令和对系统路径的写入。你可以在工作流的历史列表中看到结果。</string>
   <string name="setting_page_workflows_how_it_works_dialog_dismiss">知道了</string>
+  <string name="setting_page_workflows_new_workflow">新建工作流</string>
+  <string name="setting_page_workflows_new_workflow_name">新工作流</string>
   <string name="setting_page_workflows_how_it_works_dialog_title">工作流的运作方式</string>
   <string name="setting_page_workflows_subtitle_never_run">从未运行</string>
   <string name="setting_page_workflows_subtitle_ran_failed">失败于 %1$s</string>
@@ -1789,6 +1793,34 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_termux_verify_timeout_desc">allow-external-apps echo 连通测试的超时时间。范围 3 秒至 30 秒。</string>
   <string name="setting_termux_verify_unexpected_output">连通测试输出异常</string>
   <string name="setting_termux_working_dir">默认工作目录</string>
+  <!-- Shizuku 设置页 -->
+  <string name="setting_shizuku_title">Shizuku</string>
+  <string name="setting_shizuku_state_not_installed">Shizuku 未安装</string>
+  <string name="setting_shizuku_state_not_installed_desc">未安装 Shizuku 或 AXManager。请安装兼容的管理器以启用特权 shell 访问。</string>
+  <string name="setting_shizuku_state_not_running">服务未运行</string>
+  <string name="setting_shizuku_state_not_running_desc">Shizuku 已安装但服务未运行。打开管理器应用并点击"启动"。</string>
+  <string name="setting_shizuku_state_need_permission">需要授权</string>
+  <string name="setting_shizuku_state_need_permission_desc">Shizuku 正在运行但 RikkaHub 未授权。点击下方按钮请求权限。</string>
+  <string name="setting_shizuku_state_ready">已就绪</string>
+  <string name="setting_shizuku_state_ready_desc">Shizuku 完全就绪，所有特权工具可用。</string>
+  <string name="setting_shizuku_action_header">操作</string>
+  <string name="setting_shizuku_install_shizuku_title">安装 Shizuku</string>
+  <string name="setting_shizuku_install_shizuku_desc">官方 Shizuku Manager — 使用最广泛的特权服务。</string>
+  <string name="setting_shizuku_install_axmanager_title">安装 AXManager</string>
+  <string name="setting_shizuku_install_axmanager_desc">替代管理器（Axeron）— 兼容 Shizuku 协议。</string>
+  <string name="setting_shizuku_open_manager">打开管理器</string>
+  <string name="setting_shizuku_open_manager_desc">启动已安装的 Shizuku 兼容管理器以启动服务或管理权限。</string>
+  <string name="setting_shizuku_recheck">重新检查状态</string>
+  <string name="setting_shizuku_recheck_desc">刷新 Shizuku 服务状态。</string>
+  <string name="setting_shizuku_grant">授权 RikkaHub</string>
+  <string name="setting_shizuku_grant_desc">向 Shizuku 服务发送权限请求。在系统弹窗中确认授权。</string>
+  <string name="setting_shizuku_capabilities_header">能力列表</string>
+  <string name="setting_shizuku_cap_shell">Shell 命令</string>
+  <string name="setting_shizuku_cap_shell_desc">以系统级权限执行任意 shell 命令（pm, am, settings, dumpsys 等）。</string>
+  <string name="setting_shizuku_cap_input">输入模拟</string>
+  <string name="setting_shizuku_cap_input_desc">模拟触摸、滑动和按键事件。在 AccessibilityService 不可用时回退到 Shizuku。</string>
+  <string name="setting_shizuku_cap_screenshot">截图</string>
+  <string name="setting_shizuku_cap_screenshot_desc">通过 screencap 截取屏幕。无限速限制 — 即使 AccessibilityService 截图 API 被限流也可正常工作。</string>
 
   <!-- Browser settings (4) -->
   <string name="setting_browser_per_tool_timeout_desc">每次浏览器工具调用的时间硬上限。范围 10 秒至 10 分钟。</string>
@@ -1950,4 +1982,9 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="save">保存</string>
   <string name="undo">撤销</string>
 
+  <!-- Knowledge Base -->
+  <string name="kb_relevance_high">高度相关</string>
+  <string name="kb_relevance_medium">相关</string>
+  <string name="kb_relevance_low">部分相关</string>
+  <string name="kb_relevance_minimal">低相关度</string>
 </resources>

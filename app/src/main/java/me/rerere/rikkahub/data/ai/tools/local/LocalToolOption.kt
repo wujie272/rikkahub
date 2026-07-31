@@ -73,4 +73,7 @@ sealed class LocalToolOption {
     @Serializable @SerialName("calendar")           data object Calendar             : LocalToolOption()
 
     @Serializable @SerialName("shizuku")           data object Shizuku             : LocalToolOption()
+
+    @Serializable @SerialName("app_data_bridge")   data object AppDataBridge      : LocalToolOption()
+
 }

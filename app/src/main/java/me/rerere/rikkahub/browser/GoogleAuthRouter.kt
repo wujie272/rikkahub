@@ -7,10 +7,11 @@ import androidx.browser.customtabs.CustomTabsIntent
 import java.net.URI
 
 /**
- * Google OAuth 路由 — 对标 OpenMinis GoogleAuthRouter
+ * Google OAuth 路由
  *
- * Google 永久禁止 WebView 登录（403 disallowed_useragent），
- * 将 accounts.google.com 等域名路由到 Chrome Custom Tab。
+ * Google 对默认 WebView UA（含 Version/4.0 标记）返回 403 disallowed_useragent。
+ * 现在 WebView 已使用真实 Chrome UA（UserAgentProfile.MOBILE），
+ * Google 登录应直接通过。此路由作为兜底，防止某些情况下仍被拦截。
  * Custom Tab 运行在用户真实的 Chrome 进程里，共享 Cookie。
  */
 object GoogleAuthRouter {

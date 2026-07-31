@@ -26,11 +26,10 @@ import me.rerere.rikkahub.browser.awaitReadyState
 import me.rerere.rikkahub.browser.evaluateJavascriptAsync
 import java.net.URI
 
-// ---- 新增工具（对标 OpenMinis BrowserAction，补齐 10 个缺失工具） ----
+// ---- 新增工具 ----
 
 /**
  * 获取页面骨架（DOM 结构摘要）。
- * 对标 OpenMinis BrowserUseManager.getBackbone
  */
 fun getBackboneTool(): Tool = Tool(
     name = BrowserToolDefaults.GET_BACKBONE,
@@ -58,7 +57,6 @@ fun getBackboneTool(): Tool = Tool(
 
 /**
  * 通过页面上下文发起 HTTP 请求（可绕过 CORS）。
- * 对标 OpenMinis BrowserUseManager.fetch
  * 使用同步 XMLHttpRequest 避免 Promise 兼容问题。
  */
 fun fetchTool(): Tool = Tool(
@@ -96,7 +94,6 @@ fun fetchTool(): Tool = Tool(
 
 /**
  * 获取当前页面的 Cookies。
- * 对标 OpenMinis BrowserUseManager.getCookies
  */
 fun getCookiesTool(): Tool = Tool(
     name = BrowserToolDefaults.GET_COOKIES,
@@ -157,7 +154,6 @@ fun getCookiesTool(): Tool = Tool(
 
 /**
  * 设置 Cookies（写入当前页面的 Cookie 存储）。
- * 对标 OpenMinis BrowserUseManager.setCookies
  */
 fun setCookiesTool(): Tool = Tool(
     name = BrowserToolDefaults.SET_COOKIES,
@@ -225,7 +221,6 @@ fun setCookiesTool(): Tool = Tool(
 
 /**
  * 列出所有标签页。
- * 对标 OpenMinis BrowserTabPool.listTabs
  */
 fun listTabsTool(): Tool = Tool(
     name = BrowserToolDefaults.LIST_TABS,
@@ -254,7 +249,6 @@ fun listTabsTool(): Tool = Tool(
 
 /**
  * 创建新标签页。
- * 对标 OpenMinis BrowserTabPool.createTab
  */
 fun newTabTool(context: Context): Tool = Tool(
     name = BrowserToolDefaults.NEW_TAB,
@@ -296,7 +290,6 @@ fun newTabTool(context: Context): Tool = Tool(
 
 /**
  * 关闭标签页。
- * 对标 OpenMinis BrowserTabPool.closeTab
  */
 fun closeTabTool(): Tool = Tool(
     name = BrowserToolDefaults.CLOSE_TAB,
@@ -336,7 +329,6 @@ fun closeTabTool(): Tool = Tool(
 
 /**
  * 设置 User Agent。
- * 对标 OpenMinis BrowserUseManager.setUserAgent
  */
 fun setUserAgentTool(): Tool = Tool(
     name = BrowserToolDefaults.SET_USER_AGENT,
@@ -391,7 +383,6 @@ fun setUserAgentTool(): Tool = Tool(
 
 /**
  * 设置 Viewport 尺寸。
- * 对标 OpenMinis BrowserUseManager.applyViewport / BrowserTabPool.setGlobalViewport
  */
 fun setViewportTool(): Tool = Tool(
     name = BrowserToolDefaults.SET_VIEWPORT,
@@ -429,7 +420,6 @@ fun setViewportTool(): Tool = Tool(
 
 /**
  * 滚动页面并收集元素文本。
- * 对标 OpenMinis BrowserUseManager.scrollAndCollect
  */
 fun scrollAndCollectTool(): Tool = Tool(
     name = BrowserToolDefaults.SCROLL_AND_COLLECT,
@@ -483,7 +473,7 @@ fun scrollAndCollectTool(): Tool = Tool(
                         } catch (_: Exception) { }
                         // Scroll one viewport down
                         webView.evaluateJavascriptAsync("window.scrollBy(0, window.innerHeight);", 2_000L)
-                        delay(400)
+                        delay(200)
                     }
                     val filtered = if (keywords.isNullOrEmpty()) collected.toList()
                         else collected.filter { text -> keywords.any { kw -> text.contains(kw, ignoreCase = true) } }

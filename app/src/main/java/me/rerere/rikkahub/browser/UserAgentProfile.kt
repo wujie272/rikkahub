@@ -1,7 +1,7 @@
 package me.rerere.rikkahub.browser
 
 /**
- * User Agent 配置枚举 —— 对标 OpenMinis UserAgentProfile。
+ * User Agent 配置枚举
  *
  * 管理 UA 字符串、默认 Viewport 尺寸。
  */
@@ -21,12 +21,12 @@ enum class UserAgentProfile(val value: String, val displayName: String) {
 
     val userAgentString: String?
         get() = when (this) {
-            MOBILE -> "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.230 Mobile Safari/537.36"
-            DESKTOP -> "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            MOBILE -> "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Mobile Safari/537.36"
+            DESKTOP -> "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36"
             CUSTOM -> null
         }
 
-    /** 默认 Viewport 尺寸（对标 OpenMinis UserAgentProfile.viewportSize） */
+    /** 默认 Viewport 尺寸 */
     val viewportSize: Pair<Int, Int>
         get() = when (this) {
             DESKTOP -> 1280 to 800
@@ -47,7 +47,7 @@ enum class UserAgentProfile(val value: String, val displayName: String) {
             else -> null
         }
 
-        /** 显示 UA 字符串（对标 OpenMinis displayUA()） */
+        /** 显示 UA 字符串 */
         fun displayUA(profile: UserAgentProfile, customUA: String, notSetPlaceholder: String): String =
             when (profile) {
                 CUSTOM -> customUA.ifBlank { notSetPlaceholder }

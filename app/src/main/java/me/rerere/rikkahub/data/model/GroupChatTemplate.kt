@@ -25,6 +25,8 @@ data class GroupChatTemplate(
     val integrationModelId: Uuid? = null,
     /** Minutes to wait before consolidating memories. */
     val consolidationDelayMinutes: Int = 30,
+    /** 群聊上下文保留的最大轮数（每轮 = 所有座位各发言一次）。超过此轮数的历史消息会被裁剪。 */
+    val contextRounds: Int = 10,
     /** The seats in this group chat. */
     val seats: List<GroupChatSeat> = emptyList(),
 )

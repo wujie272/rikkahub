@@ -33,6 +33,9 @@ internal object BrowserDiffHelper {
     /** Per-side cap. Total envelope payload is ≤ 2 * MAX_CHARS_PER_SIDE + JSON keys. */
     const val MAX_CHARS_PER_SIDE = 2000
 
+    /** 大文本阈值：超过此长度时，只对比首尾部分，减少字符串分割开销 */
+    private const val LARGE_TEXT_THRESHOLD = 2000
+
     /**
      * Compute the diff envelope for an action that transitioned the page from
      * [before] to [after]. Returns a JSON object suitable for embedding under a
@@ -43,16 +46,26 @@ internal object BrowserDiffHelper {
      *   landed but didn't change anything visible (e.g. a noop button).
      * - Distinct inputs → `{ added, removed, added_chars, removed_chars, truncated }`.
      *   `truncated` is true iff EITHER side hit the per-side cap.
+     *
+     * 性能优化：文本超过 [LARGE_TEXT_THRESHOLD] 时，只对比首尾部分，
+     * 避免对数千字符的完整页面做全量 split 和 set 操作。
      */
     fun computeDiff(before: String, after: String): JsonObject {
         if (before == after) {
             return buildJsonObject { put("unchanged", true) }
         }
 
+        val (diffBefore, diffAfter) = if (before.length > LARGE_TEXT_THRESHOLD || after.length > LARGE_TEXT_THRESHOLD) {
+            val half = LARGE_TEXT_THRESHOLD / 2
+            val b = before.take(half) + "\n...\n" + before.takeLast(half)
+            val a = after.take(half) + "\n...\n" + after.takeLast(half)
+            b to a
+        } else before to after
+
         // LinkedHashSet to preserve insertion order — both for determinism in tests
         // and so the LLM reads the diff in document order rather than hash order.
-        val beforeLines = LinkedHashSet(before.split('\n'))
-        val afterLines = LinkedHashSet(after.split('\n'))
+        val beforeLines = LinkedHashSet(diffBefore.split('\n'))
+        val afterLines = LinkedHashSet(diffAfter.split('\n'))
 
         val addedLines = afterLines.filterNot { it in beforeLines }
         val removedLines = beforeLines.filterNot { it in afterLines }

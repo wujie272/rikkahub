@@ -154,8 +154,8 @@ fun SkillsContent(
 @Composable
 fun KnowledgeBaseContent(
     knowledgeBases: List<KnowledgeBaseEntity>,
-    currentKbId: String?,
-    onSelect: (String?) -> Unit,
+    enabledIds: Set<String>,
+    onToggle: (String, Boolean) -> Unit,
     modifier: Modifier = Modifier,
     onManage: (() -> Unit)? = null,
 ) {
@@ -177,10 +177,8 @@ fun KnowledgeBaseContent(
                 } else null,
                 trailingContent = {
                     Switch(
-                        checked = kb.id == currentKbId,
-                        onCheckedChange = { checked ->
-                            if (checked) onSelect(kb.id) else onSelect(null)
-                        }
+                        checked = enabledIds.contains(kb.id),
+                        onCheckedChange = { checked -> onToggle(kb.id, checked) }
                     )
                 },
                 colors = ListItemDefaults.colors(containerColor = Color.Transparent),

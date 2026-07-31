@@ -139,7 +139,8 @@ private fun List<UIMessage>.ageOldToolImages(): List<UIMessage> {
 @Serializable
 sealed interface GenerationChunk {
     data class Messages(
-        val messages: List<UIMessage>
+        val messages: List<UIMessage>,
+        val finishReasons: Set<String> = emptySet(),
     ) : GenerationChunk
 }
 
@@ -428,8 +429,8 @@ class GenerationHandler(
                         settings = settings,
                         systemAddendum = systemAddendum,
                         messages = messages,
-                        onUpdateMessages = {
-                            messages = it.transforms(
+                        onUpdateMessages = { updatedMessages, finishReasons ->
+                            messages = updatedMessages.transforms(
                                 transformers = outputTransformers,
                                 context = context,
                                 model = model,
@@ -438,13 +439,14 @@ class GenerationHandler(
                             )
                             emit(
                                 GenerationChunk.Messages(
-                                    messages.visualTransforms(
+                                    messages = messages.visualTransforms(
                                         transformers = outputTransformers,
                                         context = context,
                                         model = model,
                                         assistant = assistant,
                                         settings = settings
-                                    )
+                                    ),
+                                    finishReasons = finishReasons,
                                 )
                             )
                         },
@@ -975,7 +977,7 @@ class GenerationHandler(
         settings: Settings,
         systemAddendum: String? = null,
         messages: List<UIMessage>,
-        onUpdateMessages: suspend (List<UIMessage>) -> Unit,
+        onUpdateMessages: suspend (List<UIMessage>, Set<String>) -> Unit,
         transformers: List<MessageTransformer>,
         model: Model,
         providerImpl: Provider<ProviderSetting>,
@@ -1096,7 +1098,11 @@ class GenerationHandler(
                             }
                         }
                     }
-                    onUpdateMessages(messages)
+                    val finishReasons = it.choices
+                        .mapNotNull { choice -> choice.finishReason?.trim() }
+                        .filter { reason -> reason.isNotBlank() && reason != "unknown" }
+                        .toSet()
+                    onUpdateMessages(messages, finishReasons)
                 }
             } catch (e: Throwable) {
                 stepError = e
@@ -1118,7 +1124,11 @@ class GenerationHandler(
                         }
                     }
                 }
-                onUpdateMessages(messages)
+                val finishReasons = chunk.choices
+                    .mapNotNull { choice -> choice.finishReason?.trim() }
+                    .filter { reason -> reason.isNotBlank() && reason != "unknown" }
+                    .toSet()
+                onUpdateMessages(messages, finishReasons)
             } catch (e: Throwable) {
                 stepError = e
             }

@@ -1,9 +1,7 @@
 package me.rerere.rikkahub.browser
 
 /**
- * 浏览器工具定义 —— 对标 OpenMinis Android BrowserAction 枚举。
- *
- * 工具命名与 OpenMinis 保持一致，方便跨项目对比。
+ * 浏览器工具定义
  */
 object BrowserToolDefaults {
 
@@ -27,7 +25,7 @@ object BrowserToolDefaults {
     fun buildSearchUrl(query: String, engineUrlTemplate: String): String =
         "$engineUrlTemplate${java.net.URLEncoder.encode(query, "UTF-8")}"
 
-    // ── 工具常量（对标 OpenMinis BrowserAction） ──
+    // ── 工具常量 ──
 
     const val NAVIGATE = "navigate"
     const val SCREENSHOT = "screenshot"
@@ -52,12 +50,6 @@ object BrowserToolDefaults {
     const val SCROLL_AND_COLLECT = "scroll_and_collect"
     const val WAIT_FOR_DOM_STABLE = "wait_for_dom_stable"
 
-    // ── 浏览模式 ──
-
-    const val MODE_AUTO = "auto"
-    const val MODE_FOREGROUND = "foreground"
-    const val MODE_HEADLESS = "headless"
-
     // ── 分类 ──
 
     val READ_TOOLS: Set<String> = setOf(
@@ -72,11 +64,8 @@ object BrowserToolDefaults {
         NEW_TAB, CLOSE_TAB, SET_COOKIES, SCROLL_AND_COLLECT,
     )
 
-    val LOOP_CONTROL_TOOLS: Set<String> = emptySet()
-
     /**
      * 视觉变化动作——执行后页面内容会发生变化，应自动截图。
-     * 对标 OpenMinis BrowserAction.visualChangeActions
      */
     val VISUAL_CHANGE_TOOLS: Set<String> = setOf(
         NAVIGATE, CLICK, SCROLL, TYPE, HOVER,
@@ -85,7 +74,6 @@ object BrowserToolDefaults {
     /**
      * 打开新页面的动作——这些动作可以 fanned out 到一个新标签页。
      * 其他动作（click, get_text 等）必须始终操作当前选中的标签页。
-     * 对标 OpenMinis BrowserAction.opensNewPageActions
      */
     val OPENS_NEW_PAGE_TOOLS: Set<String> = setOf(
         NAVIGATE,
@@ -103,14 +91,6 @@ object BrowserToolDefaults {
     val DEFAULT_ENABLED: Map<String, Boolean> = buildMap {
         READ_TOOLS.forEach { put(it, true) }
         WRITE_TOOLS.forEach { put(it, false) }
-    }
-
-    enum class Category { READ, WRITE, LOOP_CONTROL }
-
-    fun category(toolName: String): Category = when {
-        toolName in WRITE_TOOLS -> Category.WRITE
-        toolName in LOOP_CONTROL_TOOLS -> Category.LOOP_CONTROL
-        else -> Category.READ
     }
 
     // ── 超时设置 ──

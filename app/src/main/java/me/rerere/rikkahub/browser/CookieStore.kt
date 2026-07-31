@@ -23,9 +23,12 @@ object CookieStore {
     @Volatile
     private var prefs: android.content.SharedPreferences? = null
 
+    /** 内存缓存，避免每次导航都写 SharedPreferences */
+    private val domainCache = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
+
     /**
      * 初始化。幂等，多次调用安全。
-     * 在 [BrowserActivity.onCreate] 和 [HeadlessBrowserSession.start] 中调用。
+     * 在 [BrowserActivity.onCreate] 中调用。
      */
     fun init(context: Context) {
         if (prefs == null) {
@@ -37,10 +40,14 @@ object CookieStore {
     /**
      * 记录一个 URL 的域名。非 http/https 的 URL 会被忽略。
      * 在 [WebViewClient.onPageStarted] 中调用。
+     *
+     * 性能优化：使用内存缓存去重，避免每次导航都写 SharedPreferences。
      */
     fun recordUrl(url: String?) {
         if (url.isNullOrBlank()) return
         val host = extractHost(url) ?: return
+        if (domainCache.containsKey(host)) return
+        domainCache[host] = true
         prefs?.edit()?.putStringSet(KEY_DOMAINS, getDomains() + host)?.apply()
     }
 
@@ -72,7 +79,6 @@ object CookieStore {
     /**
      * 删除某个域名的所有 Cookie（同时删除记录）。
      * 通过 [CookieManager.setCookie] 写入空字符串来清除该域名的所有 Cookie。
-     * 对标 OpenMinis: CookieManager.getInstance().setCookie(domain, "")
      */
     fun removeCookieForDomain(domain: String) {
         removeDomain(domain)

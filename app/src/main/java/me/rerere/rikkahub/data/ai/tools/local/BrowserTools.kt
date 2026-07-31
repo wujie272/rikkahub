@@ -46,7 +46,7 @@ import java.io.FileOutputStream
  * user has explicitly disabled.
  */
 
-private const val MAX_SCREENSHOT_HEIGHT_PX = 32768
+private const val MAX_SCREENSHOT_HEIGHT_PX = 16384
 private const val SCREENSHOT_CACHE_SUBDIR = "browser-shots"
 
 /**
@@ -69,7 +69,7 @@ internal val toolTimeoutMs: Long get() = BrowserController.perToolTimeoutMs
 // ---- Common envelope helpers --------------------------------------------------------------
 
 /**
- * 视觉变化动作（对标 OpenMinis BrowserAction.visualChangeActions）。
+ * 视觉变化动作。
  * 这些动作执行后应保存一帧截图，供 ToolDetailSheet 显示。
  */
 private val VISUAL_CHANGE_ACTIONS: Set<String> = BrowserToolDefaults.VISUAL_CHANGE_TOOLS
@@ -89,7 +89,7 @@ internal fun textPart(obj: JsonObject): List<UIMessagePart> =
     listOf(UIMessagePart.Text(obj.toString()))
 
 /**
- * 返回文本 + 可选截图（对标 OpenMinis：visualChangeActions 后附带截图）。
+ * 返回文本 + 可选截图。
  */
 private suspend fun textPartWithScreenshot(
     obj: JsonObject,
@@ -129,7 +129,6 @@ fun browserOpenTool(context: Context): Tool = Tool(
     execute = { input ->
         val raw = input.jsonObject["url"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
         // 自动检测：非 URL 的输入作为搜索查询处理
-        // 对标 OpenMinis：browser_open 支持搜索查询
         val isSearchQuery = raw != null && android.net.Uri.parse(raw.trim()).scheme == null
         val resolvedUrl = if (isSearchQuery) {
             BrowserToolDefaults.buildSearchUrl(raw, BrowserController.currentSearchEngineUrlTemplate())
@@ -160,8 +159,6 @@ fun browserOpenTool(context: Context): Tool = Tool(
         } else {
             withTimeoutOrNull(toolTimeoutMs) {
                 // 嵌入模式：通知 ChatPage 弹出 Sheet，等待 WebView 绑定
-                // 对标 OpenMinis：先创建 WebView，再通知 UI 显示 Sheet
-                // 对标 OpenMinis BrowserTabPool：创建新标签页
                 withContext(Dispatchers.Main) {
                     BrowserController.createTab(context)
                 }
@@ -220,7 +217,7 @@ fun browserCurrentUrlTool(): Tool = Tool(
 
 fun browserScreenshotTool(context: Context): Tool = Tool(
     name = BrowserToolDefaults.SCREENSHOT,
-    description = "Capture the visible viewport of the browser as a vision attachment. Use browser_get_text first if you only need the page's text — screenshots cost vision tokens. full_page=true stretches the viewport to the document height before capture (capped at 32768px). Returns metadata including image dimensions, viewport stats, and scroll position.",
+    description = "Capture the visible viewport of the browser as a vision attachment. Use browser_get_text first if you only need the page's text — screenshots cost vision tokens. full_page=true stretches the viewport to the document height before capture (capped at 16384px). Returns metadata including image dimensions, viewport stats, and scroll position.",
     parameters = {
         InputSchema.Obj(
             properties = buildJsonObject {
@@ -280,7 +277,7 @@ fun browserScreenshotTool(context: Context): Tool = Tool(
 
                     val width = webView.width.coerceAtLeast(1)
                     val height = webView.height.coerceAtLeast(1).coerceAtMost(MAX_SCREENSHOT_HEIGHT_PX)
-                    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.RGB_565)
                     val canvas = Canvas(bitmap)
                     webView.draw(canvas)
 
@@ -460,7 +457,6 @@ fun browserWaitForTool(): Tool = Tool(
                         var found = false
 
                         // 快速路径：页面已加载完成时，用两次采样确认稳定性
-                        // 对标 OpenMinis：readyState=complete 快速检测
                         if (state == "attached" || state == "visible") {
                             val readyState = webView.evaluateJavascriptAsync(
                                 "(function(){try{return document.readyState;}catch(e){return '';}})()", 1_500L
@@ -1044,36 +1040,30 @@ private fun clipText(text: String, maxChars: Int): Pair<String, Boolean> =
 
 /**
  * 保存截图到缓存文件，返回可用于 UIMessagePart.Image 的 file:// URL。
- * 对标 OpenMinis BrowserUseManager 中 visualChangeActions 后的截图保存逻辑。
  */
 private suspend fun saveScreenshotToFile(context: Context? = null): String? {
-    // 对标 OpenMinis：先等页面稳定再截图
     delay(300)
-    // 等待 WebView attach 到 window（首次 navigate 时 sheet 可能还没渲染完）
-    // 对齐 OpenMinis：attachSnapshot 在同一个类实例内直接访问 webView，
-    // 但 RikkaHub 的 saveScreenshotToFile 在 withController 作用域外执行，
-    // 需要确保 WebView 已挂载到窗口，否则 draw(canvas) 可能空白
-    var waited = 0L
-    while (waited < 3000) {
-        val session = BrowserController.selectedSession
-        if (session != null) {
-            val attached = withContext(Dispatchers.Main) { session.webView.isAttachedToWindow }
-            if (attached) break
+    // 等待 WebView attach 到窗口（首次 navigate 时 sheet 可能还没渲染完），最多 500ms
+    withTimeoutOrNull(500L) {
+        while (true) {
+            val session = BrowserController.selectedSession
+            if (session != null) {
+                val attached = withContext(Dispatchers.Main) { session.webView.isAttachedToWindow }
+                if (attached) break
+            }
+            delay(100)
         }
-        delay(200)
-        waited += 200
     }
     return withContext(Dispatchers.Main) {
         val session = BrowserController.selectedSession ?: return@withContext null
         val webView = session.webView
         val ctx = context ?: webView.context.applicationContext ?: return@withContext null
         try {
-            // 对标 OpenMinis captureWebViewBitmap：处理宽高为 0 的情况
             var w = webView.width
             var h = webView.height
             if (w <= 0 || h <= 0) {
-                // 对齐 OpenMinis：使用 profile viewport 尺寸而非硬编码 1080x1920
-                // OpenMinis 用 currentProfile.viewportSize（412x915 或 1280x800）
+                // 使用 profile viewport 尺寸而非硬编码 1080x1920
+                // profile viewportSize 为 412x915 或 1280x800
                 val (vpW, vpH) = BrowserController.resolvedViewportSize()
                 val density = webView.resources.displayMetrics.density
                 val targetW = (vpW * density).toInt().coerceAtLeast(1)
@@ -1086,7 +1076,7 @@ private suspend fun saveScreenshotToFile(context: Context? = null): String? {
                 w = targetW; h = targetH
             }
             h = h.coerceAtMost(MAX_SCREENSHOT_HEIGHT_PX)
-            val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+            val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.RGB_565)
             val canvas = Canvas(bitmap)
             webView.draw(canvas)
             val cacheDir = File(ctx.cacheDir, SCREENSHOT_CACHE_SUBDIR).apply { mkdirs() }
@@ -1108,7 +1098,6 @@ private suspend fun saveScreenshotToFile(context: Context? = null): String? {
 
 /**
  * 如果当前工具是视觉变化动作，保存截图并添加到输出。
- * 对标 OpenMinis: visualChangeActions 后 result.imageFilePath = saveScreenshot()
  */
 private suspend fun addScreenshotIfVisualChange(
     toolName: String,
@@ -1129,7 +1118,6 @@ fun createBrowserTool(
     toolName: String,
     context: Context,
 ): Tool? = when (toolName) {
-    // 对标 OpenMinis BrowserAction
     BrowserToolDefaults.NAVIGATE -> navigateTool(context)
     BrowserToolDefaults.GET_PAGE_INFO -> getPageInfoTool()
     BrowserToolDefaults.SCREENSHOT -> screenshotTool(context)
@@ -1142,7 +1130,7 @@ fun createBrowserTool(
     BrowserToolDefaults.FIND_ELEMENTS -> findElementsTool()
     BrowserToolDefaults.HOVER -> hoverTool()
     BrowserToolDefaults.WAIT_FOR_DOM_STABLE -> browserWaitForTool()
-    // 补齐的 10 个工具（对标 OpenMinis BrowserAction）
+    // 补齐的 10 个工具
     BrowserToolDefaults.GET_BACKBONE -> getBackboneTool()
     BrowserToolDefaults.FETCH -> fetchTool()
     BrowserToolDefaults.GET_COOKIES -> getCookiesTool()

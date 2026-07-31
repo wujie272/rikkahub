@@ -30,6 +30,10 @@ val knowledgeModule = module {
     }
 
     single {
+        get<KnowledgeDatabase>().queryVectorCacheDao()
+    }
+
+    single {
         FileSystemSearchEngine(
             context = androidContext(),
         )
@@ -47,6 +51,7 @@ val knowledgeModule = module {
         KnowledgeSearchService(
             documentDao = get(),
             embeddingService = get(),
+            queryVectorCacheDao = get(),
         )
     }
 

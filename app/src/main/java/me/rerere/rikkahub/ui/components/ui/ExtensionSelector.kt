@@ -205,8 +205,13 @@ fun ExtensionSelector(
                     if (knowledgeBases.isNotEmpty()) {
                         KnowledgeBaseContent(
                             knowledgeBases = knowledgeBases,
-                            currentKbId = currentKbId,
-                            onSelect = { id -> onSelectKnowledgeBase(id) },
+                            enabledIds = assistant.enabledKnowledgeBaseIds.map { it.toString() }.toSet(),
+                            onToggle = { id, checked ->
+                                val kbId = kotlin.uuid.Uuid.parse(id)
+                                val newIds = if (checked) assistant.enabledKnowledgeBaseIds + kbId
+                                    else assistant.enabledKnowledgeBaseIds - kbId
+                                onUpdate(assistant.copy(enabledKnowledgeBaseIds = newIds))
+                            },
                             onManage = onNavigateToKnowledgeBase,
                         )
                     } else {

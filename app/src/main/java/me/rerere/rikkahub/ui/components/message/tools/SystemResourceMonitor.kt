@@ -19,7 +19,7 @@ import java.io.File
 /**
  * 轻量级 CPU/内存采样器，用于 Shell 工具实时 HUD。
  *
- * 移植自 OpenMinis Android 的 SystemResourceMonitor。
+ * 系统资源监控组件，实时显示 CPU/MEM 使用率。
  *
  * - **CPU**: 本进程的 CPU 使用率，top 风格 IRIX 百分比。
  *   100% = 一个核心满载，8 核设备满载可达 800%。

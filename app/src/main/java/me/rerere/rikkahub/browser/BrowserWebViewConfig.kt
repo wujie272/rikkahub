@@ -6,7 +6,7 @@ import android.webkit.WebView
 
 /**
  * Single source of truth for WebView settings shared by the foreground browser
- * ([BrowserView]) and the headless browser ([HeadlessBrowserSession]).
+ * ([BrowserView]).
  *
  * Why this exists. The foreground BrowserView accumulated four white-page render
  * fixes between commits `1ac54c4b`, `3ac3b4b4`, and `a1db859c`:
@@ -16,16 +16,11 @@ import android.webkit.WebView
  *    the hardware layer inside a `Box` and the page renders all-white)
  *  - `mediaPlaybackRequiresUserGesture = false` (sites whose player JS errors out
  *    before layout settle render blank)
- *  - `userAgentString.replace("; wv)", ")")` (Hugo / Cloudflare / bot-sniff CMSes
- *    serve stripped-down content to a `wv`-marked embedded WebView)
+ *  - `userAgentString = UserAgentProfile.MOBILE.userAgentString` (Google 永久禁止
+ *    WebView 登录，使用真实 Chrome UA 绕过 403 disallowed_useragent)
  *
- * Those fixes lived in `BrowserView.WebViewHost` only. The headless WebView created
- * by `HeadlessBrowserSession.start` had NONE of them, so a Telegram-bot-driven
- * browse on the same site that the user just verified loads in foreground would
- * silently render an all-white PNG and stream it back to the user's chat.
- *
- * Pulling the configuration into one shared function means future fixes for either
- * mode automatically benefit the other.
+ * Pulling the configuration into one shared function means future fixes apply
+ * consistently across all browser sessions.
  */
 internal fun configureWebViewForRikka(webView: WebView) {
     webView.settings.apply {
@@ -56,7 +51,9 @@ internal fun configureWebViewForRikka(webView: WebView) {
         builtInZoomControls = false
         displayZoomControls = false
         mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-        userAgentString = userAgentString.replace("; wv)", ")")
+        // 直接用 Chrome Mobile UA（无 Version/4.0 标记），
+        // 避免 Google 等网站 403 disallowed_useragent
+        userAgentString = UserAgentProfile.MOBILE.userAgentString!!
     }
     // Hardware layer hint. For the foreground Activity's WebView this fixes a Compose
     // AndroidView interop quirk that produces all-white pages. For headless capture via
@@ -65,7 +62,7 @@ internal fun configureWebViewForRikka(webView: WebView) {
     // two code paths identical.
     webView.setLayerType(View.LAYER_TYPE_HARDWARE, null)
 
-    // 启用第三方 Cookie（对标 OpenMinis），否则 hCaptcha/Turnstile/reCAPTCHA 会卡住
+    // 启用第三方 Cookie，否则 hCaptcha/Turnstile/reCAPTCHA 会卡住
     // 验证码 widget 在跨域 iframe 中通过 Set-Cookie 回传 token
     android.webkit.CookieManager.getInstance().apply {
         setAcceptCookie(true)

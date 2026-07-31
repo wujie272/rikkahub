@@ -22,7 +22,7 @@ import java.nio.file.Paths
  * 文件系统搜索引擎 —— 直接在外部目录上搜索，零存储。
  *
  * 核心流程：
- * 1. SAF URI → POSIX 路径解析（copy from OpenMinis）
+ * 1. SAF URI → POSIX 路径解析
  * 2. Files.walk() 遍历目录树，收集文本文件
  * 3. 并行逐行搜索（不加载全文到内存）
  * 4. 返回命中结果

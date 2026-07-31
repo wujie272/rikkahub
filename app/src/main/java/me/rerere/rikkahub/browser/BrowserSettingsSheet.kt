@@ -59,7 +59,7 @@ import me.rerere.hugeicons.stroke.Delete02
 import org.koin.compose.koinInject
 
 /**
- * 浏览器设置 Sheet —— 对标 OpenMinis BrowserSettingsSheet。
+ * 浏览器设置 Sheet
  *
  * 改进：
  * - 使用 UserAgentProfile 枚举管理 UA
@@ -79,7 +79,7 @@ fun BrowserSettingsSheet(
     val prefs = remember { context.getSharedPreferences("browser_settings", android.content.Context.MODE_PRIVATE) }
     val coroutineScope = rememberCoroutineScope()
 
-    // ── UA 状态（对标 OpenMinis：UserAgentProfile 枚举） ──
+    // ── UA 状态 ──
     var selectedProfile by remember {
         mutableStateOf(
             UserAgentProfile.fromPrefString(prefs.getString("ua_profile", "mobile") ?: "mobile")
@@ -97,7 +97,7 @@ fun BrowserSettingsSheet(
             .apply()
     }
 
-    // ── Viewport 状态（对标 OpenMinis：通过 tabPool 的 flow 双向绑定） ──
+    // ── Viewport 状态 ──
     val customWidthFromPool by BrowserController.customViewportWidth.collectAsState()
     val customHeightFromPool by BrowserController.customViewportHeight.collectAsState()
     val isCustomViewportActive = customWidthFromPool > 0 && customHeightFromPool > 0
@@ -156,7 +156,6 @@ fun BrowserSettingsSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                // 对标 OpenMinis: imePadding() 防止键盘遮挡
                 .imePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp)
@@ -180,7 +179,7 @@ fun BrowserSettingsSheet(
             Spacer(Modifier.height(16.dp))
 
             // ═══════════════════════════════════════════════
-            //  User Agent（对标 OpenMinis）
+            //  User Agent
             // ═══════════════════════════════════════════════
             UserAgentSection(
                 selectedProfile = selectedProfile,
@@ -211,7 +210,7 @@ fun BrowserSettingsSheet(
             Spacer(Modifier.height(16.dp))
 
             // ═══════════════════════════════════════════════
-            //  Web Viewport（对标 OpenMinis ViewportSection）
+            //  Web Viewport
             // ═══════════════════════════════════════════════
             ViewportSection(
                 selectedProfile = selectedProfile,
@@ -290,7 +289,6 @@ fun BrowserSettingsSheet(
                     onValueChange = { idleTimeoutText = it.filter { ch -> ch.isDigit() }.take(3) },
                     label = { Text("分钟") },
                     singleLine = true,
-                    // 对标 OpenMinis: bringIntoViewOnFocus 防止键盘遮挡
                     modifier = Modifier.weight(1f),
                     textStyle = MaterialTheme.typography.bodyMedium,
                 )
@@ -309,7 +307,7 @@ fun BrowserSettingsSheet(
             Spacer(Modifier.height(16.dp))
 
             // ═══════════════════════════════════════════════
-            //  Cookies & 网站数据（对标 OpenMinis）
+            //  Cookies & 网站数据
             // ═══════════════════════════════════════════════
             SectionTitle("Cookies & 网站数据")
             Spacer(Modifier.height(8.dp))
@@ -402,7 +400,7 @@ fun BrowserSettingsSheet(
     }
 }
 
-// ── 组件（对标 OpenMinis 的组件化设计） ──────────────────────────────────
+// ── 组件 ──────────────────────────────────
 
 // ── User Agent Section ──
 
@@ -494,11 +492,9 @@ private fun SearchEngineSection(
 
 private enum class ViewportMode { DEFAULT, CUSTOM }
 
-/** 对标 OpenMinis: VIEWPORT_MIN / VIEWPORT_MAX */
 private const val VIEWPORT_MIN = 200
 private const val VIEWPORT_MAX = 4096
 
-/** 对标 OpenMinis: VIEWPORT_UA_BREAKPOINT */
 private const val VIEWPORT_UA_BREAKPOINT = 768
 
 private val viewportPresets = listOf(
@@ -528,7 +524,7 @@ private fun ViewportSection(
     SectionTitle("Web Viewport")
     Spacer(Modifier.height(8.dp))
 
-    // Default（对标 OpenMinis）
+    // Default
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -545,7 +541,7 @@ private fun ViewportSection(
         }
     }
 
-    // Custom（对标 OpenMinis）
+    // Custom
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -593,7 +589,7 @@ private fun ViewportSection(
             TextButton(onClick = onApply) { Text("应用") }
         }
 
-        // UA 不匹配警告（对标 OpenMinis UaMismatchBanner）
+        // UA 不匹配警告
         val warning = uaMismatchWarning(selectedProfile, widthText)
         if (warning != null) {
             Spacer(Modifier.height(8.dp))
@@ -636,7 +632,7 @@ private fun ViewportSection(
         }
     }
 
-    // 当前状态显示（对标 OpenMinis: 在 Viewport 区域底部显示）
+    // 当前状态显示
     Spacer(Modifier.height(8.dp))
     val (resW, resH) = BrowserController.resolvedViewportSize()
     val uaLabel = selectedProfile.displayName
@@ -651,7 +647,7 @@ private fun ViewportSection(
     )
 }
 
-// ── UA 不匹配警告（对标 OpenMinis uaMismatchWarning + UaMismatchBanner） ──
+// ── UA 不匹配警告 ──
 
 private fun uaMismatchWarning(profile: UserAgentProfile, widthText: String): String? {
     val width = widthText.toIntOrNull() ?: return null

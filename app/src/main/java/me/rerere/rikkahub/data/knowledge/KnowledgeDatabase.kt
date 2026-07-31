@@ -12,14 +12,16 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         KnowledgeBaseEntity::class,
         KnowledgeDocumentEntity::class,
         MountedKnowledgeDir::class,
+        QueryVectorCacheEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = false,
 )
 abstract class KnowledgeDatabase : RoomDatabase() {
     abstract fun knowledgeBaseDao(): KnowledgeBaseDao
     abstract fun knowledgeDocumentDao(): KnowledgeDocumentDao
     abstract fun mountedKnowledgeDirDao(): MountedKnowledgeDirDao
+    abstract fun queryVectorCacheDao(): QueryVectorCacheDao
 
     companion object {
         @Volatile
@@ -32,7 +34,7 @@ abstract class KnowledgeDatabase : RoomDatabase() {
                     KnowledgeDatabase::class.java,
                     "rikka_knowledge.db"
                 )
-                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4)
+                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                     .fallbackToDestructiveMigration()
                     .build()
                     .also { INSTANCE = it }
@@ -63,6 +65,20 @@ abstract class KnowledgeDatabase : RoomDatabase() {
                     )
                 """)
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_mounted_knowledge_dir_kb_id` ON `mounted_knowledge_dir` (`kb_id`)")
+            }
+        }
+
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `query_vector_cache` (
+                        `query` TEXT NOT NULL,
+                        `modelId` TEXT NOT NULL,
+                        `vector` TEXT NOT NULL,
+                        `createdAt` INTEGER NOT NULL,
+                        PRIMARY KEY(`query`)
+                    )
+                """)
             }
         }
     }

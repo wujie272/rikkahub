@@ -265,37 +265,3 @@ fun EditSeatPromptDialog(
     }
 }
 
-// ──── 开始群聊模式选择对话框 ────
-
-@Composable
-fun StartGroupChatModeDialog(
-    show: Boolean,
-    onDismiss: () -> Unit,
-    onStartChat: () -> Unit,
-) {
-    if (show) {
-        AlertDialog(
-            onDismissRequest = onDismiss,
-            title = { Text("选择群聊模式") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(
-                        onClick = {
-                            onStartChat()
-                            onDismiss()
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text("💬 开始群聊")
-                    }
-                }
-            },
-            confirmButton = {},
-            dismissButton = {
-                TextButton(onClick = onDismiss) {
-                    Text("取消")
-                }
-            },
-        )
-    }
-}

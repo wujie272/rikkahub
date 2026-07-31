@@ -18,6 +18,8 @@ import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.files.SkillManager
+import me.rerere.rikkahub.data.knowledge.KnowledgeBaseEntity
+import me.rerere.rikkahub.data.knowledge.KnowledgeService
 import me.rerere.rikkahub.data.files.SkillMetadata
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantMemory
@@ -36,11 +38,16 @@ class AssistantDetailVM(
     private val filesManager: FilesManager,
     private val skillManager: SkillManager,
     private val workspaceRepository: WorkspaceRepository,
+    private val knowledgeService: KnowledgeService,
 ) : ViewModel() {
     private val assistantId = Uuid.parse(id)
 
     private val _skills = MutableStateFlow<List<SkillMetadata>>(emptyList())
     val skills = _skills.asStateFlow()
+
+    val knowledgeBases: StateFlow<List<KnowledgeBaseEntity>> =
+        knowledgeService.observeAllKnowledgeBases()
+            .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     init {
         viewModelScope.launch(Dispatchers.IO) {

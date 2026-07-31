@@ -9,6 +9,8 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.workflow.execution.WorkflowEngine
 import me.rerere.rikkahub.workflow.model.WorkflowRun
+
+import me.rerere.rikkahub.workflow.model.WorkflowDefinition
 import me.rerere.rikkahub.workflow.repository.WorkflowRepository
 import me.rerere.rikkahub.workflow.repository.WorkflowRepository.Loaded
 
@@ -28,6 +30,12 @@ class WorkflowsViewModel(
         viewModelScope.launch(Dispatchers.IO) {
             repository.deleteCascading(id)
             onDone()
+        }
+    }
+
+    fun save(definition: WorkflowDefinition) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.upsert(definition)
         }
     }
 

@@ -26,6 +26,13 @@ interface KnowledgeDocumentDao {
     @Query("SELECT * FROM knowledge_document WHERE knowledge_base_id = :kbId AND vector IS NOT NULL AND enabled = 1 AND deleted_at IS NULL AND tags LIKE '%' || :tag || '%'")
     suspend fun getSearchableByTag(kbId: String, tag: String): List<KnowledgeDocumentEntity>
 
+    /** 轻量级搜索查询：只加载搜索需要的字段，跳过 enabled/created_at/updated_at 等 */
+    @Query("SELECT id, knowledge_base_id, file_path, file_name, chunk_index, vector, tags, chunk_text FROM knowledge_document WHERE knowledge_base_id = :kbId AND vector IS NOT NULL AND enabled = 1 AND deleted_at IS NULL")
+    suspend fun getSearchableLight(kbId: String): List<SearchableDoc>
+
+    @Query("SELECT id, knowledge_base_id, file_path, file_name, chunk_index, vector, tags, chunk_text FROM knowledge_document WHERE knowledge_base_id = :kbId AND vector IS NOT NULL AND enabled = 1 AND deleted_at IS NULL AND tags LIKE '%' || :tag || '%'")
+    suspend fun getSearchableLightByTag(kbId: String, tag: String): List<SearchableDoc>
+
     @Query("SELECT DISTINCT file_path, file_name FROM knowledge_document WHERE knowledge_base_id = :kbId AND deleted_at IS NULL")
     suspend fun getDistinctFiles(kbId: String): List<FilePathAndName>
 
@@ -98,4 +105,16 @@ interface KnowledgeDocumentDao {
 data class FilePathAndName(
     val file_path: String,
     val file_name: String,
+)
+
+/** 搜索投影：只包含搜索需要的字段，减轻 IO 和内存压力 */
+data class SearchableDoc(
+    val id: String,
+    val knowledge_base_id: String,
+    val file_path: String,
+    val file_name: String,
+    val chunk_index: Int,
+    val vector: String?,
+    val tags: String,
+    val chunk_text: String,
 )

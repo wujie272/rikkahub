@@ -7,8 +7,8 @@ import java.io.File
 /**
  * Best-effort cleanup of the browser screenshot cache directories. Every PNG capture
  * (foreground `browser_screenshot` + headless auto-stream after every state-changing
- * tool) writes a 1080x1920 ARGB_8888 file ≈ 7.9 MB. A long headless session that
- * fires 50 actions with auto-stream produces ~400 MB of orphaned PNGs in app cache that
+ * tool) writes a 1080x1920 RGB_565 file ≈ 4 MB. A long headless session that
+ * fires 50 actions with auto-stream produces ~200 MB of orphaned PNGs in app cache that
  * would otherwise sit there until the OS clears it (which on modern Android is "rarely,
  * if ever, on its own").
  *
@@ -29,7 +29,7 @@ internal object BrowserCacheSweeper {
      * Trim the browser-related cache subdirs to [keepLast] entries each (newest first).
      * Idempotent. Safe to call repeatedly. Errors logged at WARN, never thrown.
      */
-    fun sweep(context: Context, keepLast: Int = 20) {
+    fun sweep(context: Context, keepLast: Int = 10) {
         val cacheDir = context.cacheDir ?: return
         sweep(cacheDir, keepLast)
     }
@@ -42,7 +42,7 @@ internal object BrowserCacheSweeper {
      * potential future logging at the call site (where Android's Log facility is
      * available without the JVM-unit-test mock-required overhead).
      */
-    internal fun sweep(cacheDir: File, keepLast: Int = 20): Int {
+    internal fun sweep(cacheDir: File, keepLast: Int = 10): Int {
         var totalDeleted = 0
         for (sub in CACHE_SUBDIRS) {
             runCatching {

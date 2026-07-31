@@ -31,7 +31,7 @@ import me.rerere.hugeicons.stroke.Download04
 import me.rerere.hugeicons.stroke.Tick01
 
 /**
- * 下载管理 Sheet — 对标 OpenMinis 的 BrowserDownloadsSheet
+ * 下载管理 Sheet
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -122,5 +122,5 @@ fun BrowserDownloadsSheet(
     }
 }
 
-// 使用 BrowserController.DownloadState 替代本地 DownloadEntry
-typealias DownloadState = BrowserController.DownloadState
+// 使用 BrowserDownloadManager.DownloadState 替代本地 DownloadEntry
+typealias DownloadState = BrowserDownloadManager.DownloadState

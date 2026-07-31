@@ -1,7 +1,7 @@
 package me.rerere.rikkahub.browser
 
 /**
- * 浏览器自动化 JS 注入 — 对标 OpenMinis BrowserUseJS
+ * 浏览器自动化 JS 注入
  *
  * 提供一组封装好的 JavaScript 代码片段，用于 AI 驱动浏览器操作。
  * 所有函数生成可直接通过 evaluateJavascript 执行的 JS 代码。

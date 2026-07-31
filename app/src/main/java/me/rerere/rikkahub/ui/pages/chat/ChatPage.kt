@@ -310,8 +310,6 @@ private fun ChatPageContent(
     // 工具详情 Sheet 状态（Minis Computer）
     val toolDetailBlocks by vm.selectedToolDetailBlocks.collectAsStateWithLifecycle()
     val toolDetailIndex by vm.selectedToolDetailIndex.collectAsStateWithLifecycle()
-    // 最新工具块（ToolStatusBar）
-    val latestToolBlocks by vm.latestToolBlocks.collectAsStateWithLifecycle()
     var showBrowserPreview by remember { mutableStateOf(false) }
     var pendingBrowserUrl by remember { mutableStateOf<String?>(null) }
 
@@ -518,10 +516,8 @@ private fun ChatPageContent(
                             vm.handleToolApproval(toolCallId, approved, reason, scope, toolName)
                         },
                         onToolAnswer = { toolCallId, answer -> vm.handleToolAnswer(toolCallId, answer) },
-                        latestToolBlocks = latestToolBlocks,
                         onOpenToolDetail = { blocks, index -> vm.openToolDetail(blocks, index) },
                         onToggleFavorite = { node -> vm.toggleMessageFavorite(node) },
-                        knowledgeSources = vm.knowledgeSources.collectAsStateWithLifecycle().value,
                         onConversationSystemPromptChange = { newPrompt ->
                             vm.updateConversation(conversation.copy(customSystemPrompt = newPrompt))
                             vm.saveConversationAsync()

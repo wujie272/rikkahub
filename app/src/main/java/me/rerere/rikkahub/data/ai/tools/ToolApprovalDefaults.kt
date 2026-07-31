@@ -185,8 +185,7 @@ object ToolApprovalDefaults {
         // in cookies, so anything that mutates page state OR runs JS is approval-gated. Read
         // tools (open, current_url, screenshot, get_text, get_dom, get_links, back, forward,
         // wait_for) are NOT in this set — reading text out of a page is the same trust level
-        // as taking a screenshot or reading any other LLM context. browser_done is the
-        // loop-control sentinel and never side-effects.
+        // as taking a screenshot or reading any other LLM context.
         "browser_click",
         "browser_type",
         "browser_scroll",

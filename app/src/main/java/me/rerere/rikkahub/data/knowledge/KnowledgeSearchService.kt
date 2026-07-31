@@ -16,6 +16,7 @@ import kotlin.math.min
 class KnowledgeSearchService(
     private val documentDao: KnowledgeDocumentDao,
     private val embeddingService: EmbeddingService,
+    private val queryVectorCacheDao: QueryVectorCacheDao,
 ) {
     data class SearchResult(
         val documentId: String,
@@ -62,6 +63,50 @@ class KnowledgeSearchService(
     private var bm25Index: Bm25Index? = null
     private var bm25CacheKey: String = ""
 
+    /** 文档向量反序列化 LRU 缓存：跨搜索复用，最多 500 条 */
+    private val vectorCache = object : LinkedHashMap<String, FloatArray>(500, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, FloatArray>?): Boolean = size > 500
+    }
+
+    /** 查询向量 Room 持久化缓存（TTL 5 分钟，上限 100 条） */
+    private val QUERY_CACHE_TTL_MS = 5 * 60 * 1000L
+
+    private fun getOrParseVector(doc: SearchableDoc): FloatArray? {
+        val cached = vectorCache[doc.id]
+        if (cached != null) return cached
+        val parsed = doc.vector?.let { VectorUtils.jsonToFloatArray(it) }
+        if (parsed != null) {
+            vectorCache[doc.id] = parsed
+        }
+        return parsed
+    }
+
+    private suspend fun getCachedQueryVector(query: String, modelId: String): List<Float>? {
+        val cached = queryVectorCacheDao.getByQuery(query, modelId) ?: return null
+        if (System.currentTimeMillis() - cached.createdAt > QUERY_CACHE_TTL_MS) {
+            queryVectorCacheDao.deleteOlderThan(System.currentTimeMillis() - QUERY_CACHE_TTL_MS)
+            return null
+        }
+        return VectorUtils.jsonToVector(cached.vector)
+    }
+
+    private suspend fun putQueryVector(query: String, modelId: String, vector: List<Float>) {
+        queryVectorCacheDao.upsert(
+            QueryVectorCacheEntity(
+                query = query,
+                modelId = modelId,
+                vector = VectorUtils.vectorToJson(vector),
+            )
+        )
+        // 后台清理：只保留最近 100 条
+        queryVectorCacheDao.keepTop(100)
+    }
+
+    /** 清空文档向量缓存（知识库导入/更新后调用） */
+    internal fun clearVectorCache() {
+        vectorCache.clear()
+    }
+
     /**
      * 增强搜索主入口
      *
@@ -88,17 +133,16 @@ class KnowledgeSearchService(
     ): List<SearchResult> {
         if (query.isBlank()) return emptyList()
 
-        // 1. 获取候选数据（支持标签过滤）
+        // 1. 获取候选数据（使用轻量级查询，不加载冗余字段）
         val allCandidates = if (tagFilter != null && tagFilter.isNotBlank()) {
-            documentDao.getSearchableByTag(kbId, tagFilter)
+            documentDao.getSearchableLightByTag(kbId, tagFilter)
         } else {
-            documentDao.getSearchable(kbId)
+            documentDao.getSearchableLight(kbId)
         }
         if (allCandidates.isEmpty()) return emptyList()
 
         // 1.5 候选数量控制：超过 MAX_CANDIDATES 时，先用 BM25 筛选
         val candidates = if (allCandidates.size > MAX_CANDIDATES) {
-            // 先算 BM25，取 top MAX_CANDIDATES
             val bm25Pre = computeBm25Scores(query, allCandidates)
             val topIds = bm25Pre.entries
                 .sortedByDescending { it.value }
@@ -110,26 +154,32 @@ class KnowledgeSearchService(
             allCandidates
         }
 
-        // 2. 查询扩展（生成多个搜索变体）
-        val queries = if (enableQueryExpansion) {
-            expandQuery(query)
-        } else {
-            listOf(query)
-        }
+        // 向量缓存跨搜索复用，不清空（LRU 自动淘汰最旧的）
 
-        // 3. 生成所有 query 的向量
+        // 2. 条件性查询扩展：先用原始 query 评估结果够不够
+        val useExpansion = enableQueryExpansion && candidates.size < 100
+
+        // 3. 生成查询向量（优先走缓存）
+        val queries = if (useExpansion) expandQuery(query) else listOf(query)
         val queryVectors = queries.map { q ->
-            q to (try { embeddingService.embed(q, modelId) } catch (_: Exception) { emptyList() })
+            val cached = getCachedQueryVector(q, modelId)
+            if (cached != null) {
+                q to cached
+            } else {
+                val vec = try { embeddingService.embed(q, modelId) } catch (_: Exception) { emptyList() }
+                if (vec.isNotEmpty()) putQueryVector(q, modelId, vec)
+                q to vec
+            }
         }.filter { it.second.isNotEmpty() }
 
         if (queryVectors.isEmpty()) return emptyList()
 
-        // 4. 语义搜索（用所有扩展 query 搜索，取最高分）
+        // 4. 语义搜索（用 FloatArray 算余弦相似度，避免装箱开销）
         val semanticScores = mutableMapOf<String, Float>()
-        for ((q, qVec) in queryVectors) {
+        for ((_, qVec) in queryVectors) {
             for (doc in candidates) {
-                val docVec = doc.vector?.let { VectorUtils.jsonToVector(it) } ?: continue
-                val score = VectorUtils.cosineSimilarity(qVec, docVec)
+                val docVec = getOrParseVector(doc) ?: continue
+                val score = VectorUtils.cosineSimilarity(qVec.toFloatArray(), docVec)
                 val existing = semanticScores[doc.id] ?: 0f
                 if (score > existing) {
                     semanticScores[doc.id] = score
@@ -166,11 +216,11 @@ class KnowledgeSearchService(
 
             SearchResult(
                 documentId = doc.id,
-                knowledgeBaseId = doc.knowledgeBaseId,
-                filePath = doc.filePath,
-                fileName = doc.fileName,
-                chunkIndex = doc.chunkIndex,
-                content = doc.chunkText,
+                knowledgeBaseId = doc.knowledge_base_id,
+                filePath = doc.file_path,
+                fileName = doc.file_name,
+                chunkIndex = doc.chunk_index,
+                content = doc.chunk_text,
                 score = finalScore,
                 semanticScore = semanticScore,
                 bm25Score = bm25Score,
@@ -236,11 +286,11 @@ class KnowledgeSearchService(
      */
     private suspend fun computeBm25Scores(
         query: String,
-        candidates: List<KnowledgeDocumentEntity>,
+        candidates: List<SearchableDoc>,
     ): Map<String, Float> {
         val cacheKey = candidates.joinToString("|") { it.id }
         if (bm25Index == null || bm25CacheKey != cacheKey) {
-            val texts = candidates.map { it.chunkText }
+            val texts = candidates.map { it.chunk_text }
             bm25Index = Bm25Index(documents = texts).build()
             bm25CacheKey = cacheKey
         }
@@ -260,12 +310,12 @@ class KnowledgeSearchService(
      * 构建展开上下文
      */
     private fun buildExpandedContext(
-        doc: KnowledgeDocumentEntity,
-        allCandidates: List<KnowledgeDocumentEntity>,
+        doc: SearchableDoc,
+        allCandidates: List<SearchableDoc>,
     ): String {
         val fileChunks = allCandidates
-            .filter { it.filePath == doc.filePath }
-            .sortedBy { it.chunkIndex }
+            .filter { it.file_path == doc.file_path }
+            .sortedBy { it.chunk_index }
 
         val idx = fileChunks.indexOfFirst { it.id == doc.id }
         if (idx < 0) return ""
@@ -277,7 +327,7 @@ class KnowledgeSearchService(
 
         return buildString {
             selected.forEachIndexed { i, chunk ->
-                val text = chunk.chunkText.take(CONTEXT_CHUNK_MAX).trim()
+                val text = chunk.chunk_text.take(CONTEXT_CHUNK_MAX).trim()
                 if (text.isNotEmpty()) {
                     if (chunk.id == doc.id) {
                         appendLine("▸ $text")

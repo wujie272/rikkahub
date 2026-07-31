@@ -49,8 +49,8 @@ import org.koin.androidx.compose.koinViewModel
  *     manual use like signing into a site before the AI takes over) + "Clear browsing
  *     data" (wipes WebView profile dir + cookies; does NOT clear per-tool toggles —
  *     those are user config, not browsing data).
- *  2. Tools enabled — 31 individually-togglable browser tools. Read tools default ON,
- *     write tools default OFF, loop-control ON. Per the spec, the per-tool granularity
+ *  2. Tools enabled — 22 individually-togglable browser tools. Read tools default ON,
+ *     write tools default OFF. Per the spec, the per-tool granularity
  *     is intentional — the AI controlling a real browser is the highest-trust surface
  *     in the app, so the user must be able to grant only what they trust.
  *  3. Defaults & limits — search engine, per-tool timeout, single-task timeout.
@@ -152,13 +152,6 @@ fun SettingBrowserPage(
             ToolCategorySection(
                 heading = stringResource(R.string.setting_browser_category_write),
                 tools = BrowserToolDefaults.WRITE_TOOLS.toList()
-                    .sortedBy { BrowserToolDefaults.ALL_TOOLS.indexOf(it) },
-                toolStates = toolStates,
-                onToggle = vm::setToolEnabled,
-            )
-            ToolCategorySection(
-                heading = stringResource(R.string.setting_browser_category_loop_control),
-                tools = BrowserToolDefaults.LOOP_CONTROL_TOOLS.toList()
                     .sortedBy { BrowserToolDefaults.ALL_TOOLS.indexOf(it) },
                 toolStates = toolStates,
                 onToggle = vm::setToolEnabled,
@@ -293,30 +286,55 @@ private fun ToolCategorySection(
     }
 }
 
-@Composable
 private fun toolDisplayTitle(toolName: String): String = when (toolName) {
-    BrowserToolDefaults.NAVIGATE -> stringResource(R.string.setting_browser_tool_open_title)
-    BrowserToolDefaults.GET_PAGE_INFO -> stringResource(R.string.setting_browser_tool_current_url_title)
-    BrowserToolDefaults.SCREENSHOT -> stringResource(R.string.setting_browser_tool_screenshot_title)
-    BrowserToolDefaults.GET_TEXT -> stringResource(R.string.setting_browser_tool_get_text_title)
-    BrowserToolDefaults.WAIT_FOR_DOM_STABLE -> stringResource(R.string.setting_browser_tool_wait_for_title)
-    BrowserToolDefaults.CLICK -> stringResource(R.string.setting_browser_tool_click_title)
-    BrowserToolDefaults.TYPE -> stringResource(R.string.setting_browser_tool_type_title)
-    BrowserToolDefaults.SCROLL -> stringResource(R.string.setting_browser_tool_scroll_title)
-    BrowserToolDefaults.EXECUTE_JS -> stringResource(R.string.setting_browser_tool_eval_js_title)
-    else -> toolName
-}
+        BrowserToolDefaults.NAVIGATE -> "Open URL"
+        BrowserToolDefaults.GET_PAGE_INFO -> "Current URL"
+        BrowserToolDefaults.SCREENSHOT -> "Screenshot"
+        BrowserToolDefaults.GET_TEXT -> "Get text"
+        BrowserToolDefaults.GET_READABLE -> "Readable"
+        BrowserToolDefaults.GET_BACKBONE -> "DOM backbone"
+        BrowserToolDefaults.FETCH -> "Fetch"
+        BrowserToolDefaults.GET_COOKIES -> "Get cookies"
+        BrowserToolDefaults.SET_COOKIES -> "Set cookies"
+        BrowserToolDefaults.LIST_TABS -> "List tabs"
+        BrowserToolDefaults.NEW_TAB -> "New tab"
+        BrowserToolDefaults.CLOSE_TAB -> "Close tab"
+        BrowserToolDefaults.FIND_ELEMENTS -> "Find elements"
+        BrowserToolDefaults.WAIT_FOR_DOM_STABLE -> "Wait for element"
+        BrowserToolDefaults.CLICK -> "Click"
+        BrowserToolDefaults.TYPE -> "Type"
+        BrowserToolDefaults.SCROLL -> "Scroll"
+        BrowserToolDefaults.EXECUTE_JS -> "Run JavaScript"
+        BrowserToolDefaults.HOVER -> "Hover"
+        BrowserToolDefaults.SET_USER_AGENT -> "Set UA"
+        BrowserToolDefaults.SET_VIEWPORT -> "Set viewport"
+        BrowserToolDefaults.SCROLL_AND_COLLECT -> "Scroll & collect"
+        else -> toolName
+    }
 
 @Composable
-private fun toolDisplayDesc(toolName: String): String = when (toolName) {
-    BrowserToolDefaults.NAVIGATE -> stringResource(R.string.setting_browser_tool_open_desc)
-    BrowserToolDefaults.GET_PAGE_INFO -> stringResource(R.string.setting_browser_tool_current_url_desc)
-    BrowserToolDefaults.SCREENSHOT -> stringResource(R.string.setting_browser_tool_screenshot_desc)
-    BrowserToolDefaults.GET_TEXT -> stringResource(R.string.setting_browser_tool_get_text_desc)
-    BrowserToolDefaults.WAIT_FOR_DOM_STABLE -> stringResource(R.string.setting_browser_tool_wait_for_desc)
-    BrowserToolDefaults.CLICK -> stringResource(R.string.setting_browser_tool_click_desc)
-    BrowserToolDefaults.TYPE -> stringResource(R.string.setting_browser_tool_type_desc)
-    BrowserToolDefaults.SCROLL -> stringResource(R.string.setting_browser_tool_scroll_desc)
-    BrowserToolDefaults.EXECUTE_JS -> stringResource(R.string.setting_browser_tool_eval_js_desc)
-    else -> ""
-}
+    private fun toolDisplayDesc(toolName: String): String = when (toolName) {
+        BrowserToolDefaults.NAVIGATE -> stringResource(R.string.setting_browser_tool_open_desc)
+        BrowserToolDefaults.GET_PAGE_INFO -> stringResource(R.string.setting_browser_tool_current_url_desc)
+        BrowserToolDefaults.SCREENSHOT -> stringResource(R.string.setting_browser_tool_screenshot_desc)
+        BrowserToolDefaults.GET_TEXT -> stringResource(R.string.setting_browser_tool_get_text_desc)
+        BrowserToolDefaults.GET_READABLE -> stringResource(R.string.setting_browser_tool_readable_desc)
+        BrowserToolDefaults.GET_BACKBONE -> stringResource(R.string.setting_browser_tool_get_dom_desc)
+        BrowserToolDefaults.FETCH -> stringResource(R.string.setting_browser_tool_fetch_desc)
+        BrowserToolDefaults.GET_COOKIES -> stringResource(R.string.setting_browser_tool_get_cookies_desc)
+        BrowserToolDefaults.SET_COOKIES -> stringResource(R.string.setting_browser_tool_set_cookies_desc)
+        BrowserToolDefaults.LIST_TABS -> stringResource(R.string.setting_browser_tool_list_tabs_desc)
+        BrowserToolDefaults.NEW_TAB -> stringResource(R.string.setting_browser_tool_new_tab_desc)
+        BrowserToolDefaults.CLOSE_TAB -> stringResource(R.string.setting_browser_tool_close_tab_desc)
+        BrowserToolDefaults.FIND_ELEMENTS -> stringResource(R.string.setting_browser_tool_find_elements_desc)
+        BrowserToolDefaults.WAIT_FOR_DOM_STABLE -> stringResource(R.string.setting_browser_tool_wait_for_desc)
+        BrowserToolDefaults.CLICK -> stringResource(R.string.setting_browser_tool_click_desc)
+        BrowserToolDefaults.TYPE -> stringResource(R.string.setting_browser_tool_type_desc)
+        BrowserToolDefaults.SCROLL -> stringResource(R.string.setting_browser_tool_scroll_desc)
+        BrowserToolDefaults.EXECUTE_JS -> stringResource(R.string.setting_browser_tool_eval_js_desc)
+        BrowserToolDefaults.HOVER -> stringResource(R.string.setting_browser_tool_hover_desc)
+        BrowserToolDefaults.SET_USER_AGENT -> stringResource(R.string.setting_browser_tool_set_ua_desc)
+        BrowserToolDefaults.SET_VIEWPORT -> stringResource(R.string.setting_browser_tool_set_viewport_desc)
+        BrowserToolDefaults.SCROLL_AND_COLLECT -> stringResource(R.string.setting_browser_tool_scroll_and_collect_desc)
+        else -> ""
+    }

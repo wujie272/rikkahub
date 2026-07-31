@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.CompletableDeferred
@@ -27,26 +28,31 @@ import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
 
 /**
- * 浏览器会话 —— 对标 OpenMinis BrowserUseManager。
+ * 浏览器会话
  *
  * 管理单个 WebView 及其所有状态（URL、标题、加载状态、导航能力、动作日志、截图事件）。
  * 非单例，每个标签页 / 头戴会话一个独立实例。
- * BrowserController 单例管理多个 [BrowserSession]（标签池）。
+ * 由 [BrowserSessionPool] 创建和管理，通过 pool 参数回调池层事件。
  */
 class BrowserSession(
     val id: Int,
     context: Context,
+    private val pool: BrowserSessionPool,
 ) {
-    private val TAG = "BrowserSession"
-
     companion object {
+        private const val TAG = "BrowserSession"
         private const val MAX_RECENT_ACTIONS = 20
+        /**
+         * 隐式标签页操作后的保活窗口。每次 appendAction 重新刷新倒计时，
+         * 超时后自动释放 inUse 状态，遮罩消失。
+         */
+        private const val IMPLICIT_TAB_GRACE_MS = 15_000L
     }
 
-    // ── WebView（对标 OpenMinis BrowserUseManager.webView） ──
+    // ── WebView ──
     val webView: WebView
 
-    // ── 状态流（对标 OpenMinis BrowserUseManager 的 currentURL, pageTitle, isLoading 等） ──
+    // ── 状态流 ──
     private val _currentUrl = MutableStateFlow("")
     val currentUrl: StateFlow<String> = _currentUrl.asStateFlow()
 
@@ -69,11 +75,11 @@ class BrowserSession(
     private val _screenshotEvent = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val screenshotEvent: SharedFlow<Unit> = _screenshotEvent.asSharedFlow()
 
-    private val _taskWindowActive = MutableStateFlow(false)
-    val taskWindowActive: StateFlow<Boolean> = _taskWindowActive.asStateFlow()
+    private val _inUse = MutableStateFlow(false)
+    val taskWindowActive: StateFlow<Boolean> = _inUse.asStateFlow()
 
     @Volatile
-    var currentTaskStartedAt: Long? = null
+    var inUseGraceJob: Job? = null
 
     @Volatile
     var pendingTaskJob: Job? = null
@@ -93,7 +99,7 @@ class BrowserSession(
             return url.isNotEmpty() && url != "about:blank"
         }
 
-    // ── 初始化 WebView（对标 OpenMinis BrowserUseManager.init） ──
+    // ── 初始化 WebView ──
     init {
         webView = WebView(context.applicationContext).apply {
             configureWebViewForRikka(this)
@@ -115,8 +121,8 @@ class BrowserSession(
                 }
             }, "__rikkahub__")
 
-            // ── 设置 DownloadListener ──
-            BrowserController.setupDownloadListener(this)
+            // ── 设置 DownloadListener（委托给池层） ──
+            pool.setupDownloadListener(this)
 
             webViewClient = object : WebViewClient() {
                 override fun shouldOverrideUrlLoading(
@@ -167,7 +173,7 @@ class BrowserSession(
                     navigationDeferred?.complete(Unit)
                     navigationDeferred = null
                     if (url != null) {
-                        BrowserController.addHistoryStatic(url, _pageTitle.value)
+                        pool.addHistoryStatic(url, _pageTitle.value)
                     }
                 }
             }
@@ -185,7 +191,7 @@ class BrowserSession(
                 ): Boolean {
                     // 处理 target="_blank" 链接：在新标签页中打开
                     val transport = resultMsg?.obj as? WebView.WebViewTransport ?: return false
-                    val newSession = BrowserController.createSession(webView.context)
+                    val newSession = pool.createSession()
                     if (newSession == null) return false
                     transport.webView = newSession.webView
                     resultMsg?.sendToTarget()
@@ -194,10 +200,10 @@ class BrowserSession(
 
                 override fun onCloseWindow(window: WebView?) {
                     // 处理 window.close()
-                    val sessions = BrowserController.sessions.value
+                    val sessions = pool.sessions.value
                     val idx = sessions.indexOfFirst { it.webView === window }
                     if (idx >= 0) {
-                        BrowserController.closeSession(idx)
+                        pool.closeSession(idx)
                     }
                 }
             }
@@ -209,7 +215,7 @@ class BrowserSession(
         _canGoForward.value = webView.canGoForward()
     }
 
-    // ── 导航（对标 OpenMinis BrowserUseManager 的 goBack/goForward/reload/loadURL 等） ──
+    // ── 导航 ──
 
     fun loadUrl(url: String) {
         _isLoading.value = true
@@ -220,7 +226,6 @@ class BrowserSession(
 
     /**
      * 加载带有 viewport meta 的空白页，确保新标签页 viewport 立刻生效。
-     * 对标 OpenMinis loadBlankPage。
      */
     fun loadBlankPage() {
         val html = """
@@ -237,7 +242,7 @@ class BrowserSession(
     }
 
     /**
-     * 重新加载并等待页面完成。对标 OpenMinis reloadAndWait。
+     * 重新加载并等待页面完成 reloadAndWait。
      */
     suspend fun reloadAndWait(timeoutMs: Long = 30_000L): Boolean {
         val deferred = kotlinx.coroutines.CompletableDeferred<Unit>()
@@ -278,14 +283,7 @@ class BrowserSession(
         _isLoading.value = false
     }
 
-    fun syncState() {
-        _currentUrl.value = webView.url?.takeIf { it != "about:blank" }.orEmpty()
-        _pageTitle.value = webView.title ?: ""
-        _canGoBack.value = webView.canGoBack()
-        _canGoForward.value = webView.canGoForward()
-    }
-
-    // ── UA / Viewport（对标 OpenMinis BrowserUseManager.setUserAgent/applyViewport） ──
+    // ── UA / Viewport ──
 
     fun setUserAgent(ua: String) {
         webView.settings.userAgentString = ua
@@ -305,6 +303,13 @@ class BrowserSession(
 
     // ── 销毁 ──
     fun destroy() {
+        // 取消所有协程，防止 evictionScope 持有 session 引用导致泄漏
+        inUseGraceJob?.cancel()
+        inUseGraceJob = null
+        pendingTaskJob?.cancel()
+        pendingTaskJob = null
+        evictionScope.cancel()
+        _inUse.value = false
         try {
             webView.stopLoading()
             webView.loadUrl("about:blank")
@@ -316,7 +321,7 @@ class BrowserSession(
     }
 
     // ── 动作日志 ──
-    // ── workspace:// URL 拦截（对标 OpenMinis minis:// URL 拦截） ──
+    // ── workspace:// URL 拦截 ──
 
     /**
      * 拦截 workspace:// URL 并从 workspace 目录返回文件内容。
@@ -367,6 +372,8 @@ class BrowserSession(
     }
     fun appendAction(label: String) {
         lastActivityDate = System.currentTimeMillis()
+        // 工具调用时刷新保活倒计时，防止遮罩提前消失
+        if (_inUse.value) armInUseGraceRelease()
         val trimmed = label.trim()
         if (trimmed.isEmpty()) return
         val current = _recentActions.value
@@ -375,37 +382,43 @@ class BrowserSession(
         _screenshotEvent.tryEmit(Unit)
     }
 
-    // ── 任务窗口 ──
+    // ── 任务窗口（自动过期）──
+
+    private val evictionScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+
     fun startTaskWindow() {
-        currentTaskStartedAt = System.currentTimeMillis()
-        _taskWindowActive.value = true
+        _inUse.value = true
+        armInUseGraceRelease()
     }
 
-    fun clearTaskWindow() {
-        currentTaskStartedAt = null
-        _taskWindowActive.value = false
-    }
-
-    fun isWithinTaskWindow(): Boolean {
-        val started = currentTaskStartedAt ?: return false
-        return System.currentTimeMillis() - started < BrowserController.singleTaskTimeoutMs
+    /**
+     * 自动过期倒计时，每次工具调用（appendAction）重新刷新。
+     * 超时后 inUse = false → isAgentBusy = false → 遮罩消失。
+     */
+    private fun armInUseGraceRelease() {
+        inUseGraceJob?.cancel()
+        inUseGraceJob = evictionScope.launch {
+            delay(IMPLICIT_TAB_GRACE_MS)
+            _inUse.value = false
+            inUseGraceJob = null
+        }
     }
 
     fun stopCurrentTask() {
         pendingTaskJob?.cancel()
         pendingTaskJob = null
-        currentTaskStartedAt = null
-        _taskWindowActive.value = false
+        inUseGraceJob?.cancel()
+        inUseGraceJob = null
+        _inUse.value = false
         appendAction("AI task stopped by user")
     }
 
-    // ── 截图（对标 OpenMinis BrowserUseManager.captureLiveSnapshot） ──
+    // ── 截图 ──
     // ── JS Bridge 异步 Promise 支持 ──
     private var asyncJsDeferred: CompletableDeferred<String>? = null
 
     /**
      * 通过 JS bridge 执行异步 JavaScript（Promise 结果通过 bridge 回传）。
-     * 对标 OpenMinis BrowserUseManager.awaitPromiseJs
      */
     suspend fun evaluateAsyncJs(js: String, timeoutMs: Long = 30_000L): String? {
         val deferred = CompletableDeferred<String>()
@@ -434,7 +447,7 @@ class BrowserSession(
         return raw
     }
     /**
-     * 截图当前 WebView 内容。对标 OpenMinis captureWebViewBitmap。
+     * 截图当前 WebView 内容 captureWebViewBitmap。
      * 关键：WebView 可能未挂载到窗口（池化管理），width/height 为 0，
      * 此时需要手动测量布局后再截图，否则 bitmap 空或 1×1。
      */
@@ -455,7 +468,7 @@ class BrowserSession(
                 w = targetW
                 h = targetH
             }
-            val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+            val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.RGB_565)
             val canvas = Canvas(bitmap)
             webView.draw(canvas)
             bitmap

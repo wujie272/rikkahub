@@ -36,6 +36,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
 import me.rerere.rikkahub.R
+import kotlin.uuid.Uuid
+import androidx.compose.material3.FloatingActionButton
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.context.LocalNavController
@@ -44,6 +46,8 @@ import me.rerere.rikkahub.utils.RelativeTimeStrings
 import me.rerere.rikkahub.utils.formatRelativeAgo
 import me.rerere.rikkahub.utils.plus
 import me.rerere.rikkahub.workflow.model.TriggerSpec
+import me.rerere.rikkahub.workflow.model.WorkflowAction
+import kotlinx.serialization.json.buildJsonObject
 import me.rerere.rikkahub.workflow.model.WorkflowDefinition
 import me.rerere.rikkahub.workflow.model.WorkflowRunStatus
 import me.rerere.rikkahub.workflow.repository.WorkflowRepository.Loaded
@@ -77,6 +81,26 @@ fun WorkflowsScreen(vm: WorkflowsViewModel = koinViewModel()) {
                 scrollBehavior = scrollBehavior,
                 colors = CustomColors.topBarColors,
             )
+        },
+        floatingActionButton = {
+            val newName = stringResource(R.string.setting_page_workflows_new_workflow_name)
+            FloatingActionButton(onClick = {
+                val id = Uuid.random().toString()
+                vm.save(WorkflowDefinition(
+                    id = id,
+                    name = newName,
+                    trigger = TriggerSpec.Manual,
+                    actions = listOf(WorkflowAction(
+                        tool = "",
+                        args = buildJsonObject { },
+                        timeoutSeconds = 60,
+                    )),
+                    enabled = true,
+                ))
+                nav.navigate(Screen.WorkflowDetail(id = id, isNew = true))
+            }) {
+                Text("+", style = MaterialTheme.typography.headlineMedium)
+            }
         },
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         containerColor = CustomColors.topBarColors.containerColor,

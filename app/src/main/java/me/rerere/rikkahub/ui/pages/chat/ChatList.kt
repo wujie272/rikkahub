@@ -98,7 +98,6 @@ import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.ui.components.message.ChatMessage
-import me.rerere.rikkahub.ui.components.message.ToolStatusBar
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -142,10 +141,8 @@ fun ChatList(
     onJumpToMessage: (Int) -> Unit = {},
     onToolApproval: ((toolCallId: String, approved: Boolean, reason: String, scope: me.rerere.rikkahub.service.ChatService.ApprovalScope, toolName: String) -> Unit)? = null,
     onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
-    latestToolBlocks: List<me.rerere.ai.ui.UIMessagePart.Tool> = emptyList(),
     onOpenToolDetail: ((toolBlocks: List<me.rerere.ai.ui.UIMessagePart.Tool>, index: Int) -> Unit)? = null,
     onToggleFavorite: ((MessageNode) -> Unit)? = null,
-    knowledgeSources: List<me.rerere.rikkahub.service.KnowledgeSource> = emptyList(),
     onConversationSystemPromptChange: ((String?) -> Unit)? = null,
 ) {
     AnimatedContent(
@@ -188,9 +185,7 @@ fun ChatList(
                 animatedVisibilityScope = this@AnimatedContent,
                 onToolApproval = onToolApproval,
                 onToolAnswer = onToolAnswer,
-                latestToolBlocks = latestToolBlocks,
                 onOpenToolDetail = onOpenToolDetail,
-                knowledgeSources = knowledgeSources,
                 onToggleFavorite = onToggleFavorite,
                 onConversationSystemPromptChange = onConversationSystemPromptChange,
             )
@@ -222,10 +217,8 @@ private fun ChatListNormal(
     animatedVisibilityScope: AnimatedVisibilityScope,
     onToolApproval: ((toolCallId: String, approved: Boolean, reason: String, scope: me.rerere.rikkahub.service.ChatService.ApprovalScope, toolName: String) -> Unit)? = null,
     onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
-    latestToolBlocks: List<me.rerere.ai.ui.UIMessagePart.Tool> = emptyList(),
     onOpenToolDetail: ((toolBlocks: List<me.rerere.ai.ui.UIMessagePart.Tool>, index: Int) -> Unit)? = null,
     onToggleFavorite: ((MessageNode) -> Unit)? = null,
-    knowledgeSources: List<me.rerere.rikkahub.service.KnowledgeSource> = emptyList(),
     onConversationSystemPromptChange: ((String?) -> Unit)? = null,
 ) {
     val scope = rememberCoroutineScope()
@@ -389,7 +382,6 @@ private fun ChatListNormal(
                             onToolAnswer = onToolAnswer,
                             onOpenToolDetail = onOpenToolDetail,
                             lastMessage = index == lastMessageIndex,
-                            knowledgeSources = if (index == lastAssistantMessageIndex) knowledgeSources else emptyList(),
                         )
                     }
                 }
@@ -542,29 +534,13 @@ private fun ChatListNormal(
                 state = state
             )
 
-            // 底部：建议 + 状态条
-            val hasTools = latestToolBlocks.isNotEmpty()
-            val hasSuggestions = conversation.chatSuggestions.isNotEmpty() && !captureProgress
-            if (hasTools || hasSuggestions) {
-                Column(
+            // 底部：建议
+            if (conversation.chatSuggestions.isNotEmpty() && !captureProgress) {
+                ChatSuggestionsRow(
+                    conversation = conversation,
+                    onClickSuggestion = onClickSuggestion,
                     modifier = Modifier.align(Alignment.BottomCenter),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    if (hasSuggestions) {
-                        ChatSuggestionsRow(
-                            conversation = conversation,
-                            onClickSuggestion = onClickSuggestion,
-                            modifier = Modifier,
-                        )
-                    }
-                    if (hasTools) {
-                        ToolStatusBar(
-                            toolBlocks = latestToolBlocks,
-                            onOpenDetail = { blocks, index -> onOpenToolDetail?.invoke(blocks, index) },
-                            modifier = Modifier.padding(horizontal = 12.dp),
-                        )
-                    }
-                }
+                )
             }
         }
     }

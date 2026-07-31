@@ -87,7 +87,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.foundation.text.selection.SelectionContainer
 
-// ─── OpenMinis 颜色常量 ────────────────────────────────────────────────
+// ─── 颜色常量 ────────────────────────────────────────────────
 private val ToolCheckColor = Color(0xFF34C759) // iOS green
 private val ToolCancelColor = Color(0xFFFFCC00) // iOS yellow
 private val ToolMemoryAccent = Color(0xFFFF2D55) // iOS pink
@@ -99,14 +99,14 @@ private val BrowserUrlText = Color(0xFF595959)
 private const val VIEWPORT_UA_BREAKPOINT = 768
 
 /**
- * 实时浏览器截图 —— 每 3s 轮询 WebView，对标 OpenMinis 的 rememberBrowserLiveSnapshot。
+ * 实时浏览器截图 —— 每 3s 轮询 WebView 的 rememberBrowserLiveSnapshot。
  *
  * 当 browser_use 工具正在运行时，以固定间隔（3s）从 WebView 捕获当前帧。
  * 轮询方案确保浮窗截图持续更新，不会因为事件丢失而漏帧。
  *
  * @param toolName 工具名称，仅 "browser_use" 时生效
  * @param isLive 工具是否仍在运行/流式传输
- * @param intervalMs 轮询间隔（默认 3000ms，对标 OpenMinis）
+ * @param intervalMs 轮询间隔（默认 3000ms）
  * @return 当前 WebView 的 Bitmap 截图，或 null（无绑定/工具未运行）
  */
 @Composable
@@ -128,7 +128,7 @@ private fun rememberBrowserLiveSnapshot(
         // 首次捕获
         val first = BrowserController.captureLiveSnapshot()
         if (first != null) value = first
-        // 每 3s 轮询（对标 OpenMinis 无限循环）
+        // 每 3s 轮询
         while (true) {
             kotlinx.coroutines.delay(intervalMs)
             val next = BrowserController.captureLiveSnapshot() ?: continue
@@ -139,7 +139,7 @@ private fun rememberBrowserLiveSnapshot(
 }
 
 /**
- * 工具详情 Sheet — 对标 OpenMinis 的 ToolDetailSheet ("Minis Computer")
+ * 工具详情 Sheet
  *
  * 统一容器：顶部导航栏 + 工具专属内容 + 底部状态/翻页栏
  * 渲染在 ChatPage 层面（LazyColumn 外部），通过 ViewModel 状态控制
@@ -603,7 +603,7 @@ private fun ShellContent(
                     }
                 }
             }
-            // 运行中 CPU/MEM HUD（真实数据，对标 OpenMinis SystemResourceMonitor）
+            // 运行中 CPU/MEM HUD（真实数据 SystemResourceMonitor）
             if (isLive) {
                 val sheetMonitor = rememberSystemResourceMonitor(active = true)
                 Row(
@@ -794,7 +794,6 @@ private fun BrowserContent(
         isLive = isLive,
     )
 
-    // 对标 OpenMinis：produceState + BitmapFactory.decodeFile 直接解码保存截图
     val savedImagePath = images.firstOrNull()?.url
         ?.removePrefix("file://")
     val savedBitmap by produceState<Bitmap?>(
@@ -831,7 +830,7 @@ private fun BrowserContent(
             }
         }
 
-        // 截图（对标 OpenMinis：liveBitmap → savedBitmap 统一渲染）
+        // 截图
         if (screenshotBitmap != null) {
             Spacer(Modifier.height(12.dp))
             val aspect = screenshotBitmap.width.toFloat() / screenshotBitmap.height.coerceAtLeast(1)
@@ -865,7 +864,7 @@ private fun BrowserContent(
             }
         }
 
-        // Result（对标 OpenMinis：block.content）
+        // Result
         if (outputText.isNotEmpty()) {
             Spacer(Modifier.height(12.dp))
             Column(

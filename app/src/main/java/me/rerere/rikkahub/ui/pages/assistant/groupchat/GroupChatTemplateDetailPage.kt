@@ -17,7 +17,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
+
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -37,7 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import kotlinx.coroutines.Dispatchers
+
 import kotlinx.coroutines.launch
 import me.rerere.ai.provider.ModelType
 import me.rerere.hugeicons.HugeIcons
@@ -75,7 +75,7 @@ fun GroupChatTemplateDetailPage(id: String) {
     var showHostPromptDialog by remember(template?.id) { mutableStateOf(false) }
     var showSeatPromptDialog by remember(template?.id) { mutableStateOf(false) }
     var seatPromptDialogSeatId by remember(template?.id) { mutableStateOf<Uuid?>(null) }
-    var showModeDialog by remember { mutableStateOf(false) }
+
     val scope = rememberCoroutineScope()
 
     Scaffold(
@@ -213,6 +213,42 @@ fun GroupChatTemplateDetailPage(id: String) {
             }
 
             // ── Members section ──
+
+            // ── Context rounds ──
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = CustomColors.cardColorsOnSurfaceContainer.containerColor),
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("上下文轮数", style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            text = "群聊历史消息保留的最大轮数（每轮 = 所有座位各发言一次）。超过此轮数的早期消息会被裁剪以节省 Token。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+
+                        var editRounds by remember(currentTemplate) { mutableStateOf(currentTemplate.contextRounds.toString()) }
+
+                        OutlinedTextField(
+                            value = editRounds,
+                            onValueChange = { value ->
+                                val filtered = value.filter { it.isDigit() }
+                                editRounds = filtered
+                                filtered.toIntOrNull()?.let { rounds ->
+                                    vm.updateContextRounds(rounds)
+                                }
+                            },
+                            label = { Text("轮数（3-50）") },
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                            singleLine = true,
+                            supportingText = {
+                                Text("当前值：${currentTemplate.contextRounds} 轮")
+                            },
+                        )
+                    }
+                }
+            }
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
@@ -256,116 +292,6 @@ fun GroupChatTemplateDetailPage(id: String) {
                 }
             }
 
-            // ── Quick setup (debate presets) ──
-            item {
-                var showQuickSetup by remember { mutableStateOf(false) }
-
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    ),
-                ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Icon(
-                                HugeIcons.Zap,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(18.dp),
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                "快速配置",
-                                style = MaterialTheme.typography.titleSmall,
-                                modifier = Modifier.weight(1f),
-                            )
-                            if (currentTemplate.seats.isNotEmpty()) {
-                                TextButton(
-                                    onClick = { showQuickSetup = !showQuickSetup },
-                                ) {
-                                    Text(
-                                        if (showQuickSetup) "收起" else "展开",
-                                        style = MaterialTheme.typography.bodySmall,
-                                    )
-                                }
-                            }
-                        }
-
-                        if (currentTemplate.seats.isEmpty()) {
-                            Text(
-                                text = "先添加助手成员，然后使用辩论模板快速配置角色",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(top = 4.dp),
-                            )
-                        }
-
-                        if (currentTemplate.seats.isNotEmpty() && showQuickSetup) {
-                            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-
-                            Text(
-                                "辩论预设（将自动配置角色提示词）",
-                                style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier.padding(bottom = 8.dp),
-                            )
-
-                            DebatePresetButton(
-                                emoji = "🎯",
-                                name = "基础辩论",
-                                desc = "3角色：正方 + 反方 + 主持人",
-                                accentColor = MaterialTheme.colorScheme.primary,
-                                seats = currentTemplate.seats.take(3),
-                                settings = settings,
-                                onApply = { prompts ->
-                                    scope.launch(Dispatchers.IO) {
-                                        applyDebatePrompts(vm, currentTemplate.seats, prompts)
-                                    }
-                                    showQuickSetup = false
-                                },
-                            )
-
-                            Spacer(Modifier.height(8.dp))
-
-                            DebatePresetButton(
-                                emoji = "🏛️",
-                                name = "专业辩论",
-                                desc = "4角色：正方 + 反方 + 中立分析师 + 主持人",
-                                accentColor = MaterialTheme.colorScheme.secondary,
-                                seats = currentTemplate.seats.take(4),
-                                settings = settings,
-                                onApply = { prompts ->
-                                    scope.launch(Dispatchers.IO) {
-                                        applyDebatePrompts(vm, currentTemplate.seats, prompts)
-                                    }
-                                    showQuickSetup = false
-                                },
-                            )
-
-                            Spacer(Modifier.height(8.dp))
-
-                            DebatePresetButton(
-                                emoji = "🎓",
-                                name = "专家论坛",
-                                desc = "4角色：法律 + 经济 + 技术专家 + 主持人",
-                                accentColor = MaterialTheme.colorScheme.tertiary,
-                                seats = currentTemplate.seats.take(4),
-                                settings = settings,
-                                onApply = { prompts ->
-                                    scope.launch(Dispatchers.IO) {
-                                        applyDebatePrompts(vm, currentTemplate.seats, prompts)
-                                    }
-                                    showQuickSetup = false
-                                },
-                            )
-                        }
-                    }
-                }
-            }
-
             // ── Seat cards ──
             itemsIndexed(currentTemplate.seats, key = { _, seat -> seat.id }) { index, seat ->
                 val assistant = settings.assistants.firstOrNull { it.id == seat.assistantId }
@@ -395,7 +321,7 @@ fun GroupChatTemplateDetailPage(id: String) {
                 )
             }
 
-            // ── Start group chat button ──
+            // ── Start group chat ──
             item {
                 Column(
                     modifier = Modifier.fillMaxWidth(),
@@ -404,7 +330,12 @@ fun GroupChatTemplateDetailPage(id: String) {
                     Button(
                         onClick = {
                             if (currentTemplate.seats.isEmpty()) return@Button
-                            showModeDialog = true
+                            scope.launch {
+                                val convId = chatService.startGroupChatConversation(
+                                    templateId = currentTemplate!!.id,
+                                )
+                                navController.navigate(Screen.Chat(id = convId.toString()))
+                            }
                         },
                         modifier = Modifier
                             .fillMaxWidth()
@@ -479,17 +410,5 @@ fun GroupChatTemplateDetailPage(id: String) {
         },
     )
 
-    StartGroupChatModeDialog(
-        show = showModeDialog,
-        onDismiss = { showModeDialog = false },
-        onStartChat = {
-            scope.launch {
-                val convId = chatService.startGroupChatConversation(
-                    templateId = currentTemplate!!.id,
-                    userMessage = emptyList(),
-                )
-                navController.navigate(Screen.Chat(id = convId.toString()))
-            }
-        },
-    )
+
 }

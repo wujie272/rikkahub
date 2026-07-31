@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.service
 
+import androidx.core.app.Person
 import android.app.Application
 import android.app.PendingIntent
 import android.content.Context
@@ -19,11 +20,14 @@ import me.rerere.rikkahub.CHAT_COMPLETED_NOTIFICATION_CHANNEL_ID
 import me.rerere.rikkahub.CHAT_LIVE_UPDATE_NOTIFICATION_CHANNEL_ID
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.RouteActivity
+import me.rerere.rikkahub.ui.activity.RikkaBubbleActivity
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.event.AppEvent
 import me.rerere.rikkahub.data.event.AppEventBus
 import me.rerere.rikkahub.utils.cancelNotification
 import me.rerere.rikkahub.utils.sendNotification
+import androidx.core.content.pm.ShortcutInfoCompat
+import androidx.core.content.pm.ShortcutManagerCompat
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.uuid.Uuid
 
@@ -96,6 +100,34 @@ class ChatNotificationManager(
         senderName: String,
         contentPreview: String
     ) {
+        val bubbleIntent = PendingIntent.getActivity(
+            context,
+            conversationId.hashCode() + 20000,
+            Intent(context, RikkaBubbleActivity::class.java).apply {
+                putExtra(RikkaBubbleActivity.EXTRA_CONVERSATION_ID, conversationId.toString())
+                putExtra(RikkaBubbleActivity.EXTRA_SENDER_NAME, senderName)
+                putExtra(RikkaBubbleActivity.EXTRA_CONTENT_PREVIEW, contentPreview)
+            },
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        // 创建 Person 对象（气泡 Conversation 要求）
+        val senderPerson = Person.Builder()
+            .setName(senderName)
+            .setImportant(true)
+            .build()
+
+        // 创建并发布动态 Shortcut（气泡 Conversation 要求）
+        val shortcutId = "chat_${conversationId.toString().take(8)}"
+        val shortcut = ShortcutInfoCompat.Builder(context, shortcutId)
+            .setShortLabel(senderName)
+            .setLongLived(true)
+            .setIntent(Intent(Intent.ACTION_DEFAULT).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            })
+            .build()
+        ShortcutManagerCompat.pushDynamicShortcut(context, shortcut)
+
         context.sendNotification(
             channelId = CHAT_COMPLETED_NOTIFICATION_CHANNEL_ID,
             notificationId = 1
@@ -106,6 +138,9 @@ class ChatNotificationManager(
             useDefaults = true
             category = NotificationCompat.CATEGORY_MESSAGE
             contentIntent = getPendingIntent(context, conversationId)
+            this.bubbleIntent = bubbleIntent
+            this.person = senderPerson
+            this.shortcutId = shortcutId
         }
     }
 

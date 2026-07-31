@@ -52,4 +52,9 @@
   <string name="log_page_delete_title">删除日志</string>
   <string name="log_page_delete_confirm">确定要删除这条日志吗？</string>
   <string name="log_page_empty">暂无请求日志</string>
+
+    <!-- 气泡通知 -->
+    <string name="action_close">关闭</string>
+    <string name="bubble_no_content">无内容</string>
+    <string name="bubble_open_in_app">打开应用</string>
 </resources>

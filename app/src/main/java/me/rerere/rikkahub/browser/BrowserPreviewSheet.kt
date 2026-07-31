@@ -83,7 +83,7 @@ import me.rerere.hugeicons.stroke.Tick01
 import java.net.URLEncoder
 
 /**
- * 聊天内嵌浏览器预览 Sheet — 对标 OpenMinis Android 的 BrowserSheet.kt。
+ * 聊天内嵌浏览器预览 Sheet
  *
  * 以 ModalBottomSheet 形式在 ChatPage 内部弹出，显示 WebView 实时预览。
  * AI 驱动浏览时覆盖呼吸灯遮罩，用户可手动接管或关闭。
@@ -99,12 +99,12 @@ fun BrowserPreviewSheet(
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
 
-    // ── 多标签页状态：从 BrowserController 的 Tab Pool 读取（对标 OpenMinis BrowserTabPool） ──
+    // ── 多标签页状态：从 BrowserController 的 Tab Pool 读取 ──
     val tabs by BrowserController.tabs.collectAsState()
     val selectedTabIndex by BrowserController.selectedTabIndex.collectAsState()
     val selectedTab = tabs.getOrNull(selectedTabIndex)
 
-    // 从当前选中标签的 StateFlow 读取（对标 OpenMinis BrowserUseManager）
+    // 从当前选中标签的 StateFlow 读取
     val currentUrl = selectedTab?.currentUrl?.collectAsState()?.value.orEmpty()
     val pageTitle = selectedTab?.pageTitle?.collectAsState()?.value ?: ""
     val isLoading = selectedTab?.isLoading?.collectAsState()?.value ?: false
@@ -128,7 +128,7 @@ fun BrowserPreviewSheet(
     val accent = MaterialTheme.colorScheme.primary
 
     // 加载初始 URL
-    // 启动空闲回收定时器（对标 OpenMinis BrowserTabPool.evictionJob）
+    // 启动空闲回收定时器
     LaunchedEffect(Unit) {
         BrowserController.startIdleSweep()
     }
@@ -146,7 +146,7 @@ fun BrowserPreviewSheet(
         dragHandle = { CompactDragHandle() },
     ) {
         Column(modifier = Modifier.fillMaxSize().imePadding()) {
-            // ── 标题栏（对标 OpenMinis StandardChatSheetHeader） ──
+            // ── 标题栏 ──
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -154,7 +154,7 @@ fun BrowserPreviewSheet(
                     .padding(horizontal = 8.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                // 左侧：UA 设置按钮（对标 OpenMinis leadingAction）
+                // 左侧：UA 设置按钮
                 IconButton(
                     onClick = { showSettings = true },
                     modifier = Modifier.size(36.dp),
@@ -196,7 +196,7 @@ fun BrowserPreviewSheet(
                 }
             }
 
-            // ── Tab Bar（对标 OpenMinis BrowserTabPool） ──
+            // ── Tab Bar ──
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -318,12 +318,12 @@ fun BrowserPreviewSheet(
                 }
             }
 
-            // 加载进度条（不确定进度，对标 OpenMinis）
+            // 加载进度条（不确定进度）
             AnimatedVisibility(visible = isLoading) {
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth().height(2.dp))
             }
 
-            // ── WebView 区域（对标 OpenMinis BrowserWebView） ──
+            // ── WebView 区域 ──
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 selectedTab?.let { tab ->
                     BrowserWebView(
@@ -428,7 +428,7 @@ fun BrowserPreviewSheet(
     // 点击标题栏右侧 ✕ 按钮才会销毁所有标签页并关闭 Sheet。
     // 会话由以下机制清理：
     //   1. 点击 ✕ 按钮显式关闭
-    //   2. AI 调用 browser_done 时 clearTaskWindow
+    //   2. AI 停止调工具 15s 后自动过期释放 inUse
     //   3. 空闲回收定时器轮询清理过期标签页
     //   4. 新会话接管时跳过旧会话
 }
@@ -466,7 +466,7 @@ private fun TabChip(
 
 
 /**
- * 呼吸灯遮罩 — 对标 OpenMinis 的 AgentBrowsingOverlay
+ * 呼吸灯遮罩
  */
 @Composable
 private fun AgentBrowsingOverlay(
@@ -505,7 +505,7 @@ private fun AgentBrowsingOverlay(
 }
 
 /**
- * WebView 封装 — 对标 OpenMinis BrowserWebView
+ * WebView 封装
  *
  * 关键：通过 OnTouchListener 调用 requestDisallowInterceptTouchEvent(true)，
  * 阻止父 View（ModalBottomSheet）劫持触摸事件，确保 WebView 可滚动。
@@ -553,7 +553,7 @@ private fun BrowserWebView(
 
 
 /**
- * 紧凑拖拽手柄 — 对标 OpenMinis CompactDragHandle
+ * 紧凑拖拽手柄
  */
 @Composable
 private fun CompactDragHandle() {

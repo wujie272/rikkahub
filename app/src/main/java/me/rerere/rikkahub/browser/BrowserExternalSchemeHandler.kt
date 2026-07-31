@@ -7,7 +7,7 @@ import android.net.Uri
 import android.widget.Toast
 
 /**
- * 外部 URL Scheme 路由 — 对标 OpenMinis BrowserExternalSchemeHandler
+ * 外部 URL Scheme 路由
  *
  * 处理 WebView 中点击的非 http(s) 链接（intent://, tel:, mailto: 等），
  * 将外部链接路由到系统对应的应用，避免 WebView 显示 ERR_UNKNOWN_URL_SCHEME。

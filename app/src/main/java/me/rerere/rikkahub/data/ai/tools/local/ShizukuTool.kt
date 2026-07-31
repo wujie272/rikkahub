@@ -52,13 +52,13 @@ fun shizukuRunCommandTool(): Tool = Tool(
             val state = ShizukuManager.snapshot.value.state
             val recovery = when (state) {
                 ShizukuManager.State.NOT_INSTALLED ->
-                    "请安装 Shizuku 或 AXManager：https://github.com/RikkaApps/Shizuku/releases"
+                    "Install Shizuku or AXManager: https://github.com/RikkaApps/Shizuku/releases"
                 ShizukuManager.State.NOT_RUNNING ->
-                    "Shizuku 已安装但服务未启动，请打开 Shizuku 应用并启动服务"
+                    "Shizuku is installed but the service is not running. Open the Shizuku app and start the service."
                 ShizukuManager.State.NEED_PERMISSION ->
-                    "Shizuku 服务运行中但未授权 RikkaHub，请在 Shizuku 中授权"
+                    "Shizuku is running but RikkaHub is not authorized. Grant permission in the Shizuku app."
                 else ->
-                    "Shizuku 未就绪（状态：$state）"
+                    "Shizuku is not ready (state=$state)"
             }
             return@Tool listOf(
                 UIMessagePart.Text(

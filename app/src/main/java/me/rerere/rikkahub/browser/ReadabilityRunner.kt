@@ -63,25 +63,43 @@ object ReadabilityRunner {
         val context = this.context.applicationContext ?: return null
         val library = loadLibrary(context) ?: return null
         return withTimeoutOrNull(timeoutMs) {
-            // Inject the library, then run Readability against a cloned document.
-            // Cloning is critical — Readability's `parse()` mutates the document it
-            // operates on. Running against the live DOM would scrub the page from
-            // under any subsequent browser_get_dom / browser_click call.
-            val payload = """(function(){
-                try {
-                    if (typeof Readability === 'undefined') { $library }
-                    var doc = document.cloneNode(true);
-                    var article = new Readability(doc).parse();
-                    if (!article) return JSON.stringify(null);
-                    return JSON.stringify({
-                        textContent: (article.textContent || '').replace(/\s+/g,' ').trim(),
-                        title: article.title || '',
-                        byline: article.byline || '',
-                        siteName: article.siteName || '',
-                        length: (article.textContent || '').length
-                    });
-                } catch(e) { return JSON.stringify({error: String(e)}); }
-            })()"""
+            // 先检查 Readability 是否已加载，避免每次传 90KB 字符串
+            val loaded = this@runReadability.evaluateJavascriptAsync(
+                "(function(){return typeof Readability !== 'undefined';})()", 1_000L
+            )
+            val payload = if (loaded == "true") {
+                """(function(){
+                    try {
+                        var doc = document.cloneNode(true);
+                        var article = new Readability(doc).parse();
+                        if (!article) return JSON.stringify(null);
+                        return JSON.stringify({
+                            textContent: (article.textContent || '').replace(/\s+/g,' ').trim(),
+                            title: article.title || '',
+                            byline: article.byline || '',
+                            siteName: article.siteName || '',
+                            length: (article.textContent || '').length
+                        });
+                    } catch(e) { return JSON.stringify({error: String(e)}); }
+                })()"""
+            } else {
+                // 首次注入：附带 90KB 库
+                """(function(){
+                    try {
+                        $library
+                        var doc = document.cloneNode(true);
+                        var article = new Readability(doc).parse();
+                        if (!article) return JSON.stringify(null);
+                        return JSON.stringify({
+                            textContent: (article.textContent || '').replace(/\s+/g,' ').trim(),
+                            title: article.title || '',
+                            byline: article.byline || '',
+                            siteName: article.siteName || '',
+                            length: (article.textContent || '').length
+                        });
+                    } catch(e) { return JSON.stringify({error: String(e)}); }
+                })()"""
+            }
             val raw = this@runReadability.evaluateJavascriptAsync(payload, timeoutMs)
             parseTextContent(raw)
         }

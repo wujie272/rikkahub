@@ -16,9 +16,8 @@ private const val PREFS_KEY_AUTO_APPROVE = "auto_approve_ids"
  * Process-scoped registry of conversation ids that run "headless" — i.e. with no
  * in-app chat UI a user can tap into. Two related-but-distinct concepts live here:
  *
- *  1. **Browser-headless routing** (`isHeadless`) — should browser tools run via
- *     `HeadlessBrowserSessionPool` (no visible Activity) instead of launching the
- *     in-app `BrowserActivity`? Also gates the fast-path router skip in `ChatService`,
+ *  1. **Browser-headless routing** (`isHeadless`) — should browser tools run without
+ *     a visible UI? Also gates the fast-path router skip in `ChatService`,
  *     and the sub-agent recursion guard. Set via `mark()` or `markBrowserHeadless()`.
  *
  *  2. **Auto-approval** (`shouldAutoApprove`) — should side-effecting tools

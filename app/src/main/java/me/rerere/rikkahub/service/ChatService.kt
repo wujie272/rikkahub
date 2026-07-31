@@ -59,6 +59,7 @@ import me.rerere.rikkahub.data.ai.tools.createConversationTools
 import me.rerere.rikkahub.data.ai.tools.LocalTools
 import me.rerere.rikkahub.data.ai.tools.createSearchTools
 import me.rerere.rikkahub.data.ai.tools.createSkillTools
+import me.rerere.rikkahub.data.ai.tools.createKnowledgeBaseTools
 import me.rerere.rikkahub.data.ai.tools.createWorkspaceTools
 import me.rerere.rikkahub.data.files.SkillManager
 import me.rerere.rikkahub.data.ai.transformers.Base64ImageToLocalFileTransformer
@@ -83,6 +84,11 @@ import me.rerere.rikkahub.data.datastore.getCurrentChatModel
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
+
+import me.rerere.rikkahub.service.buildHiddenContinuePrompt
+import me.rerere.rikkahub.service.applyContinuationDedupe
+import me.rerere.rikkahub.service.ContinuationDedupeConfig
+import me.rerere.rikkahub.service.HiddenContinueRequestTransformer
 import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.replaceRegexes
 import me.rerere.rikkahub.data.model.toMessageNode
@@ -103,6 +109,8 @@ import java.util.concurrent.ConcurrentHashMap
 import kotlin.uuid.Uuid
 
 private const val TAG = "ChatService"
+/** 群聊上下文保留的最大轮数（每轮 = 所有座位各发言一次）。超过此轮数的历史消息会被裁剪。 */
+// MAX_GROUP_CHAT_ROUNDS moved to template.contextRounds
 
 internal fun backgroundTextGenerationParams(
     model: Model,
@@ -112,15 +120,6 @@ internal fun backgroundTextGenerationParams(
     reasoningLevel = reasoningLevel,
     customHeaders = model.customHeaders,
     customBody = model.customBodies,
-)
-
-/** 知识库引用来源 */
-data class KnowledgeSource(
-    val fileName: String,
-    val filePath: String = "",
-    val content: String,
-    val score: Float,
-    val chunkIndex: Int,
 )
 
 data class ChatError(
@@ -222,10 +221,6 @@ class ChatService(
     }
 
     // 群聊执行引擎（将在后续步骤中集成到 ChatService 内部）
-    // 知识库来源缓存（每次发送消息时更新）
-    val knowledgeSources: MutableStateFlow<Map<Uuid, List<KnowledgeSource>>> = MutableStateFlow(emptyMap())
-
-    // 统一会话管理
     private val sessions = ConcurrentHashMap<Uuid, ConversationSession>()
     private val _sessionsVersion = MutableStateFlow(0L)
 
@@ -817,6 +812,8 @@ class ChatService(
         messageRange: ClosedRange<Int>? = null,
         modelOverride: Model? = null,
         continueAddendum: String? = null,
+        autoContinueAttemptsRemaining: Int = 1,
+        continuationDedupeConfig: ContinuationDedupeConfig? = null,
     ) {
         val settings = settingsStore.settingsFlow.first()
         // Resolve the assistant from this conversation's own assistantId — the global
@@ -855,6 +852,8 @@ class ChatService(
             model.displayName
         }
 
+        var latestFinishReasons: Set<String> = emptySet()
+
         runCatching {
             // reset suggestions
             updateConversation(conversationId, initialConversation.copy(chatSuggestions = emptyList()))
@@ -890,19 +889,8 @@ class ChatService(
                         .ConversationSystemAddendum.get(conversationId)
                     if (!existing.isNullOrBlank()) append(existing).appendLine()
 
-                    // 知识库上下文注入
-                    val kbContext = injectKnowledgeBaseContext(
-                        conversationId = conversationId,
-                        messages = conversation.currentMessages,
-                    )
-                    if (kbContext != null) append(kbContext)
-
-                    // 自动继续指令（不污染对话历史，仅本次生成生效）
-                    if (continueAddendum != null) {
-                        appendLine()
-                        append(continueAddendum)
-                    }
-                }.takeIf { it.isNotBlank() || continueAddendum != null },
+                    // 自动继续指令已由 HiddenContinueRequestTransformer 处理
+                }.takeIf { it.isNotBlank() },
                 isToolAutoApproved = { toolName ->
                     // YOLO mode ("I AM STUPID" toggle in Settings → Tool approvals): every
                     // tool auto-approves. User opted into this explicitly. HARDLINE still
@@ -960,7 +948,9 @@ class ChatService(
                     addAll(inputTransformers)
                     add(templateTransformer)
                     add(workspaceReminderTransformer)
-
+                    if (continueAddendum != null) {
+                        add(HiddenContinueRequestTransformer(continueAddendum))
+                    }
                 },
                 outputTransformers = outputTransformers,
                 tools = buildList {
@@ -986,6 +976,9 @@ class ChatService(
                         addAll(createConversationTools(conversationRepo, assistant.id))
                     }
                     addAll(createWorkspaceToolsIfReady(assistant.workspaceId?.toString(), conversation.workspaceCwd))
+                    if (assistant.enabledKnowledgeBaseIds.isNotEmpty()) {
+                        addAll(createKnowledgeBaseTools(knowledgeService))
+                    }
                     if (assistant.enabledSkills.isNotEmpty()) {
                         addAll(
                             createSkillTools(
@@ -1072,9 +1065,13 @@ class ChatService(
                             ?.toText()?.take(50)?.trim() ?: "",
                     )
                 )
-            }.collect { chunk ->
+        }.collect { chunk ->
                 when (chunk) {
                     is GenerationChunk.Messages -> {
+                        if (chunk.finishReasons.isNotEmpty()) {
+                            latestFinishReasons = chunk.finishReasons
+                        }
+
                         val updatedConversation = getConversationFlow(conversationId).value
                             .updateCurrentMessages(chunk.messages)
                         updateConversation(conversationId, updatedConversation)
@@ -1123,28 +1120,57 @@ class ChatService(
                 Log.w(TAG, "handleMessageComplete: failure-path save failed", saveErr)
             }
 
-            // ═══ 自动继续逻辑 ═══
-            // 保留失败的回复，注入 continue 指令让 LLM 从断点继续
+            // ═══ 自动继续逻辑（FLIT 风格：隐藏指令 + 去重） ═══
+            // 保留失败的回复，注入隐藏 continue 指令让 LLM 从断点继续
             if (assistant.autoContinueOnError) {
                 val attemptCount = continueAttempts.getOrDefault(conversationId, 0)
                 if (attemptCount < assistant.maxContinueCount) {
                     continueAttempts[conversationId] = attemptCount + 1
-                    Log.i(TAG, "autoContinue: attempt ${attemptCount + 1}/${assistant.maxContinueCount} for $conversationId")
+                    Log.i(TAG, "autoContinue (error): attempt ${attemptCount + 1}/${assistant.maxContinueCount} for $conversationId")
 
                     // 解析继续模型（如果指定了）
                     val continueModel = if (assistant.continueModelId != null) {
                         settings.findModelById(assistant.continueModelId)
                     } else null
 
-                    // 保留失败的回复，注入继续指令
+                    // 取最后一条 assistant 消息的文本，作为继续的上下文
+                    val lastAssistantText = getConversationFlow(conversationId).value
+                        .currentMessages
+                        .lastOrNull { it.role == MessageRole.ASSISTANT }
+                        ?.toText()
+                        ?.trim()
+                        .orEmpty()
+
+                    val continuePrompt = if (lastAssistantText.isNotBlank()) {
+                        buildHiddenContinuePrompt(
+                            previousAssistantText = lastAssistantText,
+                        )
+                    } else {
+                        """
+                        |Continue from where you left off.
+                        |Do NOT repeat what you already wrote.
+                        |Do NOT re-execute tools that have already completed successfully.
+                        |Error: ${error.message?.take(200) ?: error.javaClass.simpleName}
+                        """.trimMargin()
+                    }
+
+                    // 保留失败的回复，注入隐藏继续指令
                     handleMessageComplete(
                         conversationId,
                         modelOverride = continueModel,
-                        continueAddendum = buildString {
-                            appendLine("Your previous response was interrupted by a temporary error. Continue from where you left off.")
-                            appendLine("Do NOT repeat what you already wrote. Do NOT re-execute tools that have already completed successfully.")
-                            appendLine("Error that caused the interruption: ${error.message?.take(200) ?: error.javaClass.simpleName}")
-                        },
+                        continueAddendum = continuePrompt,
+                        autoContinueAttemptsRemaining = 0,
+                        continuationDedupeConfig = if (lastAssistantText.isNotBlank()) {
+                            val lastMsg = getConversationFlow(conversationId).value
+                                .currentMessages
+                                .lastOrNull { it.role == MessageRole.ASSISTANT }
+                            if (lastMsg != null) {
+                                ContinuationDedupeConfig(
+                                    targetMessageId = lastMsg.id,
+                                    originalText = lastAssistantText,
+                                )
+                            } else null
+                        } else null,
                     )
                     return@onFailure
                 }
@@ -1160,8 +1186,62 @@ class ChatService(
             // 生成成功，清除继续计数器
             continueAttempts.remove(conversationId)
 
-            val finalConversation = getConversationFlow(conversationId).value
+            var finalConversation = getConversationFlow(conversationId).value
+
+            // 去重：如果这是自动继续的结果，移除 LLM 可能重复的原文开头
+            val dedupeConfig = continuationDedupeConfig
+            if (dedupeConfig != null) {
+                val deduped = applyContinuationDedupe(finalConversation, dedupeConfig)
+                if (deduped != finalConversation) {
+                    finalConversation = deduped
+                    updateConversation(conversationId, deduped)
+                }
+            }
+
             saveConversation(conversationId, finalConversation)
+
+            // 检测截断并自动继续（基于 finishReasons，来自 FLIT 逻辑）
+            val shouldAutoContinue = autoContinueAttemptsRemaining > 0 &&
+                assistant.autoContinueOnError &&
+                latestFinishReasons.any { reason ->
+                    when (reason.trim().lowercase(java.util.Locale.US)) {
+                        "length", "max_tokens", "max_output_tokens",
+                        "max_tokens_exceeded", "token_limit_reached" -> true
+                        else -> false
+                    }
+                }
+            if (shouldAutoContinue) {
+                val lastMessage = finalConversation.currentMessages.lastOrNull()
+                if (lastMessage != null && lastMessage.role == MessageRole.ASSISTANT) {
+                    val text = lastMessage.toText().trim()
+                    if (text.isNotBlank()) {
+                        val attemptCount = continueAttempts.getOrDefault(conversationId, 0)
+                        if (attemptCount < assistant.maxContinueCount) {
+                            continueAttempts[conversationId] = attemptCount + 1
+                            Log.i(TAG, "autoContinue (truncation): attempt ${attemptCount + 1}/${assistant.maxContinueCount} for $conversationId, reasons=$latestFinishReasons")
+
+                            val continueModel = if (assistant.continueModelId != null) {
+                                settings.findModelById(assistant.continueModelId)
+                            } else null
+
+                            val continuePrompt = buildHiddenContinuePrompt(
+                                previousAssistantText = text,
+                            )
+
+                            handleMessageComplete(
+                                conversationId,
+                                modelOverride = continueModel,
+                                autoContinueAttemptsRemaining = autoContinueAttemptsRemaining - 1,
+                                continuationDedupeConfig = ContinuationDedupeConfig(
+                                    targetMessageId = lastMessage.id,
+                                    originalText = text,
+                                ),
+                            )
+                            return@onSuccess
+                        }
+                    }
+                }
+            }
 
             launchWithConversationReference(conversationId) {
                 generateTitle(conversationId, finalConversation)
@@ -1858,7 +1938,7 @@ class ChatService(
         val conversation = Conversation(
             id = conversationId,
             assistantId = firstAssistantId,
-            title = template.name.ifBlank { "群聊" },
+            title = "",
             groupChatTemplateId = templateId,
             messageNodes = emptyList(),
         )
@@ -1974,6 +2054,7 @@ class ChatService(
         if (resolvedSpeakers.isEmpty()) return
 
         var runningMessages = baseMessages
+        val baseMessageCount = baseMessages.size
         val speakersGenerated = mutableListOf<GroupChatSeat>()
 
         // ── 阶段 1：为每个座位生成回复 ──
@@ -2005,8 +2086,26 @@ class ChatService(
                 null
             }
 
+            val contextForSeat = if (runningMessages.size > baseMessageCount + template.contextRounds * template.seats.size) {
+                val seatDisplayNames = template.buildSeatDisplayNames(
+                    assistantsById = settings.assistants.associateBy { it.id },
+                    defaultName = "Assistant",
+                )
+                val trimmedHistory = trimGroupChatContextForSeat(
+                    messages = baseMessages,
+                    seatId = seat.id,
+                    template = template,
+                    seatDisplayNames = seatDisplayNames,
+                    maxRounds = template.contextRounds,
+                )
+                val currentRoundResponses = runningMessages.drop(baseMessageCount)
+                trimmedHistory + currentRoundResponses
+            } else {
+                runningMessages
+            }
+
             val promptMessages = buildGroupChatPromptMessagesForSeat(
-                messages = runningMessages,
+                messages = contextForSeat,
                 settings = settings,
                 template = template,
                 seatId = seat.id,
@@ -2296,8 +2395,26 @@ class ChatService(
                     null
                 }
 
+                val interContextForSeat = if (runningMessages.size > baseMessageCount + template.contextRounds * template.seats.size) {
+                    val seatDisplayNames = template.buildSeatDisplayNames(
+                        assistantsById = settings.assistants.associateBy { it.id },
+                        defaultName = "Assistant",
+                    )
+                    val trimmedHistory = trimGroupChatContextForSeat(
+                        messages = baseMessages,
+                        seatId = speaker.id,
+                        template = template,
+                        seatDisplayNames = seatDisplayNames,
+                        maxRounds = template.contextRounds,
+                    )
+                    val currentRoundResponses = runningMessages.drop(baseMessageCount)
+                    trimmedHistory + currentRoundResponses
+                } else {
+                    runningMessages
+                }
+
                 val interPromptMessages = buildGroupChatPromptMessagesForSeat(
-                    messages = runningMessages,
+                    messages = interContextForSeat,
                     settings = settings,
                     template = template,
                     seatId = speaker.id,
@@ -2393,6 +2510,13 @@ class ChatService(
 
         // 保存对话
         saveConversation(conversationId, getConversationFlow(conversationId).value)
+        // 生成标题和推荐（与普通对话的 .onSuccess 逻辑一致）
+        launchWithConversationReference(conversationId) {
+            generateTitle(conversationId, getConversationFlow(conversationId).value)
+        }
+        launchWithConversationReference(conversationId) {
+            generateSuggestion(conversationId, getConversationFlow(conversationId).value)
+        }
     }
 
     /**
@@ -2659,7 +2783,7 @@ class ChatService(
         val convMutex = mutexFor(conversationId)
         // cancelAndJoin BEFORE the mutex so the cancelled coroutine can drain its own
         // writes (which may try to acquire the same mutex via their save path).
-        sessions[conversationId]?.getJob()?.let { runCatching { it.cancelAndJoin() } }
+        sessions[conversationId]?.getJob()?.cancelAndJoin()
 
         convMutex.withLock {
             // Hydrate from disk so we mark Pending tools cancelled even when the user
@@ -2691,58 +2815,41 @@ class ChatService(
         }
     }
 
+
     /**
-     * 从关联的知识库中搜索相关上下文，格式化为 system prompt addendum
+     * 裁剪群聊历史消息，仅保留对指定座位相关的上下文。
+     *
+     * 策略：
+     * 1. 保留最近 N 轮的所有消息
+     * 2. 保留所有 @该座位 的消息（确保被提及的上下文不丢失）
+     * 3. 按原始顺序排序
+     *
+     * 当历史消息不足 N 轮时，直接返回原始消息列表（无裁剪）。
      */
-    private suspend fun injectKnowledgeBaseContext(
-        conversationId: Uuid,
+    private fun trimGroupChatContextForSeat(
         messages: List<UIMessage>,
-    ): String? {
-        val conversation = getConversationFlow(conversationId).value
-        val kbId = conversation.knowledgeBaseId?.toString() ?: return null
+        seatId: Uuid,
+        template: GroupChatTemplate,
+        seatDisplayNames: Map<Uuid, String>,
+        maxRounds: Int = 10,
+    ): List<UIMessage> {
+        if (messages.size <= maxRounds * template.seats.size) return messages
 
-        // 取最近 N 条消息（用户+助手）作为搜索 query，保留对话上下文
-        val query = messages
-            .takeLast(8)
-            .joinToString("\n") { msg ->
-                val prefix = if (msg.role == MessageRole.USER) "用户" else "助手"
-                "$prefix: ${msg.toText()}"
-            }
-            .trim()
-        if (query.isBlank()) return null
+        val seatName = seatDisplayNames[seatId]?.trim()?.lowercase()
+            ?: return messages.takeLast(maxRounds * template.seats.size)
 
-        val results = knowledgeService.search(kbId, query, limit = 5, minScore = 0.3f)
+        // 1. 找到所有 @该座位的消息
+        val mentionedIndices = messages.mapIndexedNotNull { index, msg ->
+            val text = msg.toText().lowercase()
+            if (text.contains("@$seatName")) index else null
+        }.toSet()
 
-        // 缓存知识库来源供 UI 展示（先清旧数据，防泄漏）
-        val updatedSources = knowledgeSources.value.toMutableMap().apply {
-            remove(conversationId)
-            if (results.isNotEmpty()) {
-                put(conversationId, results.map { r ->
-                    KnowledgeSource(
-                        fileName = r.fileName,
-                        filePath = r.filePath,
-                        content = (if (r.expandedContext.isNotBlank()) r.expandedContext else r.content).take(300),
-                        score = r.score,
-                        chunkIndex = r.chunkIndex,
-                    )
-                })
-            }
-        }
-        knowledgeSources.value = updatedSources
+        // 2. 最近 N 轮
+        val recentStart = maxOf(0, messages.size - maxRounds * template.seats.size)
+        val recentIndices = (recentStart until messages.size).toSet()
 
-        if (results.isEmpty()) return null
-
-        return buildString {
-            appendLine()
-            appendLine("<knowledge_base_context>")
-            results.forEachIndexed { i, r ->
-                appendLine("<context_item index=\"${i + 1}\" source=\"${r.fileName}\" relevance=\"${(r.score * 100).toInt()}%\">")
-                val ctx = if (r.expandedContext.isNotBlank()) r.expandedContext else r.content
-                appendLine(ctx.trim())
-                appendLine("</context_item>")
-            }
-            appendLine("</knowledge_base_context>")
-            appendLine("请基于上述知识库内容回答用户问题。如果知识库内容与问题无关，请忽略知识库并正常回答。")
-        }
+        // 3. 合并，按原始顺序排序
+        val selectedIndices = (mentionedIndices + recentIndices).sorted()
+        return selectedIndices.map { messages[it] }
     }
 }

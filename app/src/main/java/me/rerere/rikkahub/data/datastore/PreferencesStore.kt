@@ -45,6 +45,7 @@ import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV1Migration
 import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV2Migration
 import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV3Migration
 import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.data.ai.tools.local.LocalToolOption
 import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.Lorebook
@@ -462,7 +463,10 @@ class SettingsStore(
                         // 过滤掉不存在的快捷消息 ID
                         quickMessageIds = assistant.quickMessageIds.filter { id ->
                             id in validQuickMessageIds
-                        }.toSet()
+                        }.toSet(),
+                        // 自动清理旧版本残留的未知工具类型（如 app_data_bridge），
+                        // 下次用户修改设置时干净数据会覆盖掉 DataStore 中的脏数据。
+                        localTools = assistant.localTools.filter { it !is LocalToolOption.AppDataBridge }
                     )
                 },
                 ttsProviders = settings.ttsProviders.distinctBy { it.id },

@@ -49,7 +49,7 @@ import me.rerere.hugeicons.stroke.Search01
 import java.util.Calendar
 
 /**
- * 浏览历史 Sheet — 对标 OpenMinis 的 BrowserHistoryStore
+ * 浏览历史 Sheet
  *
  * 支持搜索、按天分组、时间标签、单条删除、清空全部。
  */

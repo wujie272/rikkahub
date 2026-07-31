@@ -3,13 +3,16 @@ package me.rerere.rikkahub.utils
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.PendingIntent
+import androidx.core.app.Person
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
+import androidx.core.graphics.drawable.IconCompat
 import androidx.annotation.RequiresPermission
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+
 import me.rerere.rikkahub.R
 
 /**
@@ -27,6 +30,13 @@ class NotificationConfig {
     var visibility: Int = NotificationCompat.VISIBILITY_PRIVATE
     var contentIntent: PendingIntent? = null
     var useBigTextStyle: Boolean = false
+
+    // 对话通知支持 (Android 11+ 气泡必需)
+    var person: Person? = null
+    var shortcutId: String? = null
+
+    // 气泡通知支持 (Android 12+)
+    var bubbleIntent: PendingIntent? = null
 
     // Live Update 相关
     var requestPromotedOngoing: Boolean = false
@@ -91,6 +101,28 @@ object NotificationUtil {
             setOngoing(config.ongoing)
             setOnlyAlertOnce(config.onlyAlertOnce)
             setVisibility(config.visibility)
+
+            // 对话通知支持 (setShortcutId + Person + MessagingStyle)
+            // Android 11+ (targetSdk 30+) 气泡必需满足 Conversation 要求
+            if (config.shortcutId != null) {
+                setShortcutId(config.shortcutId!!)
+            }
+            if (config.person != null) {
+                addPerson(config.person!!)
+                val style = NotificationCompat.MessagingStyle(config.person!!)
+                    .setConversationTitle(config.title)
+                style.addMessage(config.content, System.currentTimeMillis(), config.person!!)
+                setStyle(style)
+            }
+
+            // Android 12+ 气泡通知支持
+            if (config.bubbleIntent != null && Build.VERSION.SDK_INT >= 31) {
+                val bubbleIcon = IconCompat.createWithResource(context, R.drawable.small_icon)
+                val bubbleData = NotificationCompat.BubbleMetadata.Builder(
+                    config.bubbleIntent!!, bubbleIcon
+                ).setDesiredHeight(600).build()
+                setBubbleMetadata(bubbleData)
+            }
 
             config.subText?.let { setSubText(it) }
             config.category?.let { setCategory(it) }

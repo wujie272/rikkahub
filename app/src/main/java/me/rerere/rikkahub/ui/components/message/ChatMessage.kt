@@ -88,7 +88,6 @@ import me.rerere.rikkahub.data.model.replaceRegexes
 import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
 import me.rerere.rikkahub.ui.components.richtext.ZoomableAsyncImage
 import me.rerere.rikkahub.ui.components.richtext.buildMarkdownPreviewHtml
-import me.rerere.rikkahub.service.KnowledgeSource
 import me.rerere.rikkahub.ui.components.webview.WebViewContentCache
 import me.rerere.rikkahub.ui.components.ui.ChainOfThought
 import me.rerere.rikkahub.ui.components.ui.ChainOfThoughtScope
@@ -127,7 +126,6 @@ fun ChatMessage(
     onToolApproval: ((toolCallId: String, approved: Boolean, reason: String, scope: me.rerere.rikkahub.service.ChatService.ApprovalScope, toolName: String) -> Unit)? = null,
     onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
     onOpenToolDetail: ((toolBlocks: List<UIMessagePart.Tool>, index: Int) -> Unit)? = null,
-    knowledgeSources: List<KnowledgeSource> = emptyList(),
 ) {
     val message = node.messages[node.selectIndex]
     val settings = LocalSettings.current.displaySetting
@@ -172,14 +170,7 @@ fun ChatMessage(
             }
         }
 
-        // 知识库来源卡片（折叠在思考过程之前）
-        if (knowledgeSources.isNotEmpty() && message.role == MessageRole.ASSISTANT) {
-            KnowledgeSourcesSection(
-                sources = knowledgeSources,
-            )
-        }
-
-        ProvideTextStyle(textStyle) {
+    ProvideTextStyle(textStyle) {
             MessagePartsBlock(
                 assistant = assistant,
                 role = message.role,
@@ -684,146 +675,3 @@ private fun MessagePartsBlock(
 
 // ============ 知识库来源卡片（折叠展示） ============
 
-@Composable
-private fun KnowledgeSourcesSection(
-    sources: List<KnowledgeSource>,
-) {
-    var expanded by remember { mutableStateOf(false) }
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .animateContentSize(),
-    ) {
-        // 折叠按钮
-        Surface(
-            onClick = { expanded = !expanded },
-            shape = RoundedCornerShape(8.dp),
-            color = Color.Transparent,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp, horizontal = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                Icon(
-                    imageVector = if (expanded) HugeIcons.ArrowUp01 else HugeIcons.ArrowDown01,
-                    contentDescription = null,
-                    modifier = Modifier.size(14.dp),
-                    tint = MaterialTheme.colorScheme.primary,
-                )
-                Icon(
-                    imageVector = HugeIcons.BookOpen01,
-                    contentDescription = null,
-                    modifier = Modifier.size(14.dp),
-                    tint = MaterialTheme.colorScheme.primary,
-                )
-                Text(
-                    text = stringResource(R.string.kb_sources_title, sources.size),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-            }
-        }
-
-        // 展开后的来源卡片列表
-        AnimatedVisibility(visible = expanded) {
-            Column(
-                modifier = Modifier.padding(top = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                sources.forEach { source ->
-                    KnowledgeSourceCard(source = source)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun KnowledgeSourceCard(
-    source: KnowledgeSource,
-) {
-    val relevanceLabel = when {
-        source.score >= 0.85f -> stringResource(R.string.kb_relevance_high)
-        source.score >= 0.60f -> stringResource(R.string.kb_relevance_medium)
-        source.score >= 0.40f -> stringResource(R.string.kb_relevance_low)
-        else -> stringResource(R.string.kb_relevance_minimal)
-    }
-    val relevanceColor = when {
-        source.score >= 0.85f -> MaterialTheme.colorScheme.primary
-        source.score >= 0.60f -> MaterialTheme.colorScheme.tertiary
-        else -> MaterialTheme.colorScheme.onSurfaceVariant
-    }
-
-    Surface(
-        shape = RoundedCornerShape(8.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        tonalElevation = 0.dp,
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            // 源类型图标
-            Box(
-                modifier = Modifier
-                    .size(28.dp)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(MaterialTheme.colorScheme.primaryContainer),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = HugeIcons.File02,
-                    contentDescription = null,
-                    modifier = Modifier.size(14.dp),
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                )
-            }
-
-            // 文件名 + 内容预览
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = source.fileName,
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                if (source.content.isNotBlank()) {
-                    Spacer(Modifier.height(2.dp))
-                    Text(
-                        text = source.content,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            }
-
-            // 相关度分数
-            Column(
-                horizontalAlignment = Alignment.End,
-            ) {
-                Text(
-                    text = "${(source.score * 100).toInt()}%",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = relevanceColor,
-                )
-                Text(
-                    text = relevanceLabel,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                    maxLines = 1,
-                )
-            }
-        }
-    }
-}

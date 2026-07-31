@@ -154,11 +154,6 @@ class ChatVM(
     // 生成完成
     val generationDoneFlow: SharedFlow<Uuid> = chatService.generationDoneFlow
 
-    // 当前对话的知识库引用来源
-    val knowledgeSources: StateFlow<List<me.rerere.rikkahub.service.KnowledgeSource>> = chatService.knowledgeSources
-        .map { sources -> sources[_conversationId] ?: emptyList() }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
-
     // MCP管理器
 
     // 工具详情 Sheet 状态（Minis Computer）

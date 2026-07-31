@@ -24,6 +24,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import org.koin.compose.koinInject
+import me.rerere.rikkahub.data.datastore.SettingsStore
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -262,7 +264,15 @@ private fun ConversationItem(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = conversation.title.ifBlank { stringResource(id = R.string.chat_page_new_message) },
+                text = conversation.title.ifBlank {
+                    val groupChatFallback = if (conversation.groupChatTemplateId != null) {
+                        val settingsStore = koinInject<SettingsStore>()
+                        settingsStore.settingsFlow.value.groupChatTemplates
+                            .find { it.id == conversation.groupChatTemplateId }?.name
+                            ?.ifBlank { null }
+                    } else null
+                    groupChatFallback ?: stringResource(id = R.string.chat_page_new_message)
+                },
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )

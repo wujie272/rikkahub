@@ -114,7 +114,7 @@ import me.rerere.rikkahub.ui.pages.setting.SettingDonatePage
 import me.rerere.rikkahub.ui.pages.setting.SettingFilesPage
 
 import me.rerere.rikkahub.ui.pages.setting.SettingAdvancedPage
-import me.rerere.rikkahub.ui.pages.setting.SettingDebatePage
+
 import me.rerere.rikkahub.ui.pages.setting.SettingMcpPage
 import me.rerere.rikkahub.ui.pages.setting.SettingModelPage
 import me.rerere.rikkahub.ui.pages.setting.SettingPage
@@ -500,9 +500,11 @@ class RouteActivity : ComponentActivity() {
                                 SettingAdvancedPage()
                             }
 
-                            entry<Screen.SettingDebate> {
-                                SettingDebatePage()
+                            entry<Screen.SettingWeb> {
+                                SettingWebPage()
                             }
+
+
 
                             entry<Screen.SettingSsh> {
                                 SettingSshPage()
@@ -513,7 +515,7 @@ class RouteActivity : ComponentActivity() {
                             }
 
                             entry<Screen.WorkflowDetail> { key ->
-                                me.rerere.rikkahub.workflow.ui.WorkflowDetailScreen(workflowId = key.id)
+                                me.rerere.rikkahub.workflow.ui.WorkflowDetailScreen(workflowId = key.id, initialEditMode = key.isNew)
                             }
 
                             entry<Screen.SettingScheduledJobs> {
@@ -807,8 +809,7 @@ sealed interface Screen : NavKey {
     @Serializable
     data object SettingAdvanced : Screen
 
-    @Serializable
-    data object SettingDebate : Screen
+
 
     @Serializable
     data object SettingWeb : Screen
@@ -820,7 +821,7 @@ sealed interface Screen : NavKey {
     data object SettingWorkflows : Screen
 
     @Serializable
-    data class WorkflowDetail(val id: String) : Screen
+    data class WorkflowDetail(val id: String, val isNew: Boolean = false) : Screen
 
     @Serializable
     data object SettingScheduledJobs : Screen

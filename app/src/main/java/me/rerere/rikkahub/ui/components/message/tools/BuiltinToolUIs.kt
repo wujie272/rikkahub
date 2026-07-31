@@ -31,6 +31,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -65,6 +66,7 @@ import me.rerere.hugeicons.stroke.Settings03
 import me.rerere.hugeicons.stroke.SmartPhone01
 import me.rerere.hugeicons.stroke.Time02
 import me.rerere.hugeicons.stroke.VolumeHigh
+import me.rerere.hugeicons.stroke.BookOpen01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.event.AppEvent
 import me.rerere.rikkahub.data.event.AppEventBus
@@ -913,6 +915,159 @@ object OpenWifiSettingsToolUI : ToolUIRenderer {
     @Composable
     override fun title(context: ToolUIContext): String =
         context.content.getStringContent("summary") ?: "WiFi Settings"
+}
+
+/**
+ * 知识库搜索: 标题显示查询词, 摘要显示结果文件名, 详情为结果列表
+ */
+object KnowledgeSearchToolUI : ToolUIRenderer {
+    override val toolName: String = "knowledge_search"
+
+    override fun icon(context: ToolUIContext): ImageVector = HugeIcons.BookOpen01
+
+    @Composable
+    override fun title(context: ToolUIContext): String = stringResource(
+        R.string.chat_message_tool_knowledge_search,
+        context.arguments.getStringContent("query") ?: ""
+    )
+
+    private fun results(context: ToolUIContext): List<JsonElement> =
+        context.content?.jsonObjectOrNull?.get("results")?.let { it as? JsonArray } ?: emptyList()
+
+    override fun hasSummary(context: ToolUIContext): Boolean = results(context).isNotEmpty()
+
+    @Composable
+    override fun Summary(context: ToolUIContext) {
+        val results = results(context)
+        if (results.isEmpty()) return
+        val fileNames = results.mapNotNull { it.getStringContent("file_name") }
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.chat_message_tool_search_results_count, results.size),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
+            )
+            if (fileNames.isNotEmpty()) {
+                Text(
+                    text = fileNames.joinToString(", "),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+    }
+
+    @Composable
+    override fun Preview(context: ToolUIContext, onDismissRequest: () -> Unit) {
+        val results = results(context)
+        if (results.isEmpty()) {
+            DefaultToolPreview(context = context)
+            return
+        }
+        KnowledgeSearchPreview(results = results)
+    }
+}
+
+@Composable
+private fun KnowledgeSearchPreview(results: List<JsonElement>) {
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxHeight(0.8f)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        items(results) { item ->
+            val fileName = item.getStringContent("file_name") ?: return@items
+            val content = item.getStringContent("content") ?: ""
+            val score = item.jsonObjectOrNull?.get("score")?.jsonPrimitiveOrNull?.contentOrNull?.toFloatOrNull() ?: 0f
+            val semanticScore = item.jsonObjectOrNull?.get("semantic_score")?.jsonPrimitiveOrNull?.contentOrNull?.toFloatOrNull()
+            val bm25Score = item.jsonObjectOrNull?.get("bm25_score")?.jsonPrimitiveOrNull?.contentOrNull?.toFloatOrNull()
+
+            val relevanceLabel = when {
+                score >= 0.85f -> stringResource(R.string.kb_relevance_high)
+                score >= 0.60f -> stringResource(R.string.kb_relevance_medium)
+                score >= 0.40f -> stringResource(R.string.kb_relevance_low)
+                else -> stringResource(R.string.kb_relevance_minimal)
+            }
+            val relevanceColor = when {
+                score >= 0.85f -> MaterialTheme.colorScheme.primary
+                score >= 0.60f -> MaterialTheme.colorScheme.tertiary
+                else -> MaterialTheme.colorScheme.onSurfaceVariant
+            }
+
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                )
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = fileName,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Text(
+                            text = "${(score * 100).toInt()}%",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = relevanceColor,
+                        )
+                    }
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            text = relevanceLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                        )
+                        if (semanticScore != null) {
+                            Text(
+                                text = "语义 ${(semanticScore * 100).toInt()}%",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                            )
+                        }
+                        if (bm25Score != null) {
+                            Text(
+                                text = "BM25 ${(bm25Score * 100).toInt()}%",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                            )
+                        }
+                    }
+                    if (content.isNotBlank()) {
+                        Text(
+                            text = content,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 4,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
+        }
+    }
 }
 
 object ShowLocationOnMapToolUI : ToolUIRenderer {

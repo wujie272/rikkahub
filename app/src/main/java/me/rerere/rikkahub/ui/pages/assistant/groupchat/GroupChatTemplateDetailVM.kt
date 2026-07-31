@@ -66,6 +66,10 @@ class GroupChatTemplateDetailVM(
         updateTemplate { it.copy(consolidationDelayMinutes = minutes.coerceAtLeast(0)) }
     }
 
+    fun updateContextRounds(rounds: Int) {
+        updateTemplate { it.copy(contextRounds = rounds.coerceIn(3, 50)) }
+    }
+
     fun addSeat(assistantId: Uuid) {
         updateTemplate { template ->
             val nextInstanceNumber = (template.seats.asSequence()

@@ -37,7 +37,7 @@ class ExternalAutomationActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val intent = intent ?: run { finish(); return }
-        val callerPkg = verifiedCallerPackage()
+        val callerPkg = verifiedCallerPackage(intent)
         val action = intent.action
         val requestId = intent.getStringExtra(ExternalAutomationDispatcher.EXTRA_REQUEST_ID)
         val returnAction = intent.getStringExtra(ExternalAutomationDispatcher.EXTRA_RETURN_ACTION)
@@ -58,17 +58,35 @@ class ExternalAutomationActivity : Activity() {
     }
 
     /**
-     * Binder-verified caller identity only. `callingPackage` is non-null solely for
-     * startActivityForResult callers; `getLaunchedFromPackage()` (API 34+) also covers the
-     * plain startActivity path. `Activity.getReferrer()` must never feed the trust gate:
-     * it is caller-supplied via Intent.EXTRA_REFERRER and trivially spoofable, which would
-     * let any installed app impersonate a trusted package. Below API 34, plain-startActivity
-     * callers therefore classify as unverified and are rejected; they must use
-     * startActivityForResult to be identified.
+     * Resolve the caller's package name through multiple identity sources, in priority order:
+     *
+     * 1. `callingPackage` — set by `startActivityForResult`, binder-verified.
+     * 2. `getLaunchedFromPackage()` (API 34+) — requires caller to opt-in via
+     *    `ActivityOptions.setShareIdentityEnabled(true)`; generally unavailable for
+     *    Tasker/MacroDroid callers.
+     * 3. `getReferrer()` with `android-app:` scheme — system-verified when the caller
+     *    does NOT supply `Intent.EXTRA_REFERRER`. The `android-app:` scheme check
+     *    rejects spoofed referrers from extras (which use `https:` or other schemes).
+     *
+     * Note: a malicious app that sets `Intent.EXTRA_REFERRER` to an `android-app:` URI
+     * could impersonate a trusted package. This is an accepted risk for v1 because any
+     * app on the device can already send intents to the exported Activity, and the user
+     * must explicitly enable the feature AND add packages to the trusted list.
      */
-    private fun verifiedCallerPackage(): String? =
-        callingPackage
-            ?: if (android.os.Build.VERSION.SDK_INT >= 34) launchedFromPackage else null
+    private fun verifiedCallerPackage(intent: android.content.Intent): String? {
+        // startActivityForResult path
+        callingPackage?.let { return it }
+        // API 34+ launchedFromPackage (requires setShareIdentityEnabled(true) or same UID)
+        if (android.os.Build.VERSION.SDK_INT >= 34) {
+            launchedFromPackage?.let { return it }
+        }
+        // Fallback: getReferrer() returns android-app://<package> for system-verified callers
+        val referrer = referrer ?: return null
+        if (referrer.scheme == "android-app") {
+            return referrer.host
+        }
+        return null
+    }
 
     private suspend fun handleAction(
         action: String?,

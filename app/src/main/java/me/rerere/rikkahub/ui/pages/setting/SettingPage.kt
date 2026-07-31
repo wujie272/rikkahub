@@ -178,12 +178,7 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         supportingContent = { Text(stringResource(R.string.setting_page_assistant_desc)) },
                         headlineContent = { Text(stringResource(R.string.setting_page_assistant)) },
                     )
-                    item(
-                        onClick = { navController.navigate(Screen.SettingDebate) },
-                        leadingContent = { Icon(HugeIcons.Zap, null) },
-                        supportingContent = { Text("AI角色辩论，多模型轮流交锋") },
-                        headlineContent = { Text("AI辩论") },
-                    )
+
                     item(
                         onClick = { navController.navigate(Screen.Extensions) },
                         leadingContent = { Icon(HugeIcons.Package, null) },

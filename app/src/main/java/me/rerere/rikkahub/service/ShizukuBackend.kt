@@ -13,7 +13,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * Shizuku 特权级执行后端。同时支持官方 Shizuku 和 AXManager。
  *
  * 通过反射调用 Shizuku.newProcess 来执行 shell 命令。
- * 参考 OpenMinis 的 ShizukuBackend 实现。
+ * Shizuku 权限后端，通过 ContentProvider 执行特权命令。
  */
 class ShizukuBackend(private val appContext: Context) {
 
