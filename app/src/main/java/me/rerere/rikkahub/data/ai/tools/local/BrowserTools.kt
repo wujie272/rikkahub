@@ -680,7 +680,37 @@ fun typeTool(): Tool = browserTypeTool()
 
 fun scrollTool(): Tool = browserScrollTool()
 
-fun executeJsTool(): Tool = browserEvalJsTool()
+fun executeJsTool(): Tool = Tool(
+    name = BrowserToolDefaults.EXECUTE_JS,
+    description = "Run arbitrary JavaScript in the page and return its last expression. HARDLINE-checked: shell-shaped strings, document.cookie writes, eval/Function constructors, and string-form setTimeout are all blocked at the tool dispatcher BEFORE the JS executes. Always asks for approval; never eligible for 'Always Allow'.",
+    parameters = {
+        InputSchema.Obj(properties = buildJsonObject {
+            put("code", buildJsonObject {
+                put("type","string")
+                put("description","JavaScript to evaluate. The string returned by the WebView is the value of the last expression, JSON-encoded.")
+            })
+        }, required = listOf("code"))
+    },
+    execute = { input ->
+        val code = input.jsonObject["code"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+        val out = if (code == null) {
+            missingArgEnvelope("code", "code is required")
+        } else {
+            withTimeoutOrNull(toolTimeoutMs) {
+                BrowserControllerHandle.withController {
+                    val raw = webView.evaluateJavascriptAsync(code, toolTimeoutMs - 1_000L)
+                    BrowserController.appendAction("Run JS")
+                    val (clipped, truncated) = clipText(raw ?: "null", EVAL_JS_MAX_RESULT_CHARS)
+                    buildJsonObject {
+                        put("result", clipped)
+                        if (truncated) put("truncated", true)
+                    }
+                }
+            } ?: timeoutEnvelope(BrowserToolDefaults.EXECUTE_JS)
+        }
+        textPart(out)
+    },
+)
 
 fun findElementsTool(): Tool = Tool(
     name = BrowserToolDefaults.FIND_ELEMENTS,
@@ -734,7 +764,14 @@ fun findElementsTool(): Tool = Tool(
 fun hoverTool(): Tool = Tool(
     name = BrowserToolDefaults.HOVER,
     description = "Hover over an element matching a CSS selector. Dispatches mouseenter and mouseover events. {success}.",
-    parameters = { selectorOnlySchema("CSS selector of the element to hover over") },
+    parameters = {
+        InputSchema.Obj(properties = buildJsonObject {
+            put("selector", buildJsonObject {
+                put("type", "string")
+                put("description", "CSS selector of the element to hover over")
+            })
+        }, required = listOf("selector"))
+    },
     execute = { input ->
         val selector = input.jsonObject["selector"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
         val out = if (selector == null) {
@@ -1104,7 +1141,7 @@ fun createBrowserTool(
     BrowserToolDefaults.EXECUTE_JS -> executeJsTool()
     BrowserToolDefaults.FIND_ELEMENTS -> findElementsTool()
     BrowserToolDefaults.HOVER -> hoverTool()
-    BrowserToolDefaults.WAIT_FOR_DOM_STABLE -> waitForDomStableTool()
+    BrowserToolDefaults.WAIT_FOR_DOM_STABLE -> browserWaitForTool()
     // 补齐的 10 个工具（对标 OpenMinis BrowserAction）
     BrowserToolDefaults.GET_BACKBONE -> getBackboneTool()
     BrowserToolDefaults.FETCH -> fetchTool()
