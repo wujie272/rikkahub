@@ -3,7 +3,6 @@ package me.rerere.rikkahub.service
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.util.Base64
-import java.io.ByteArrayOutputStream
 import android.util.Log
 
 /**
@@ -12,10 +11,7 @@ import android.util.Log
  * 提供的方法：
  * - inputTap(x, y)         — 点击坐标
  * - inputSwipe(sx, sy, ex, ey, duration) — 滑动
- * - inputText(text)        — 输入文本（仅 ASCII，中文不支持）
  * - captureScreencap()     — 截图（返回 Bitmap）
- * - pressKey(keycode)      — 按键事件
- * - run(command)           — 通用 shell 执行
  */
 object ShizukuShell {
 
@@ -44,29 +40,14 @@ object ShizukuShell {
     }
 
     /**
-     * 通过 Shizuku 输入文本。
-     * 注意：input text 不支持中文，中文会变成乱码或空格。
-     * 建议仅用于 ASCII 文本输入。
-     */
-    suspend fun inputText(text: String): Boolean {
-        // 转义单引号等特殊字符
-        val escaped = text
-            .replace("'", "'\\\\''")
-            .replace("\"", "\\\"")
-        val result = ShizukuManager.runShell("input text '$escaped'")
-        return result.exitCode == 0
-    }
-
-    /**
      * 通过 Shizuku 截图（screencap）。
      * 返回 Bitmap 或 null（失败时）。
-     * 
+     *
      * 流程：screencap 输出 PNG → base64 编码（通过 sh -c 管道）→ 解码为 Bitmap。
      * 比 AccessibilityService 截图 API 更稳定，不受 ~1次/秒 限流。
      * 使用 base64 避免二进制数据通过文本管道时损坏。
      */
     suspend fun captureScreencap(): Bitmap? {
-        // screencap -p 输出 PNG，用 base64 编码后传回，避免二进制损坏
         val result = ShizukuManager.runShell(
             command = "screencap -p 2>/dev/null | base64 -w0",
             timeoutMs = 10_000L,
@@ -81,27 +62,6 @@ object ShizukuShell {
             Log.w(TAG, "captureScreencap decode failed: ${t.message}")
             null
         }
-    }
-
-    /**
-     * 通过 Shizuku 发送按键事件。
-     * @param keycode Android 键码（如 KeyEvent.KEYCODE_BACK = 4）
-     */
-    suspend fun pressKey(keycode: Int): Boolean {
-        val result = ShizukuManager.runShell("input keyevent $keycode")
-        return result.exitCode == 0
-    }
-
-    /**
-     * 通用 shell 执行。直接运行任意命令。
-     * @param command shell 命令字符串
-     * @param timeoutMs 超时时间
-     */
-    suspend fun run(
-        command: String,
-        timeoutMs: Long = 5_000L,
-    ): ShizukuManager.ProcessResult {
-        return ShizukuManager.runShell(command, timeoutMs)
     }
 
     /**
