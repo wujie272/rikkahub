@@ -404,6 +404,19 @@
       android:enabled="true"
       android:exported="true"
       android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
+
+    <!-- 桌面小组件：工作流状态 -->
+    <receiver android:name=".widget.WorkflowStatusWidgetProvider"
+        android:label="@string/widget_workflow_status_name"
+        android:exported="true">
+        <intent-filter>
+            <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+        </intent-filter>
+        <meta-data
+            android:name="android.appwidget.provider"
+            android:resource="@xml/workflow_status_widget_info" />
+    </receiver>
+
   </application>
 
 </manifest>

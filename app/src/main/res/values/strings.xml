@@ -2214,4 +2214,15 @@
     <string name="action_close">Close</string>
     <string name="bubble_no_content">No content</string>
     <string name="bubble_open_in_app">Open in App</string>
+    <!-- 桌面小组件：工作流状态 -->
+    <string name="widget_workflow_status_name">工作流状态</string>
+    <string name="widget_workflow_status_description">查看最近工作流运行状态</string>
+    <string name="widget_workflow_run_now">▶ 立即运行</string>
+    <string name="widget_workflow_no_workflows">暂无工作流</string>
+    <string name="widget_workflow_runs_today">今日运行: %d次</string>
+    <string name="widget_workflow_status_enabled">已启用</string>
+    <string name="widget_workflow_status_disabled">已暂停</string>
+    <string name="widget_workflow_status_success">成功</string>
+    <string name="widget_workflow_status_failed">失败</string>
+    <string name="widget_workflow_just_now">刚刚</string>
 </resources>

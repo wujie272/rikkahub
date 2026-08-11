@@ -41,6 +41,10 @@ import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import me.rerere.rikkahub.workflow.execution.WorkflowEngine
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
@@ -150,6 +154,7 @@ import me.rerere.rikkahub.utils.CrashHandler
 import me.rerere.rikkahub.utils.openUsageAccessSettings
 import okhttp3.OkHttpClient
 import org.koin.android.ext.android.inject
+import org.koin.android.ext.android.get
 import org.koin.compose.koinInject
 import kotlin.uuid.Uuid
 
@@ -259,6 +264,32 @@ class RouteActivity : ComponentActivity() {
         // Navigate to the chat screen if a conversation ID is provided
         intent.getStringExtra("conversationId")?.let { text ->
             navStack?.add(Screen.Chat(text))
+        }
+
+        // Handle widget navigation intents
+        when (intent.getStringExtra("navigateTo")) {
+            "workflows" -> {
+                navStack?.add(Screen.SettingWorkflows)
+            }
+            "workflow_detail" -> {
+                intent.getStringExtra("workflowId")?.let { id ->
+                    navStack?.add(Screen.WorkflowDetail(id))
+                }
+            }
+            "workflow_run_now" -> {
+                intent.getStringExtra("workflowId")?.let { id ->
+                    // 立即运行工作流（后台 headless 执行）
+                    lifecycleScope.launch(Dispatchers.IO) {
+                        runCatching {
+                            get<WorkflowEngine>().fire(id)
+                            // 触发小组件刷新
+                            me.rerere.rikkahub.widget.WorkflowStatusWidgetProvider.updateAll(this@RouteActivity)
+                        }
+                    }
+                    // 同时打开工作流详情页
+                    navStack?.add(Screen.WorkflowDetail(id))
+                }
+            }
         }
     }
 
