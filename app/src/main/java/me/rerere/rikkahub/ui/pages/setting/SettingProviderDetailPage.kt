@@ -511,9 +511,9 @@ private fun KeyManagementSheet(
                         maxTokens = 8,
                     )
                 )
-                val text = chunk.choices.firstOrNull()?.message?.parts
-                    ?.filterIsInstance<UIMessagePart.Text>()
-                    ?.joinToString("") { it.text } ?: ""
+                val text = chunk.message.parts
+                    .filterIsInstance<UIMessagePart.Text>()
+                    .joinToString("") { it.text } ?: ""
                 toaster.show("✅ ${text.ifBlank { "✓" }.take(60)}", type = ToastType.Success)
             }.onFailure { e ->
                 toaster.show("❌ ${(e.message ?: "Error").take(60)}", type = ToastType.Error)

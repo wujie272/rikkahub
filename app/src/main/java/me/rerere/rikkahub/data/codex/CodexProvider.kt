@@ -27,8 +27,11 @@ import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.Provider
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
-import me.rerere.ai.provider.providers.openai.ResponseApiStreamDecoder
+import me.rerere.ai.provider.TextGenerationResult
+import me.rerere.ai.provider.providers.openai.createResponseApiStreamDecoder
+import me.rerere.ai.provider.providers.openai.ResponseAPI
 import me.rerere.ai.provider.stream.SseEvent
+import me.rerere.ai.provider.stream.StreamChunkDecoder
 import me.rerere.ai.ui.ImageGenerationItem
 import me.rerere.ai.ui.StreamChunk
 import me.rerere.ai.ui.StreamChunkHandler
@@ -54,7 +57,7 @@ class CodexProvider(
     private val json: Json,
 ) : Provider<ProviderSetting.Codex> {
     private val responseApi = ResponseAPI(client)
-    private val responseApiDecoder = ResponseApiStreamDecoder()
+    private val responseApiDecoder: StreamChunkDecoder = createResponseApiStreamDecoder()
     private val eventSourceClient by lazy {
         client.newBuilder()
             .addNetworkInterceptor { chain ->

@@ -488,6 +488,13 @@ private fun sanitizePartForLog(part: UIMessagePart, system: Boolean): UIMessageP
             input = part.input.truncateTo(REQUEST_LOG_MAX_TOOL_ARGS_CHARS),
             metadata = null,
         )
+        is UIMessagePart.ServerTool -> part.copy(
+            toolCallId = part.toolCallId.truncateInline(120),
+            toolName = part.toolName.truncateInline(120),
+            input = part.input?.truncateJsonForLog(REQUEST_LOG_MAX_JSON_ELEMENT_CHARS),
+            output = part.output?.truncateJsonForLog(REQUEST_LOG_MAX_JSON_ELEMENT_CHARS),
+            metadata = null,
+        )
         UIMessagePart.Search -> UIMessagePart.Search
     }
 }

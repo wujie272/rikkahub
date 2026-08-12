@@ -2704,7 +2704,7 @@ class ChatService(
                 params = TextGenerationParams(model = hostModel),
             )
 
-            val text = result.choices.firstOrNull()?.message?.toText()?.trim() ?: ""
+            val text = result.message.toText()?.trim() ?: ""
             if (text.isBlank()) return enabledSeats.take(3).map { it.id }
 
             val jsonStart = text.indexOf('{')

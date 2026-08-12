@@ -345,3 +345,9 @@ internal class ResponseApiStreamDecoder : StreamChunkDecoder {
         }
     }
 }
+
+/**
+ * 公开的工厂函数：创建用于解码 OpenAI Response API SSE 事件的解码器。
+ * Codex provider 等 app 模块中的调用方无法直接访问 internal 的 [ResponseApiStreamDecoder]。
+ */
+fun createResponseApiStreamDecoder(): StreamChunkDecoder = ResponseApiStreamDecoder()
