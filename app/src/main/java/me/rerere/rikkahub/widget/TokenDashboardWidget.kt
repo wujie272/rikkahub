@@ -281,7 +281,7 @@ private fun ModelDistribution(models: List<AiModelUsage>) {
                         .width((pct * 1.5).dp.coerceAtMost(150.dp))
                         .height(8.dp)
                         .background(ColorProvider(color)),
-                )
+                ) { }
             }
             // 百分比
             Text(
