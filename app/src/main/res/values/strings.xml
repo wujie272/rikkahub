@@ -2225,4 +2225,18 @@
     <string name="widget_workflow_status_success">成功</string>
     <string name="widget_workflow_status_failed">失败</string>
     <string name="widget_workflow_just_now">刚刚</string>
+    <!-- 桌面小组件：Token 统计仪表盘 -->
+    <string name="widget_token_dashboard_name">AI Token 仪表盘</string>
+    <string name="widget_token_dashboard_description">查看AI调用统计与Token消耗</string>
+    <string name="widget_token_title">🤖 AI 调用统计</string>
+    <string name="widget_token_today_count">今日 %d次</string>
+    <string name="widget_token_no_today">今日暂无调用记录</string>
+    <string name="widget_token_total">总消耗: %1$s tokens</string>
+    <string name="widget_token_input">输入: %s</string>
+    <string name="widget_token_output">输出: %s</string>
+    <string name="widget_token_success_rate">成功率 %d%%</string>
+    <string name="widget_token_avg_duration">平均 %ds</string>
+    <string name="widget_token_model_dist">模型分布</string>
+    <string name="widget_token_recent">最近调用</string>
+    <string name="widget_token_recent_empty">暂无最近调用</string>
 </resources>

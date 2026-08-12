@@ -417,6 +417,18 @@
             android:resource="@xml/workflow_status_widget_info" />
     </receiver>
 
+    <!-- 桌面小组件：Token 统计仪表盘 -->
+    <receiver android:name=".widget.TokenDashboardWidgetProvider"
+        android:label="@string/widget_token_dashboard_name"
+        android:exported="true">
+        <intent-filter>
+            <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+        </intent-filter>
+        <meta-data
+            android:name="android.appwidget.provider"
+            android:resource="@xml/token_dashboard_widget_info" />
+    </receiver>
+
   </application>
 
 </manifest>

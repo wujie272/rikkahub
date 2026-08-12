@@ -42,4 +42,13 @@ data class AIRequestLogEntity(
     val responseRawText: String,
     @ColumnInfo(name = "error")
     val error: String?,
+    // 以下为 v36 新增：Token 用量统计
+    @ColumnInfo(name = "input_tokens", defaultValue = "0")
+    val inputTokens: Int = 0,
+    @ColumnInfo(name = "output_tokens", defaultValue = "0")
+    val outputTokens: Int = 0,
+    @ColumnInfo(name = "total_tokens", defaultValue = "0")
+    val totalTokens: Int = 0,
+    @ColumnInfo(name = "cost", defaultValue = "0")
+    val cost: Double = 0.0,
 )

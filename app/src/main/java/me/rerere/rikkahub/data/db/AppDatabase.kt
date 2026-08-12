@@ -43,6 +43,7 @@ import me.rerere.rikkahub.data.db.migrations.Migration_29_30
 import me.rerere.rikkahub.data.db.migrations.Migration_30_31
 import me.rerere.rikkahub.data.db.migrations.Migration_8_9
 import me.rerere.rikkahub.data.db.migrations.MIGRATION_34_35
+import me.rerere.rikkahub.data.db.migrations.MIGRATION_35_36
 import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.rikkahub.workflow.db.WorkflowDao
 import me.rerere.rikkahub.workflow.db.WorkflowEntity
@@ -68,7 +69,7 @@ import me.rerere.rikkahub.workflow.db.WorkflowRunEntity
         FolderEntity::class,
         AIRequestLogEntity::class,
     ],
-    version = 35,
+    version = 36,
     autoMigrations = [
         // v1→v23: Using auto-migrations for early versions (no manual migrations overlap)
         AutoMigration(from = 1, to = 2),

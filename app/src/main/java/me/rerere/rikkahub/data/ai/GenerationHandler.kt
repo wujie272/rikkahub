@@ -1157,7 +1157,13 @@ class GenerationHandler(
                 latencyMs = null,
                 durationMs = durationMs,
                 error = stepError,
+                // v36: 落库 Token 用量，供桌面仪表盘小组件聚合展示。
+                tokenUsage = messages.lastOrNull()?.usage,
             )
+            // v36: AI 调用完成后刷新 Token 仪表盘小组件
+            runCatching {
+                me.rerere.rikkahub.widget.TokenDashboardWidgetProvider.updateAll(this@GenerationHandler.context)
+            }
         }
 
         // 流式模式下如果发生错误，重新抛出

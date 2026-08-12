@@ -15,6 +15,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.core.MessageRole
+import me.rerere.ai.core.TokenUsage
 import me.rerere.ai.provider.CustomBody
 import me.rerere.ai.provider.CustomHeader
 import me.rerere.ai.provider.Model
@@ -24,6 +25,9 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.ai.AIRequestSource
 import me.rerere.rikkahub.utils.JsonInstant
+
+import java.time.LocalDate
+import java.time.ZoneId
 
 private const val REQUEST_LOG_KEEP_LATEST = 200
 private const val REQUEST_LOG_MAX_JSON_CHARS = 120_000
@@ -86,6 +90,36 @@ class AIRequestLogManager(
         runCatching { dao.deleteById(id) }
     }
 
+    // ---- v36 Token 仪表盘数据接口 ----
+
+    /** 今日（本地时区自然日）聚合快照。 */
+    suspend fun todaySnapshot(): AiUsageSnapshot? = withContext(Dispatchers.IO) {
+        val today = LocalDate.now(ZoneId.systemDefault())
+        val since = today.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val until = since + 86_400_000L
+        runCatching { dao.usageSnapshot(since, until) }.getOrNull()
+    }
+
+    /** 全部历史聚合快照。 */
+    suspend fun allTimeSnapshot(): AiUsageSnapshot? = withContext(Dispatchers.IO) {
+        runCatching { dao.usageSnapshot(0L, Long.MAX_VALUE) }.getOrNull()
+    }
+
+    /** 今日按模型聚合（调用次数 Top-N）。 */
+    suspend fun todayUsageByModel(limit: Int = 6): List<AiModelUsage> =
+        withContext(Dispatchers.IO) {
+            val today = LocalDate.now(ZoneId.systemDefault())
+            val since = today.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+            val until = since + 86_400_000L
+            runCatching { dao.usageByModel(since, until, limit) }.getOrDefault(emptyList())
+        }
+
+    /** 最近 N 条调用记录（仪表盘行）。 */
+    suspend fun recentLogs(limit: Int = 5): List<AIRequestLogEntity> =
+        withContext(Dispatchers.IO) {
+            runCatching { dao.getRecent(limit) }.getOrDefault(emptyList())
+        }
+
     suspend fun logTextGeneration(
         source: AIRequestSource,
         providerSetting: ProviderSetting,
@@ -98,6 +132,7 @@ class AIRequestLogManager(
         latencyMs: Long?,
         durationMs: Long?,
         error: Throwable? = null,
+        tokenUsage: TokenUsage? = null,
     ) = withContext(Dispatchers.IO) {
         runCatching {
             val paramsJson = buildTextGenerationParamsJson(params)
@@ -121,6 +156,7 @@ class AIRequestLogManager(
 
             val providerType = providerSetting::class.simpleName ?: "Provider"
             val requestUrl = buildTextGenerationRequestUrl(providerSetting, params)
+            val tu = tokenUsage
 
             dao.insert(
                 AIRequestLogEntity(
@@ -141,6 +177,10 @@ class AIRequestLogManager(
                     responseText = normalizedResponseText.truncateTo(REQUEST_LOG_MAX_JSON_CHARS),
                     responseRawText = normalizedRawResponseText.truncateTo(REQUEST_LOG_MAX_JSON_CHARS),
                     error = error?.let { "[${it.javaClass.simpleName}] ${it.message}".take(800) },
+                    inputTokens = tu?.promptTokens ?: 0,
+                    outputTokens = tu?.completionTokens ?: 0,
+                    totalTokens = tu?.totalTokens ?: 0,
+                    cost = tu?.cost ?: 0.0,
                 )
             )
             dao.pruneKeepLatest(REQUEST_LOG_KEEP_LATEST)

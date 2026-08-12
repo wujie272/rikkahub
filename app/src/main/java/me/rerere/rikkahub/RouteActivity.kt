@@ -290,6 +290,10 @@ class RouteActivity : ComponentActivity() {
                     navStack?.add(Screen.WorkflowDetail(id))
                 }
             }
+            // Token 仪表盘小组件：打开 AI 请求日志页
+            "log" -> {
+                navStack?.add(Screen.Log)
+            }
         }
     }
 
