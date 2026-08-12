@@ -27,12 +27,13 @@ import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.Provider
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
-import me.rerere.ai.provider.providers.openai.ResponseAPI
+import me.rerere.ai.provider.providers.openai.ResponseApiStreamDecoder
+import me.rerere.ai.provider.stream.SseEvent
 import me.rerere.ai.ui.ImageGenerationItem
-import me.rerere.ai.ui.MessageChunk
+import me.rerere.ai.ui.StreamChunk
+import me.rerere.ai.ui.StreamChunkHandler
 import me.rerere.ai.ui.UIMessage
-import me.rerere.ai.ui.UIMessageChoice
-import me.rerere.ai.ui.handleMessageChunk
+import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.util.toHeaders
 import me.rerere.common.http.await
 import me.rerere.rikkahub.R
@@ -53,6 +54,7 @@ class CodexProvider(
     private val json: Json,
 ) : Provider<ProviderSetting.Codex> {
     private val responseApi = ResponseAPI(client)
+    private val responseApiDecoder = ResponseApiStreamDecoder()
     private val eventSourceClient by lazy {
         client.newBuilder()
             .addNetworkInterceptor { chain ->
@@ -128,24 +130,21 @@ class CodexProvider(
         providerSetting: ProviderSetting.Codex,
         messages: List<UIMessage>,
         params: TextGenerationParams,
-    ): MessageChunk {
+    ): TextGenerationResult {
+        val streamChunkHandler = StreamChunkHandler(params.model)
         var collected = listOf(UIMessage.assistant(""))
-        var usage: me.rerere.ai.core.TokenUsage? = null
+        var finishReason: String? = null
+        var usage: TokenUsage? = null
         streamText(providerSetting, messages, params).collect { chunk ->
-            collected = collected.handleMessageChunk(chunk, params.model)
-            usage = chunk.usage ?: usage
+            collected = streamChunkHandler.handle(collected, chunk)
+            if (chunk is StreamChunk.Finish) finishReason = chunk.finishReason
+            if (chunk is StreamChunk.Usage) usage = chunk.usage
         }
-        return MessageChunk(
+        return TextGenerationResult(
             id = "",
             model = params.model.modelId,
-            choices = listOf(
-                UIMessageChoice(
-                    index = 0,
-                    delta = null,
-                    message = collected.last(),
-                    finishReason = "stop",
-                )
-            ),
+            message = collected.lastOrNull() ?: UIMessage.assistant(""),
+            finishReason = finishReason ?: "stop",
             usage = usage,
         )
     }
@@ -154,7 +153,7 @@ class CodexProvider(
         providerSetting: ProviderSetting.Codex,
         messages: List<UIMessage>,
         params: TextGenerationParams,
-    ): Flow<MessageChunk> = callbackFlow {
+    ): Flow<StreamChunk> = callbackFlow {
         val reasoningEffort = params.model.abilities
             .takeIf { it.contains(ModelAbility.REASONING) }
             ?.let { codexReasoningEffort(params.reasoningLevel) }
@@ -167,17 +166,8 @@ class CodexProvider(
             baseUrl = "https://api.openai.com/v1",
             useResponseApi = true,
         )
-        val baseRequestBody = responseApi.createRequestBody(
-            providerSetting = syntheticSetting,
-            messages = messages,
-            params = params,
-            stream = true,
-        )
         val requestBody = buildJsonObject {
-            baseRequestBody.forEach { (key, value) -> put(key, value) }
-            if (baseRequestBody["instructions"]?.jsonPrimitive?.contentOrNull.isNullOrBlank()) {
-                put("instructions", DEFAULT_INSTRUCTIONS)
-            }
+            responseApi.buildRequestBody(syntheticSetting, messages, params, true).forEach { (key, value) -> put(key, value) }
             reasoningEffort?.let { effort ->
                 put("reasoning", buildJsonObject {
                     put("effort", effort)
@@ -220,15 +210,7 @@ class CodexProvider(
                 val eventType = payload["type"]?.jsonPrimitive?.contentOrNull ?: type
                 if (eventType in FINAL_RESPONSE_EVENTS) {
                     parseTokenUsage(payload)?.let { usage ->
-                        trySend(
-                            MessageChunk(
-                                id = payload["response"]?.jsonObject
-                                    ?.get("id")?.jsonPrimitive?.contentOrNull.orEmpty(),
-                                model = params.model.modelId,
-                                choices = emptyList(),
-                                usage = usage,
-                            )
-                        )
+                        trySend(StreamChunk.Usage(usage))
                     }
                     if (eventType == "response.failed") {
                         close(
@@ -244,11 +226,12 @@ class CodexProvider(
                     }
                     return
                 }
-                runCatching { responseApi.parseResponseDelta(payload) }
-                    .onSuccess { chunk ->
-                        if (chunk != null) trySend(chunk)
-                    }
-                    .onFailure { close(it) }
+                val result = runCatching { responseApiDecoder.accept(SseEvent(id, type, data)) }
+                result.onSuccess { decodeResult ->
+                    decodeResult.chunks.forEach { trySend(it) }
+                    if (decodeResult.completed) close()
+                }
+                result.onFailure { close(it) }
                 if (eventType == "error") {
                     close(
                         IllegalStateException(

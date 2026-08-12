@@ -13,10 +13,9 @@ import kotlinx.coroutines.launch
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ProviderManager
 import me.rerere.ai.provider.TextGenerationParams
-import me.rerere.ai.ui.MessageChunk
+import me.rerere.ai.ui.StreamChunkHandler
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
-import me.rerere.ai.ui.handleMessageChunk
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
@@ -188,6 +187,7 @@ class TextSelectionVM(
                 )
 
                 val provider = providerManager.getProviderByType(providerSetting)
+                val streamChunkHandler = StreamChunkHandler(model)
 
                 provider.streamText(
                     providerSetting = providerSetting,
@@ -197,7 +197,8 @@ class TextSelectionVM(
                     Log.e(TAG, "Stream error", e)
                     state = TextSelectionState.Error(e.message ?: "Unknown error")
                 }.collect { chunk ->
-                    handleChunk(chunk, model)
+                    messages = streamChunkHandler.handle(messages, chunk).toMutableList()
+                    updateStreamResult()
                 }
 
                 val currentState = state
@@ -211,11 +212,9 @@ class TextSelectionVM(
         }
     }
 
-    private fun handleChunk(chunk: MessageChunk, model: Model) {
-        messages = messages.handleMessageChunk(chunk, model).toMutableList()
-
+    private fun updateStreamResult() {
         val lastMessage = messages.lastOrNull()
-        val responseText = lastMessage?.parts?.filterIsInstance<me.rerere.ai.ui.UIMessagePart.Text>()?.joinToString("\n") { it.text } ?: ""
+        val responseText = lastMessage?.parts?.filterIsInstance<UIMessagePart.Text>()?.joinToString("\n") { it.text } ?: ""
         val isReasoning = lastMessage?.parts?.any {
             it is UIMessagePart.Reasoning && it.finishedAt == null
         } ?: false

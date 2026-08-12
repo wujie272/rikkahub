@@ -35,7 +35,6 @@ import kotlinx.serialization.json.put
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.Tool
-import me.rerere.ai.core.merge
 import me.rerere.ai.provider.CustomBody
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.Provider
@@ -46,7 +45,9 @@ import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.ToolApprovalState
-import me.rerere.ai.ui.handleMessageChunk
+import me.rerere.ai.ui.StreamChunkHandler
+import me.rerere.ai.ui.StreamChunk
+import me.rerere.ai.ui.handleTextGenerationResult
 import me.rerere.ai.ui.limitContext
 import me.rerere.rikkahub.data.ai.transformers.InputMessageTransformer
 import me.rerere.rikkahub.data.ai.transformers.MessageTransformer
@@ -1083,25 +1084,21 @@ class GenerationHandler(
 
         if (stream) {
             try {
+                var lastFinishReason: String? = null
+                val streamChunkHandler = StreamChunkHandler(model)
                 providerImpl.streamText(
                     providerSetting = provider,
                     messages = internalMessages,
                     params = params
                 ).collect {
-                    messages = messages.handleMessageChunk(chunk = it, model = model)
-                    it.usage?.let { usage ->
-                        messages = messages.mapIndexed { index, message ->
-                            if (index == messages.lastIndex) {
-                                message.copy(usage = message.usage.merge(usage))
-                            } else {
-                                message
-                            }
-                        }
+                    messages = streamChunkHandler.handle(messages, it)
+                    if (it is StreamChunk.Finish) {
+                        lastFinishReason = it.finishReason
                     }
-                    val finishReasons = it.choices
-                        .mapNotNull { choice -> choice.finishReason?.trim() }
-                        .filter { reason -> reason.isNotBlank() && reason != "unknown" }
-                        .toSet()
+                    val finishReasons = lastFinishReason
+                        ?.takeIf { r -> r.isNotBlank() && r != "unknown" }
+                        ?.let { setOf(it) }
+                        ?: emptySet()
                     onUpdateMessages(messages, finishReasons)
                 }
             } catch (e: Throwable) {
@@ -1109,25 +1106,16 @@ class GenerationHandler(
             }
         } else {
             try {
-                val chunk = providerImpl.generateText(
+                val result = providerImpl.generateText(
                     providerSetting = provider,
                     messages = internalMessages,
                     params = params,
                 )
-                messages = messages.handleMessageChunk(chunk = chunk, model = model)
-                chunk.usage?.let { usage ->
-                    messages = messages.mapIndexed { index, message ->
-                        if (index == messages.lastIndex) {
-                            message.copy(usage = message.usage.merge(usage))
-                        } else {
-                            message
-                        }
-                    }
-                }
-                val finishReasons = chunk.choices
-                    .mapNotNull { choice -> choice.finishReason?.trim() }
-                    .filter { reason -> reason.isNotBlank() && reason != "unknown" }
-                    .toSet()
+                messages = messages.handleTextGenerationResult(result = result, model = model)
+                val finishReasons = result.finishReason
+                    ?.takeIf { r -> r.isNotBlank() && r != "unknown" }
+                    ?.let { setOf(it) }
+                    ?: emptySet()
                 onUpdateMessages(messages, finishReasons)
             } catch (e: Throwable) {
                 stepError = e
@@ -1226,6 +1214,7 @@ class GenerationHandler(
 
             var messages = listOf(UIMessage.user(prompt))
             var translatedText = ""
+            val streamChunkHandler = StreamChunkHandler(model)
 
             providerHandler.streamText(
                 providerSetting = provider,
@@ -1235,7 +1224,7 @@ class GenerationHandler(
                     reasoningLevel = ReasoningLevel.fromBudgetTokens(settings.translateThinkingBudget),
                 ),
             ).collect { chunk ->
-                messages = messages.handleMessageChunk(chunk)
+                messages = streamChunkHandler.handle(messages, chunk)
                 translatedText = messages.lastOrNull()?.toText() ?: ""
 
                 if (translatedText.isNotBlank()) {
@@ -1246,7 +1235,7 @@ class GenerationHandler(
         } else {
             // Use Qwen MT model with special translation options
             val messages = listOf(UIMessage.user(sourceText))
-            val chunk = providerHandler.generateText(
+            val result = providerHandler.generateText(
                 providerSetting = provider,
                 messages = messages,
                 params = TextGenerationParams(
@@ -1267,7 +1256,7 @@ class GenerationHandler(
                     )
                 ),
             )
-            val translatedText = chunk.choices.firstOrNull()?.message?.toText() ?: ""
+            val translatedText = result.message.toText()
 
             if (translatedText.isNotBlank()) {
                 onStreamUpdate?.invoke(translatedText)
