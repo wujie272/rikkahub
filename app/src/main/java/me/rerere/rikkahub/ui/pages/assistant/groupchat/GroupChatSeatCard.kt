@@ -41,6 +41,7 @@ import me.rerere.rikkahub.data.model.GroupChatSeatOverrides
 import me.rerere.rikkahub.ui.components.ai.McpPickerButton
 import me.rerere.rikkahub.ui.components.ai.ModelSelector
 import me.rerere.rikkahub.ui.components.ai.SearchPickerButton
+import me.rerere.rikkahub.ui.components.ai.SearchMode
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
 import me.rerere.rikkahub.ui.theme.CustomColors
 import org.koin.compose.koinInject
@@ -187,8 +188,8 @@ fun SeatCard(
                         SearchPickerButton(
                             enableSearch = overrides.searchEnabled,
                             settings = settings,
-                            onToggleSearch = { enabled ->
-                                onUpdateOverrides { it.copy(searchEnabled = enabled) }
+                            onUpdateSearchMode = { mode ->
+                                onUpdateOverrides { it.copy(searchEnabled = mode != SearchMode.OFF) }
                             },
                             onUpdateSearchService = { index ->
                                 onUpdateOverrides { overrides ->

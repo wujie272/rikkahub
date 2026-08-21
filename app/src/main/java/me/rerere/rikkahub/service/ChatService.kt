@@ -36,6 +36,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.Tool
+import me.rerere.ai.provider.BuiltInTools
 import me.rerere.ai.provider.Modality
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
@@ -120,6 +121,10 @@ internal fun backgroundTextGenerationParams(
     customHeaders = model.customHeaders,
     customBody = model.customBodies,
 )
+
+internal fun shouldUseExternalWebSearch(assistant: Assistant, model: Model): Boolean {
+    return assistant.enableWebSearch && BuiltInTools.Search !in model.tools
+}
 
 data class ChatError(
     val id: Uuid = Uuid.random(),
@@ -850,6 +855,7 @@ class ChatService(
         } else {
             model.displayName
         }
+        val useExternalWebSearch = shouldUseExternalWebSearch(assistant, model)
 
         var latestFinishReasons: Set<String> = emptySet()
 
@@ -859,7 +865,7 @@ class ChatService(
 
             // memory tool
             if (!model.abilities.contains(ModelAbility.TOOL)) {
-                if (assistant.enableWebSearch || mcpManager.getAllAvailableTools().isNotEmpty()) {
+                if (useExternalWebSearch || mcpManager.getAllAvailableTools().isNotEmpty()) {
                     addError(
                         IllegalStateException(context.getString(R.string.tools_warning)),
                         conversationId,
@@ -953,7 +959,7 @@ class ChatService(
                 },
                 outputTransformers = outputTransformers,
                 tools = buildList {
-                    if (assistant.enableWebSearch) {
+                    if (useExternalWebSearch) {
                         addAll(createSearchTools(settings))
                     }
                     // Pass the caller context so context-aware tools (subagent_dispatch

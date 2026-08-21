@@ -21,6 +21,8 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenu
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
@@ -810,7 +812,7 @@ private fun TriggerEditor(
             readOnly = true,
             label = { Text(stringResource(R.string.setting_page_workflow_detail_edit_trigger_type)) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
-            modifier = Modifier.fillMaxWidth().menuAnchor(),
+            modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
         )
         ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             triggerTypeLabels.forEach { (key, label) ->
@@ -920,7 +922,7 @@ private fun ConditionEditor(
                     readOnly = true,
                     label = { Text(stringResource(R.string.setting_page_workflow_detail_edit_condition_type)) },
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
-                    modifier = Modifier.weight(1f).menuAnchor(),
+                    modifier = Modifier.weight(1f).menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
                     singleLine = true,
                 )
                 ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
