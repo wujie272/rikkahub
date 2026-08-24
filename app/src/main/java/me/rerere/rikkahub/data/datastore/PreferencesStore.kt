@@ -159,6 +159,7 @@ class SettingsStore(
         val THEME_ID = stringPreferencesKey("theme_id")
         val CUSTOM_THEMES = stringPreferencesKey("custom_themes")
         val DISPLAY_SETTING = stringPreferencesKey("display_setting")
+        val NETWORK_SETTING = stringPreferencesKey("network_setting")
         val DEVELOPER_MODE = booleanPreferencesKey("developer_mode")
 
         // 模型选择
@@ -299,6 +300,7 @@ class SettingsStore(
                 } ?: emptyList(),
                 developerMode = preferences[DEVELOPER_MODE] == true,
                 displaySetting = JsonInstant.decodeFromString(preferences[DISPLAY_SETTING] ?: "{}"),
+                networkSetting = JsonInstant.decodeFromString(preferences[NETWORK_SETTING] ?: "{}"),
                 searchServices = preferences[SEARCH_SERVICES]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: listOf(SearchServiceOptions.DEFAULT),
@@ -502,6 +504,7 @@ class SettingsStore(
             preferences[CUSTOM_THEMES] = JsonInstant.encodeToString(settings.customThemes)
             preferences[DEVELOPER_MODE] = settings.developerMode
             preferences[DISPLAY_SETTING] = JsonInstant.encodeToString(settings.displaySetting)
+            preferences[NETWORK_SETTING] = JsonInstant.encodeToString(settings.networkSetting)
 
             preferences[FAVORITE_MODELS] = JsonInstant.encodeToString(settings.favoriteModels)
             preferences[SELECT_MODEL] = settings.chatModelId.toString()
@@ -687,6 +690,90 @@ enum class AiLogLevel(val preferenceName: String) {
 }
 
 @Serializable
+data class Settings(
+    @Transient
+    val init: Boolean = false,
+    val dynamicColor: Boolean = true,
+    val themeId: String = PresetThemes[0].id,
+    val customThemes: List<CustomTheme> = emptyList(),
+    val developerMode: Boolean = false,
+    val displaySetting: DisplaySetting = DisplaySetting(),
+    val networkSetting: NetworkSetting = NetworkSetting(),
+    val favoriteModels: List<Uuid> = emptyList(),
+    val chatModelId: Uuid = Uuid.random(),
+    val fastModelId: Uuid = Uuid.random(),
+    val titleModelId: Uuid? = null,
+    val imageGenerationModelId: Uuid = Uuid.random(),
+    val titlePrompt: String = DEFAULT_TITLE_PROMPT,
+    val translateModeId: Uuid = Uuid.random(),
+    val translatePrompt: String = DEFAULT_TRANSLATION_PROMPT,
+    val translateThinkingBudget: Int = 0,
+    val enableSuggestion: Boolean = true,
+    val suggestionModelId: Uuid? = null,
+    val suggestionPrompt: String = DEFAULT_SUGGESTION_PROMPT,
+    val ocrModelId: Uuid = Uuid.random(),
+    val ocrPrompt: String = DEFAULT_OCR_PROMPT,
+    val compressModelId: Uuid = Uuid.random(),
+    val compressPrompt: String = DEFAULT_COMPRESS_PROMPT,
+    val assistantId: Uuid = DEFAULT_ASSISTANT_ID,
+    val providers: List<ProviderSetting> = DEFAULT_PROVIDERS,
+    /**
+     * IDs of built-in providers the user explicitly removed via long-press. The re-seed
+     * pass on settings load skips these so deletions stick across app restarts. Without
+     * this gate, deleting a default provider would just re-add it on next read.
+     */
+    val deletedBuiltInProviderIds: Set<Uuid> = emptySet(),
+    val assistants: List<Assistant> = DEFAULT_ASSISTANTS,
+    /**
+     * Names of bundled default-on skills (see [DEFAULT_AUTO_ENABLED_SKILLS]) that have already
+     * been seeded into the default assistants' enabledSkills exactly once. Mirrors
+     * [deletedBuiltInProviderIds]: it lets a newly-shipped skill auto-enable on upgrade while
+     * still respecting a later deliberate user-disable - once a name is recorded here it is
+     * never re-added, so toggling it off sticks across launches.
+     */
+    val autoEnabledDefaultSkills: Set<String> = emptySet(),
+    val assistantTags: List<Tag> = emptyList(),
+    val searchServices: List<SearchServiceOptions> = listOf(SearchServiceOptions.DEFAULT),
+    val searchCommonOptions: SearchCommonOptions = SearchCommonOptions(),
+    val searchServiceSelected: Int = 0,
+    val mcpServers: List<McpServerConfig> = emptyList(),
+    val webDavConfig: WebDavConfig = WebDavConfig(),
+    val s3Config: S3Config = S3Config(),
+    val ttsProviders: List<TTSProviderSetting> = DEFAULT_TTS_PROVIDERS,
+    val selectedTTSProviderId: Uuid = DEFAULT_SYSTEM_TTS_ID,
+    val defaultTTSPlaybackSpeed: Float = 1.0f,
+    val asrProviders: List<ASRProviderSetting> = emptyList(),
+    val selectedASRProviderId: Uuid? = null,
+    val modeInjections: List<PromptInjection.ModeInjection> = DEFAULT_MODE_INJECTIONS,
+    val lorebooks: List<Lorebook> = emptyList(),
+    val groupChatTemplates: List<GroupChatTemplate> = emptyList(),
+    val quickMessages: List<QuickMessage> = emptyList(),
+    val textSelectionConfig: TextSelectionConfig = TextSelectionConfig(),
+    val webServerEnabled: Boolean = false,
+    val webServerPort: Int = 8080,
+    val webServerJwtEnabled: Boolean = false,
+    val webServerAccessPassword: String = "",
+    val webServerLocalhostOnly: Boolean = false,
+    val aiLogLevel: AiLogLevel = AiLogLevel.INFO,
+    val backupReminderConfig: BackupReminderConfig = BackupReminderConfig(),
+    val launchCount: Int = 0,
+    val sponsorAlertDismissedAt: Int = 0,
+) {
+    companion object {
+        // 构造一个用于初始化的settings, 但它不能用于保存，防止使用初始值存储
+        fun dummy() = Settings(init = true)
+    }
+}
+
+@Serializable
+data class NetworkSetting(
+    val userAgent: String = "",
+    val proxyUrl: String = "",
+    val proxyUsername: String = "",
+    val proxyPassword: String = "",
+)
+
+@Serializable
 enum class ChatFontFamily {
     @SerialName("default")
     DEFAULT,
@@ -761,82 +848,6 @@ data class DisplaySetting(
     val useLastTurnMemoryOnSkip: Boolean = false,
     val volumeKeyScrollRatio: Float = 1.0f,
 )
-
-@Serializable
-data class Settings(
-    @Transient
-    val init: Boolean = false,
-    val dynamicColor: Boolean = true,
-    val themeId: String = PresetThemes[0].id,
-    val customThemes: List<CustomTheme> = emptyList(),
-    val developerMode: Boolean = false,
-    val displaySetting: DisplaySetting = DisplaySetting(),
-    val favoriteModels: List<Uuid> = emptyList(),
-    val chatModelId: Uuid = Uuid.random(),
-    val fastModelId: Uuid = Uuid.random(),
-    val titleModelId: Uuid? = null,
-    val imageGenerationModelId: Uuid = Uuid.random(),
-    val titlePrompt: String = DEFAULT_TITLE_PROMPT,
-    val translateModeId: Uuid = Uuid.random(),
-    val translatePrompt: String = DEFAULT_TRANSLATION_PROMPT,
-    val translateThinkingBudget: Int = 0,
-    val enableSuggestion: Boolean = true,
-    val suggestionModelId: Uuid? = null,
-    val suggestionPrompt: String = DEFAULT_SUGGESTION_PROMPT,
-    val ocrModelId: Uuid = Uuid.random(),
-    val ocrPrompt: String = DEFAULT_OCR_PROMPT,
-    val compressModelId: Uuid = Uuid.random(),
-    val compressPrompt: String = DEFAULT_COMPRESS_PROMPT,
-    val assistantId: Uuid = DEFAULT_ASSISTANT_ID,
-    val providers: List<ProviderSetting> = DEFAULT_PROVIDERS,
-    /**
-     * IDs of built-in providers the user explicitly removed via long-press. The re-seed
-     * pass on settings load skips these so deletions stick across app restarts. Without
-     * this gate, deleting a default provider would just re-add it on next read.
-     */
-    val deletedBuiltInProviderIds: Set<Uuid> = emptySet(),
-    val assistants: List<Assistant> = DEFAULT_ASSISTANTS,
-    /**
-     * Names of bundled default-on skills (see [DEFAULT_AUTO_ENABLED_SKILLS]) that have already
-     * been seeded into the default assistants' enabledSkills exactly once. Mirrors
-     * [deletedBuiltInProviderIds]: it lets a newly-shipped skill auto-enable on upgrade while
-     * still respecting a later deliberate user-disable - once a name is recorded here it is
-     * never re-added, so toggling it off sticks across launches.
-     */
-    val autoEnabledDefaultSkills: Set<String> = emptySet(),
-    val assistantTags: List<Tag> = emptyList(),
-    val searchServices: List<SearchServiceOptions> = listOf(SearchServiceOptions.DEFAULT),
-    val searchCommonOptions: SearchCommonOptions = SearchCommonOptions(),
-    val searchServiceSelected: Int = 0,
-    val mcpServers: List<McpServerConfig> = emptyList(),
-    val webDavConfig: WebDavConfig = WebDavConfig(),
-    val s3Config: S3Config = S3Config(),
-    val ttsProviders: List<TTSProviderSetting> = DEFAULT_TTS_PROVIDERS,
-    val selectedTTSProviderId: Uuid = DEFAULT_SYSTEM_TTS_ID,
-    val defaultTTSPlaybackSpeed: Float = 1.0f,
-    val asrProviders: List<ASRProviderSetting> = emptyList(),
-    val selectedASRProviderId: Uuid? = null,
-    val modeInjections: List<PromptInjection.ModeInjection> = DEFAULT_MODE_INJECTIONS,
-    val lorebooks: List<Lorebook> = emptyList(),
-    val groupChatTemplates: List<GroupChatTemplate> = emptyList(),
-
-    val quickMessages: List<QuickMessage> = emptyList(),
-    val textSelectionConfig: TextSelectionConfig = TextSelectionConfig(),
-    val webServerEnabled: Boolean = false,
-    val webServerPort: Int = 8080,
-    val webServerJwtEnabled: Boolean = false,
-    val webServerAccessPassword: String = "",
-    val webServerLocalhostOnly: Boolean = false,
-    val aiLogLevel: AiLogLevel = AiLogLevel.INFO,
-    val backupReminderConfig: BackupReminderConfig = BackupReminderConfig(),
-    val launchCount: Int = 0,
-    val sponsorAlertDismissedAt: Int = 0,
-) {
-    companion object {
-        // 构造一个用于初始化的settings, 但它不能用于保存，防止使用初始值存储
-        fun dummy() = Settings(init = true)
-    }
-}
 
 @Serializable
 data class WebDavConfig(
