@@ -1942,13 +1942,6 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_provider_page_requests">请求</string>
   <string name="setting_provider_page_success">成功</string>
   <string name="setting_provider_page_failures">失败</string>
-  <string name="setting_provider_page_proxy">代理</string>
-  <string name="setting_provider_page_proxy_desc">为此提供商配置 HTTP 代理</string>
-  <string name="setting_provider_page_proxy_none">无</string>
-  <string name="setting_provider_page_proxy_address">地址</string>
-  <string name="setting_provider_page_proxy_port">端口</string>
-  <string name="setting_provider_page_proxy_username">用户名</string>
-  <string name="setting_provider_page_proxy_password">密码</string>
   <string name="setting_provider_page_import_keys">导入 Key</string>
   <string name="setting_provider_page_import_keys_hint">粘贴 Key，每行一个或用逗号分隔</string>
   <string name="setting_provider_page_import_confirm">导入</string>

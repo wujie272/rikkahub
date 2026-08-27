@@ -2022,13 +2022,6 @@
   <string name="setting_provider_page_requests">Requests</string>
   <string name="setting_provider_page_success">Success</string>
   <string name="setting_provider_page_failures">Failures</string>
-  <string name="setting_provider_page_proxy">Proxy</string>
-  <string name="setting_provider_page_proxy_desc">Configure HTTP proxy for this provider</string>
-  <string name="setting_provider_page_proxy_none">None</string>
-  <string name="setting_provider_page_proxy_address">Address</string>
-  <string name="setting_provider_page_proxy_port">Port</string>
-  <string name="setting_provider_page_proxy_username">Username</string>
-  <string name="setting_provider_page_proxy_password">Password</string>
     <string name="setting_provider_page_cooldown">Cooldown</string>
     <string name="setting_provider_page_cooldown_disabled">Off</string>
     <string name="setting_provider_page_cooldown_off">Off</string>

@@ -167,8 +167,8 @@ fun SettingProviderDetailPage(id: Uuid, vm: SettingVM = koinViewModel()) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     val navController = LocalNavController.current
     val provider = settings.providers.find { it.id == id } ?: return
-    // Tab 0: 配置(含Key管理) | Tab 1: 模型 | Tab 2: 代理(仅远程Provider)
-    val tabCount = if (provider.hasKeyPage) 3 else 2
+    // Tab 0: 配置(含Key管理) | Tab 1: 模型
+    val tabCount = 2
     val pager = rememberPagerState { tabCount }
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
@@ -244,14 +244,6 @@ fun SettingProviderDetailPage(id: Uuid, vm: SettingVM = koinViewModel()) {
                     icon = { Icon(HugeIcons.Package01, null) },
                     onClick = { scope.launch { pager.animateScrollToPage(1) } }
                 )
-                if (provider.hasKeyPage) {
-                    NavigationBarItem(
-                        selected = pager.currentPage == 2,
-                        label = { Text(stringResource(R.string.setting_provider_page_proxy)) },
-                        icon = { Icon(HugeIcons.Connect, null) },
-                        onClick = { scope.launch { pager.animateScrollToPage(2) } }
-                    )
-                }
             }
         }
     ) {
@@ -284,21 +276,6 @@ fun SettingProviderDetailPage(id: Uuid, vm: SettingVM = koinViewModel()) {
                         onEdit = onEdit
                     )
                 }
-
-                2 -> {
-                    if (provider.hasKeyPage) {
-                        SettingProviderProxyPage(
-                            provider = provider,
-                            onEdit = onEdit
-                        )
-                    } else {
-                        SettingProviderModelPage(
-                            provider = provider,
-                            onEdit = onEdit
-                        )
-                    }
-                }
-
 
             }
         }
