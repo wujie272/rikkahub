@@ -1143,7 +1143,9 @@ class ChatService(
 
             // ═══ 自动继续逻辑（FLIT 风格：隐藏指令 + 去重） ═══
             // 保留失败的回复，注入隐藏 continue 指令让 LLM 从断点继续
-            if (assistant.autoContinueOnError) {
+            // 网络错误已在 GenerationHandler 层自动重试，重试耗尽后才走到这里；
+            // 网络错误不应触发"续写"（没有已生成内容可续），交给外层报错即可
+            if (assistant.autoContinueOnError && error !is java.io.IOException) {
                 val attemptCount = continueAttempts.getOrDefault(conversationId, 0)
                 if (attemptCount < assistant.maxContinueCount) {
                     continueAttempts[conversationId] = attemptCount + 1

@@ -11,6 +11,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flow
@@ -54,6 +57,11 @@ import me.rerere.rikkahub.data.ai.transformers.MessageTransformer
 import me.rerere.rikkahub.data.ai.transformers.OutputMessageTransformer
 import me.rerere.rikkahub.data.files.FileFolders
 import java.io.File
+import java.io.IOException
+import java.net.ConnectException
+import java.net.NoRouteToHostException
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
 import me.rerere.rikkahub.data.ai.transformers.onGenerationFinish
 import me.rerere.rikkahub.data.ai.transformers.transforms
 import me.rerere.rikkahub.data.ai.transformers.visualTransforms
@@ -66,6 +74,7 @@ import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantMemory
 import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.data.ai.requestlog.AIRequestLogManager
+import me.rerere.rikkahub.R
 import me.rerere.rikkahub.utils.applyPlaceholders
 import java.util.Locale
 import kotlin.time.Clock
@@ -287,6 +296,11 @@ internal object LoopGuard {
         return LoopGuardDecision(true, priorOccurrences)
     }
 }
+
+private const val MAX_PROVIDER_NETWORK_RETRIES = 3
+private const val INITIAL_PROVIDER_RETRY_DELAY_MS = 1_000L
+
+private class StreamChunkHandlingException(cause: Throwable) : RuntimeException(cause)
 
 class GenerationHandler(
     private val context: Context,
@@ -1086,44 +1100,72 @@ class GenerationHandler(
         val stepStartMs = System.currentTimeMillis()
         var stepError: Throwable? = null
 
-        if (stream) {
-            try {
+        try {
+            if (stream) {
+                // 每次重试都从本次模型调用开始前的消息快照重新合并，避免将重试响应
+                // 追加到已经展示的半截回复后面，也避免 retry 响应污染 onUpdateMessages
+                val responseBaseMessages = messages
+                var retryCount = 0
                 var lastFinishReason: String? = null
-                val streamChunkHandler = StreamChunkHandler(model)
-                providerImpl.streamText(
-                    providerSetting = provider,
-                    messages = internalMessages,
-                    params = params
-                ).collect {
-                    messages = streamChunkHandler.handle(messages, it)
-                    if (it is StreamChunk.Finish) {
-                        lastFinishReason = it.finishReason
+                while (true) {
+                    val streamChunkHandler = StreamChunkHandler(model)
+                    var attemptMessages = responseBaseMessages
+                    try {
+                        providerImpl.streamText(
+                            providerSetting = provider,
+                            messages = internalMessages,
+                            params = params
+                        ).collect { chunk ->
+                            try {
+                                if (retryCount > 0) {
+                                    processingStatus.value = null
+                                }
+                                attemptMessages = streamChunkHandler.handle(attemptMessages, chunk)
+                                if (chunk is StreamChunk.Finish) {
+                                    lastFinishReason = chunk.finishReason
+                                }
+                                val finishReasons = lastFinishReason
+                                    ?.takeIf { r -> r.isNotBlank() && r != "unknown" }
+                                    ?.let { setOf(it) }
+                                    ?: emptySet()
+                                onUpdateMessages(attemptMessages, finishReasons)
+                            } catch (error: CancellationException) {
+                                throw error
+                            } catch (error: Throwable) {
+                                // 下游渲染/转换失败不属于网络故障，不能重放模型请求
+                                throw StreamChunkHandlingException(error)
+                            }
+                        }
+                        messages = attemptMessages
+                        break
+                    } catch (error: Throwable) {
+                        if (error is StreamChunkHandlingException) {
+                            throw error.cause ?: error
+                        }
+                        retryCount = awaitNetworkRetryOrThrow(
+                            error = error,
+                            retryCount = retryCount,
+                            processingStatus = processingStatus,
+                        )
                     }
-                    val finishReasons = lastFinishReason
-                        ?.takeIf { r -> r.isNotBlank() && r != "unknown" }
-                        ?.let { setOf(it) }
-                        ?: emptySet()
-                    onUpdateMessages(messages, finishReasons)
                 }
-            } catch (e: Throwable) {
-                stepError = e
-            }
-        } else {
-            try {
-                val result = providerImpl.generateText(
-                    providerSetting = provider,
-                    messages = internalMessages,
-                    params = params,
-                )
+            } else {
+                val result = executeProviderRequestWithRetry(processingStatus) {
+                    providerImpl.generateText(
+                        providerSetting = provider,
+                        messages = internalMessages,
+                        params = params,
+                    )
+                }
                 messages = messages.handleTextGenerationResult(result = result, model = model)
                 val finishReasons = result.finishReason
                     ?.takeIf { r -> r.isNotBlank() && r != "unknown" }
                     ?.let { setOf(it) }
                     ?: emptySet()
                 onUpdateMessages(messages, finishReasons)
-            } catch (e: Throwable) {
-                stepError = e
             }
+        } catch (e: Throwable) {
+            stepError = e
         }
 
         // 完整请求/响应日志写入 Room 数据库（不占内存）
@@ -1160,6 +1202,62 @@ class GenerationHandler(
 
         // 流式模式下如果发生错误，重新抛出
         if (stepError != null) throw stepError
+    }
+
+    private suspend fun <T> executeProviderRequestWithRetry(
+        processingStatus: MutableStateFlow<String?>,
+        block: suspend () -> T,
+    ): T {
+        var retryCount = 0
+        while (true) {
+            try {
+                return block()
+            } catch (error: Throwable) {
+                retryCount = awaitNetworkRetryOrThrow(
+                    error = error,
+                    retryCount = retryCount,
+                    processingStatus = processingStatus,
+                )
+            }
+        }
+    }
+
+    private suspend fun awaitNetworkRetryOrThrow(
+        error: Throwable,
+        retryCount: Int,
+        processingStatus: MutableStateFlow<String?>,
+    ): Int {
+        // 用户主动停止生成时，底层连接也可能以 IOException("canceled") 收尾；
+        // 先检查协程状态，确保取消不会被当作网络波动重新拉起。
+        currentCoroutineContext().ensureActive()
+        if (error !is IOException || retryCount >= MAX_PROVIDER_NETWORK_RETRIES) {
+            throw error
+        }
+
+        val nextRetryCount = retryCount + 1
+        val retryDelay = INITIAL_PROVIDER_RETRY_DELAY_MS shl retryCount
+        processingStatus.value = context.getString(
+            R.string.chat_generation_network_retrying,
+            getNetworkErrorMessage(error),
+            nextRetryCount,
+            MAX_PROVIDER_NETWORK_RETRIES,
+        )
+        Log.w(
+            TAG,
+            "Provider connection failed, retrying in ${retryDelay}ms " +
+                    "($nextRetryCount/$MAX_PROVIDER_NETWORK_RETRIES)",
+            error,
+        )
+        delay(retryDelay)
+        return nextRetryCount
+    }
+
+    private fun getNetworkErrorMessage(error: Throwable): String = when (error) {
+        is UnknownHostException -> context.getString(R.string.chat_generation_network_unknown_host)
+        is SocketTimeoutException -> context.getString(R.string.chat_generation_network_timeout)
+        is ConnectException -> context.getString(R.string.chat_generation_network_unreachable)
+        is NoRouteToHostException -> context.getString(R.string.chat_generation_network_unreachable)
+        else -> context.getString(R.string.chat_generation_network_disconnected)
     }
 
     private fun maybeTruncateToolOutput(
