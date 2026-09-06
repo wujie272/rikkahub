@@ -5,6 +5,7 @@ import android.content.Context
 import android.util.Log
 import androidx.core.net.toUri
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
@@ -92,6 +93,7 @@ import me.rerere.rikkahub.service.ContinuationDedupeConfig
 import me.rerere.rikkahub.service.HiddenContinueRequestTransformer
 import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.MessageNode
+import me.rerere.rikkahub.data.model.localFileUrls
 import me.rerere.rikkahub.data.model.replaceRegexes
 import me.rerere.rikkahub.data.model.toMessageNode
 import me.rerere.rikkahub.data.model.GroupChatTemplate
@@ -343,7 +345,11 @@ class ChatService(
                     assistantId = settings.getCurrentAssistant().id
                 ),
                 scope = appScope,
-                onIdle = { removeSession(it) }
+                onIdle = { removeSession(it) },
+                onGenerationFinished = { id, cause ->
+                    if (cause != null) sessions[id]?.messageQueue?.pause()
+                    appScope.launch { dispatchNextQueuedMessage(id) }
+                },
             ).also {
                 _sessionsVersion.value++
                 Log.i(TAG, "createSession: $id (total: ${sessions.size + 1})")
@@ -459,6 +465,61 @@ class ChatService(
 
     // ---- 发送消息 ----
 
+    fun getMessageQueueFlow(conversationId: Uuid): StateFlow<MessageQueueState> =
+        getOrCreateSession(conversationId).messageQueue.state
+
+    fun removeQueuedMessage(conversationId: Uuid, messageId: Uuid) {
+        sessions[conversationId]?.messageQueue?.remove(messageId)?.let(::cleanupQueuedAttachments)
+        dispatchNextQueuedMessage(conversationId)
+    }
+
+    fun beginEditQueuedMessage(conversationId: Uuid, messageId: Uuid): QueuedMessage? =
+        sessions[conversationId]?.messageQueue?.beginEdit(messageId)
+
+    fun finishEditQueuedMessage(
+        conversationId: Uuid,
+        messageId: Uuid,
+        parts: List<UIMessagePart>? = null
+    ) {
+        sessions[conversationId]?.messageQueue?.finishEdit(messageId, parts)
+            ?.let(::cleanupQueuedAttachments)
+        dispatchNextQueuedMessage(conversationId)
+    }
+
+    private fun cleanupQueuedAttachments(previous: QueuedMessage) {
+        val candidates = previous.parts.localFileUrls()
+        if (candidates.isEmpty()) return
+        appScope.launch {
+            try {
+                // 未打开的会话及未选中的分支也可能引用同一附件。
+                val persistedReferences =
+                    candidates.filter { conversationRepo.hasFileReference(it) }.toSet()
+                // 数据库查询挂起期间队列可能已推进，删除前重新读取内存引用。
+                val currentSessions = sessions.values.toList()
+                val unusedFiles = unreferencedQueuedAttachmentUrls(
+                    previous = previous,
+                    conversations = currentSessions.map { it.state.value },
+                    pendingMessages = currentSessions.flatMap {
+                        it.messageQueue.state.value.messages + listOfNotNull(it.submittingMessage)
+                    },
+                ) - persistedReferences
+                if (unusedFiles.isNotEmpty()) {
+                    filesManager.deleteChatFiles(unusedFiles.map { it.toUri() })
+                }
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                // 无法确认引用时保留文件，避免误删。
+                Log.w(TAG, "Failed to clean queued attachments", e)
+            }
+        }
+    }
+
+    fun resumeMessageQueue(conversationId: Uuid) {
+        sessions[conversationId]?.messageQueue?.resume()
+        dispatchNextQueuedMessage(conversationId)
+    }
+
+    fun sendMessage(conversationId: Uuid, content: List<UIMessagePart>, answer: Boolean = true) {
     fun sendMessage(
         conversationId: Uuid,
         content: List<UIMessagePart>,
@@ -466,14 +527,37 @@ class ChatService(
         groupChatSpeakerSeatIdsOverride: List<Uuid>? = null,
     ) {
         if (content.isEmptyInputMessage()) return
-
         val session = getOrCreateSession(conversationId)
-        val previousJob = session.getJob()
-        previousJob?.cancel()
+        synchronized(session) {
+            if (session.messageQueue.state.value.messages.isEmpty()) session.messageQueue.resume()
+            session.messageQueue.enqueue(content, answer)
+            dispatchNextQueuedMessage(conversationId)
+        }
+    }
 
+    private fun dispatchNextQueuedMessage(conversationId: Uuid) {
+        val session = sessions[conversationId] ?: return
+        synchronized(session) {
+            // A pending tool approval is still part of the current turn.
+            if (session.getJob() != null || session.state.value.currentMessages.any { message ->
+                    message.parts.any { it is UIMessagePart.Tool && it.isPending }
+                }) return
+            val next = session.messageQueue.takeNext() ?: return
+            session.submittingMessage = next
+            sendQueuedMessage(session, next)
+        }
+    }
+
+    private fun sendQueuedMessage(session: ConversationSession, queued: QueuedMessage) {
+        val conversationId = session.id
+        val content = queued.parts
+        val answer = queued.answer
+        val job = launchGenerationJob(
+            conversationId = conversationId,
+            keepAliveInBackground = answer,
+        ) {
         val job = appScope.launch {
             try {
-                runCatching { previousJob?.join() }
                 finishInterruptedPendingTools(conversationId)
 
                 val currentConversation = session.state.value
@@ -493,6 +577,7 @@ class ChatService(
                     ).toMessageNode(),
                 )
                 saveConversation(conversationId, withUser)
+                session.submittingMessage = null
 
                 // Phase 16 — fast-path router.
                 val routedHandled = if (answer)
@@ -527,7 +612,14 @@ class ChatService(
                 _generationDoneFlow.emit(conversationId)
             } catch (e: Exception) {
                 e.printStackTrace()
+                if (e is CancellationException) throw e
+                session.messageQueue.pause()
                 addError(e, conversationId, title = context.getString(R.string.error_title_send_message))
+            }
+        }
+        job.invokeOnCompletion {
+            synchronized(session) {
+                if (session.submittingMessage?.id == queued.id) session.submittingMessage = null
             }
         }
         session.setJob(job)
@@ -662,12 +754,13 @@ class ChatService(
         conversationId: Uuid,
         message: UIMessage,
         regenerateAssistantMsg: Boolean = true
-    ) {
+    ) = synchronized(getOrCreateSession(conversationId)) {
         val session = getOrCreateSession(conversationId)
-        session.getJob()?.cancel()
+        val previousJob = session.getJob()
 
         val job = appScope.launch {
             try {
+                previousJob?.join()
                 val conversation = session.state.value
 
                 // Locate the message's node up front. indexOf returns -1 when the node is no
@@ -699,6 +792,8 @@ class ChatService(
 
                 _generationDoneFlow.emit(conversationId)
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                session.messageQueue.pause()
                 addError(e, conversationId, title = context.getString(R.string.error_title_regenerate_message))
             }
         }
@@ -836,6 +931,8 @@ class ChatService(
                 }
                 _generationDoneFlow.emit(conversationId)
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                session.messageQueue.pause()
                 addError(e, conversationId, title = context.getString(R.string.error_title_tool_approval))
             }
         }
@@ -1077,6 +1174,8 @@ class ChatService(
         }.onFailure { error ->
             // 兜底取消 Live Update 通知（生成开始前失败时 onCompletion 不会执行）
             appEventBus.tryEmit(AppEvent.ChatGenerationEnded(conversationId, senderName, null))
+            if (it is CancellationException) throw it
+            sessions[conversationId]?.messageQueue?.pause()
 
             // Persist the in-memory snapshot so the Auto/Pending → Denied transitions
             // GenerationHandler did inside its try/catch (the "generation_failed" recovery
@@ -1690,7 +1789,11 @@ class ChatService(
     }
 
     private fun checkFilesDelete(newConversation: Conversation, oldConversation: Conversation) {
-        val newFiles = newConversation.files
+        val session = sessions[newConversation.id]
+        val queuedFiles = (session?.messageQueue?.state?.value?.messages.orEmpty() +
+                listOfNotNull(session?.submittingMessage))
+            .flatMap { it.parts }.localFileUrls().map { it.toUri() }
+        val newFiles = newConversation.files + queuedFiles
         val oldFiles = oldConversation.files
         val deletedFiles = oldFiles.filter { file ->
             newFiles.none { it == file }
@@ -1729,6 +1832,10 @@ class ChatService(
         } else {
             conversationRepo.updateConversation(updatedConversation)
         }
+
+        // 删除消息或切换分支也可能解除工具审批阻塞，保存成功后重新检查队列。
+        // 调度器仍会检查当前生成任务、待审批工具、暂停状态及编辑占位。
+        dispatchNextQueuedMessage(conversationId)
     }
 
     // ---- 翻译消息 ----
@@ -2856,6 +2963,9 @@ class ChatService(
 
     // 停止当前会话生成任务（不清理会话缓存）
     suspend fun stopGeneration(conversationId: Uuid) {
+        // 上游语义：停止生成时暂停消息队列，避免排队的消息立刻接着跑
+        sessions[conversationId]?.messageQueue?.pause()
+
         // 群聊的停止逻辑将在 Step 3 中集成到 session 管理中
 
         val convMutex = mutexFor(conversationId)
