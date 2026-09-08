@@ -49,6 +49,7 @@ data class Assistant(
     val enabledSkills: Set<String> = emptySet(),        // 启用的 skill 名称列表
     val enabledKnowledgeBaseIds: Set<kotlin.uuid.Uuid> = emptySet(), // 启用的知识库 ID 列表
     val enableTimeReminder: Boolean = false,            // 时间间隔提醒注入
+    val timeReminderIntervalMinutes: Int = 60,          // 时间提醒间隔（分钟，至少 1 分钟，上游 5b4d78950）
     // Phase 11 — Sub-agents settings. Defaults to "inherit from main" (null model id +
     // empty system prompt → built-in focused-sub-agent prompt). Each assistant has its
     // own concurrency cap; we hard-cap globally at 16 across all assistants in the engine.
