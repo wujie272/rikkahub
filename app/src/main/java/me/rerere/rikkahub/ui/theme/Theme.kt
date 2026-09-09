@@ -81,6 +81,7 @@ fun RikkahubTheme(
     val view = LocalView.current
     // 悬浮窗（FloatingWindow）等场景下 Compose 挂在 Application Context 上，
     // view.context 并不是 Activity，此时没有系统栏可更新，必须跳过。
+    // （上游 a7ee362f9 的「退出时恢复系统栏图标颜色」本地已具备，此处保留更严格的守卫）
     val activity = view.context.getActivity()
     if (!view.isInEditMode && activity != null) {
         DisposableEffect(view, activity, darkTheme) {
