@@ -140,6 +140,7 @@ private fun SwipeableFavoriteCard(
 
     // Key on settledValue: currentValue flips to the closest anchor mid-animation,
     // which would restart this effect and cancel it before onDelete() runs.
+    // （上游 445341e91 的早期版本已被本地 54aa81148 取代，保留本地实现）
     LaunchedEffect(dismissState.settledValue) {
         if (dismissState.settledValue == SwipeToDismissBoxValue.EndToStart) {
             onDelete()
