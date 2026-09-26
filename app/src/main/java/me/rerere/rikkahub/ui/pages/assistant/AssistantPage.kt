@@ -26,16 +26,12 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
@@ -58,13 +54,11 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastForEach
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import me.rerere.hugeicons.stroke.MoreVertical
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.DEFAULT_ASSISTANTS_IDS
@@ -73,15 +67,18 @@ import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantMemory
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.FormItem
+import me.rerere.rikkahub.ui.components.ui.ItemAction
+import me.rerere.rikkahub.ui.components.ui.ItemActionMenu
+import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
 import me.rerere.rikkahub.ui.components.ui.Tag
 import me.rerere.rikkahub.ui.components.ui.TagType
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
+import me.rerere.rikkahub.ui.components.ui.longPressReorder
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.hooks.EditState
 import me.rerere.rikkahub.ui.hooks.EditStateContent
 import me.rerere.rikkahub.ui.hooks.heroAnimation
 import me.rerere.rikkahub.ui.hooks.useEditState
-import me.rerere.rikkahub.ui.modifier.onClick
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantImporter
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantExporter
 import me.rerere.rikkahub.ui.theme.CustomColors
@@ -168,7 +165,6 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
                     vm.updateSettings(settings.copy(assistants = newAssistants))
                 }
             }
-            val haptic = LocalHapticFeedback.current
 
             // 搜索框
             OutlinedTextField(
@@ -225,27 +221,16 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
                             onEdit = {
                                 navController.navigate(Screen.AssistantDetail(id = assistant.id.toString()))
                             },
-                            onShowActions = {
-                                actionSheetAssistant = assistant
+                            onCopy = {
+                                vm.copyAssistant(assistant)
+                            },
+                            onDelete = {
+                                deleteTarget = assistant
                             },
                             modifier = Modifier
-                                .scale(if (isDragging) 0.95f else 1f)
                                 .fillMaxWidth()
                                 .animateItem()
-                                .then(
-                                    if (!isFiltering) {
-                                        Modifier.longPressDraggableHandle(
-                                            onDragStarted = {
-                                                haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
-                                            },
-                                            onDragStopped = {
-                                                haptic.performHapticFeedback(HapticFeedbackType.GestureEnd)
-                                            }
-                                        )
-                                    } else {
-                                        Modifier
-                                    }
-                                )
+                                .then(longPressReorder(isDragging, enabled = !isFiltering))
                         )
                     }
                 }
@@ -413,7 +398,6 @@ private fun AssistantTagsFilterRow(
     selectedTagIds: Set<Uuid>,
     onUpdateSelectedTagIds: (Set<Uuid>) -> Unit
 ) {
-    val haptic = LocalHapticFeedback.current
     if (settings.assistantTags.isNotEmpty()) {
         val tagsListState = rememberLazyListState()
         val tagsReorderableState = rememberReorderableLazyListState(tagsListState) { from, to ->
@@ -451,16 +435,7 @@ private fun AssistantTagsFilterRow(
                             },
                             selected = tag.id in selectedTagIds,
                             shape = RoundedCornerShape(50),
-                            modifier = Modifier
-                                .scale(if (isDragging) 0.95f else 1f)
-                                .longPressDraggableHandle(
-                                    onDragStarted = {
-                                        haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
-                                    },
-                                    onDragStopped = {
-                                        haptic.performHapticFeedback(HapticFeedbackType.GestureEnd)
-                                    },
-                                )
+                            modifier = longPressReorder(isDragging)
                         )
                     }
                 }
@@ -555,7 +530,8 @@ private fun AssistantItem(
     modifier: Modifier = Modifier,
     memories: List<AssistantMemory>,
     onEdit: () -> Unit,
-    onShowActions: () -> Unit,
+    onCopy: () -> Unit,
+    onDelete: () -> Unit,
 ) {
     Card(
         modifier = modifier.fillMaxWidth(),
@@ -627,12 +603,20 @@ private fun AssistantItem(
                 }
             }
 
-            IconButton(
-                onClick = onShowActions
-            ) {
-                Icon(
-                    imageVector = HugeIcons.MoreVertical,
-                    contentDescription = stringResource(R.string.assistant_page_actions)
+            ItemActionMenu(
+                actions = listOf(
+                    ItemAction(
+                        text = stringResource(R.string.assistant_page_clone),
+                        icon = HugeIcons.Copy01,
+                        onClick = onCopy,
+                    ),
+                    ItemAction(
+                        text = stringResource(R.string.assistant_page_delete),
+                        icon = HugeIcons.Delete01,
+                        destructive = true,
+                        enabled = assistant.id !in DEFAULT_ASSISTANTS_IDS,
+                        onClick = onDelete,
+                    ),
                 )
             }
         }
@@ -703,49 +687,6 @@ private fun AssistantActionSheet(
                 modifier = Modifier.onClick { onCopy() },
                 colors = ListItemDefaults.colors(containerColor = Color.Transparent)
             )
-
-            // 删除选项（仅非默认助手显示）
-            if (assistant.id !in DEFAULT_ASSISTANTS_IDS) {
-                ListItem(
-                    headlineContent = {
-                        Text(
-                            stringResource(R.string.assistant_page_delete),
-                            color = MaterialTheme.colorScheme.error
-                        )
-                    },
-                    leadingContent = {
-                        Icon(
-                            imageVector = HugeIcons.Delete01,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.error
-                        )
-                    },
-                    modifier = Modifier.onClick { showDeleteDialog = true },
-                    colors = ListItemDefaults.colors(containerColor = Color.Transparent)
-                )
-            }
         }
-    }
-
-    if (showDeleteDialog) {
-        AlertDialog(
-            onDismissRequest = { showDeleteDialog = false },
-            title = { Text(stringResource(R.string.assistant_page_delete)) },
-            text = { Text(stringResource(R.string.assistant_page_delete_dialog_text)) },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showDeleteDialog = false
-                        onDelete()
-                    }) {
-                    Text(stringResource(R.string.confirm))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeleteDialog = false }) {
-                    Text(stringResource(R.string.cancel))
-                }
-            },
-        )
     }
 }
