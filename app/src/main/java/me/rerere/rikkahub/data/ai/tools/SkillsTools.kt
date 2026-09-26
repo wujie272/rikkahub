@@ -10,6 +10,9 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.files.SkillManager
 import me.rerere.rikkahub.data.files.SkillMetadata
 
+// 与 Agent Skills 规范的 description 上限一致
+private const val MAX_SKILL_DESCRIPTION_LENGTH = 1024
+
 fun createSkillTools(
     enabledSkills: Set<String>,
     allSkills: List<SkillMetadata>,
@@ -67,8 +70,9 @@ fun createSkillTools(
                         appendLine("<available_skills>")
                         lazy.forEach { skill ->
                             appendLine("  <skill>")
-                            appendLine("    <name>${skill.name}</name>")
-                            appendLine("    <description>${skill.description}</description>")
+                            // 技能可能来自第三方导入，转义并限长，防止 name/description 闭合标签注入任意系统提示
+                            appendLine("    <name>${skill.name.escapeXml()}</name>")
+                            appendLine("    <description>${skill.description.take(MAX_SKILL_DESCRIPTION_LENGTH).escapeXml()}</description>")
                             appendLine("  </skill>")
                         }
                         append("</available_skills>")
@@ -131,6 +135,11 @@ fun createSkillTools(
                     )
                 )
                 val name = it.jsonObject["name"]?.jsonPrimitive?.content
+                    // 模型可能照抄系统提示中转义后的名称，两种形式都接受
+                    ?.let { raw ->
+                        available.firstOrNull { skill -> skill.name == raw || skill.name.escapeXml() == raw }?.name
+                            ?: raw
+                    }
                     ?: return@Tool err(
                         "missing_required_arg",
                         "use_skill requires a 'name' argument identifying which skill to load.",
@@ -172,4 +181,15 @@ fun createSkillTools(
             }
         )
     )
+}
+
+private fun String.escapeXml(): String = buildString(length) {
+    for (c in this@escapeXml) {
+        when (c) {
+            '&' -> append("&amp;")
+            '<' -> append("&lt;")
+            '>' -> append("&gt;")
+            else -> append(c)
+        }
+    }
 }

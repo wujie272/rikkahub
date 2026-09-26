@@ -63,6 +63,10 @@ val repositoryModule = module {
                         source = File(context.filesDir, FileFolders.UPLOAD).apply { mkdirs() },
                         target = "/upload",
                     ),
+                    WorkspaceBindMount(
+                        source = File(context.filesDir, FileFolders.BUILTIN_SKILLS).apply { mkdirs() },
+                        target = "/builtin_skills",
+                    ),
                 ),
             )
         )
