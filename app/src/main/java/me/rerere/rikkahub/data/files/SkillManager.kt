@@ -201,11 +201,23 @@ class SkillManager(
     fun saveSkillFile(skillName: String, relativePath: String, content: String): Boolean {
         val skillDir = resolveSkillDir(skillName) ?: return false
         val target = SkillPaths.resolveSkillFile(skillDir, relativePath) ?: return false
-        target.parentFile?.mkdirs()
-        target.writeText(content)
-        return true
+        val parent = target.parentFile ?: return false
+        // 先写同目录临时文件再 rename 覆盖，避免写到一半失败时损坏原文件；
+        // IO 异常（如 mkdirs 失败导致 FileNotFoundException）转为返回 false，不向调用方抛出
+        val tempFile = parent.resolve(".${target.name}.tmp")
+        return try {
+            if (!parent.exists() && !parent.mkdirs()) return false
+            tempFile.writeText(content)
+            tempFile.renameTo(target)
+        } catch (e: Exception) {
+            Log.w(TAG, "saveSkillFile: Failed to save $skillName/$relativePath", e)
+            false
+        } finally {
+            if (tempFile.exists()) tempFile.delete()
+        }
     }
 
+    // 本地定制（Phase 19C 本地文件导入）仍需要字符串版本；上游已删除该便捷包装，这里保留。
     fun saveSkillFilesAtomically(skillName: String, files: Map<String, String>): Boolean {
         return saveSkillFileBytesAtomically(
             skillName = skillName,
