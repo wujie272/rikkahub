@@ -1685,4 +1685,6 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="workspace_terminal_close_confirm_title">터미널 %1$d번을 닫으시겠습니까?</string>
   <string name="workspace_terminal_close_confirm_message">이 탭을 닫으면 실행 중인 프로세스가 종료됩니다.</string>
   <string name="workspace_terminal_close">닫기</string>
+  <string name="skills_page_search_placeholder">스킬 검색</string>
+  <string name="skills_page_search_no_result">일치하는 스킬 없음</string>
 </resources>

@@ -1362,4 +1362,6 @@
   <string name="skill_detail_save_failed">فشل الحفظ</string>
   <string name="update_download_description">جارٍ تنزيل التحديث…</string>
   <string name="chat_stop_generation_before_delete">من فضلك أوقف التوليد قبل حذف الرسائل</string>
+  <string name="skills_page_search_placeholder">البحث في المهارات</string>
+  <string name="skills_page_search_no_result">لا توجد مهارات مطابقة</string>
 </resources>

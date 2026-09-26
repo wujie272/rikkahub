@@ -2271,5 +2271,7 @@
   <string name="chat_generation_network_timeout">Connection timed out</string>
   <string name="chat_generation_network_unreachable">Unable to connect to server</string>
   <string name="chat_generation_network_disconnected">Network connection lost</string>
+  <string name="skills_page_search_placeholder">Search skills</string>
+  <string name="skills_page_search_no_result">No matching skills</string>
 </resources>
 

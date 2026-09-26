@@ -1690,4 +1690,6 @@
   <string name="workspace_terminal_close_confirm_title">關閉終端機 %1$d？</string>
   <string name="workspace_terminal_close_confirm_message">關閉此分頁將終止仍在其中執行的任何程序。</string>
   <string name="workspace_terminal_close">關閉</string>
+  <string name="skills_page_search_placeholder">搜尋技能</string>
+  <string name="skills_page_search_no_result">找不到符合的技能</string>
 </resources>

@@ -1685,4 +1685,6 @@
   <string name="workspace_terminal_close_confirm_title">Закрыть терминал %1$d?</string>
   <string name="workspace_terminal_close_confirm_message">Закрытие этой вкладки приведет к завершению всех процессов, которые все еще в ней выполняются.</string>
   <string name="workspace_terminal_close">Закрыть</string>
+  <string name="skills_page_search_placeholder">Поиск навыков</string>
+  <string name="skills_page_search_no_result">Нет подходящих навыков</string>
 </resources>
