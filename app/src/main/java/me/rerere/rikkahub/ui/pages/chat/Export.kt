@@ -62,7 +62,6 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import androidx.compose.runtime.mutableStateListOf
 import androidx.navigation3.runtime.NavKey
-import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.ui.context.Navigator
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
@@ -93,6 +92,8 @@ import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
 import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
 import me.rerere.rikkahub.ui.components.ui.BitmapComposer
 import me.rerere.rikkahub.ui.components.ui.ChainOfThought
+import me.rerere.rikkahub.ui.components.charts.ChartCard
+import me.rerere.rikkahub.ui.components.charts.ChartSpec
 import me.rerere.rikkahub.ui.components.ui.ChainOfThoughtScope
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalSettings
@@ -578,6 +579,11 @@ private fun ExportedChatMessage(
                                 }
                             }
                         }
+                    }
+
+                    is MessagePartBlock.ChartBlock -> {
+                        val spec = remember(block.tool.input) { ChartSpec.fromJson(block.tool.inputAsJson()) }
+                        spec?.let { ChartCard(spec = it) }
                     }
 
                     is MessagePartBlock.ContentBlock -> {

@@ -76,4 +76,5 @@ sealed class LocalToolOption {
 
     @Serializable @SerialName("app_data_bridge")   data object AppDataBridge      : LocalToolOption()
 
+    @Serializable @SerialName("chart_display")     data object ChartDisplay        : LocalToolOption()
 }
