@@ -155,7 +155,6 @@ class WorkspaceManager(
                 workingDir = workingDir,
                 timeoutMillis = timeoutMillis,
                 stdin = stdin,
-                bindMounts = bindMounts,
                 shellCompatibilityMode = shellCompatibilityMode,
             )
         )
