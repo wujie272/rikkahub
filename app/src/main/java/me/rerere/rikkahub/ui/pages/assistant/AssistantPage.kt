@@ -614,4 +614,115 @@ private fun AssistantItem(
             )
         }
     }
+
+private fun AssistantActionSheet(
+    assistant: Assistant,
+    settings: Settings,
+    onDismiss: () -> Unit,
+    onCopy: () -> Unit,
+    onDelete: () -> Unit
+) {
+    var showDeleteDialog by remember { mutableStateOf(false) }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 32.dp)
+        ) {
+            // 助手信息头部
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                UIAvatar(
+                    name = assistant.name.ifBlank { stringResource(R.string.assistant_page_default_assistant) },
+                    value = assistant.avatar,
+                    modifier = Modifier.size(40.dp)
+                )
+                Text(
+                    text = assistant.name.ifBlank { stringResource(R.string.assistant_page_default_assistant) },
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+            val linkedLorebooks = remember(assistant.lorebookIds, settings.lorebooks) {
+                settings.lorebooks.filter { it.id in assistant.lorebookIds }
+            }
+
+            // 导出选项 — 使用 AssistantExporter 组件
+            AssistantExporter(
+                assistant = assistant,
+                lorebooks = linkedLorebooks,
+            )
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+            // 克隆选项
+            ListItem(
+                headlineContent = { Text(stringResource(R.string.assistant_page_clone)) },
+                leadingContent = {
+                    Icon(
+                        imageVector = HugeIcons.Copy01,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                },
+                modifier = Modifier.onClick { onCopy() },
+                colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+            )
+
+            // 删除选项（仅非默认助手显示）
+            if (assistant.id !in DEFAULT_ASSISTANTS_IDS) {
+                ListItem(
+                    headlineContent = {
+                        Text(
+                            stringResource(R.string.assistant_page_delete),
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    },
+                    leadingContent = {
+                        Icon(
+                            imageVector = HugeIcons.Delete01,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                    },
+                    modifier = Modifier.onClick { showDeleteDialog = true },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                )
+            }
+        }
+    }
+
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text(stringResource(R.string.assistant_page_delete)) },
+            text = { Text(stringResource(R.string.assistant_page_delete_dialog_text)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteDialog = false
+                        onDelete()
+                    }) {
+                    Text(stringResource(R.string.confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
+    }
+}
+
 }

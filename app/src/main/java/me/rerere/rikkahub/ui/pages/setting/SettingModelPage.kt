@@ -167,7 +167,6 @@ private fun ModelSettingsPage(settings: Settings, vm: SettingVM, contentPadding:
 }
 
 
-
 @Composable
 private fun SuggestionSettingItem(
     settings: Settings,
@@ -251,4 +250,76 @@ private fun ModelSettingItem(
     }
 
     ModelListSheet(state = state, onSelect = onSelect)
+
+private fun SuggestionModelSettingItem(
+    settings: Settings,
+    vm: SettingVM,
+) {
+    val title = stringResource(R.string.setting_model_page_suggestion_model)
+    val state = rememberModelListState(
+        modelId = settings.suggestionModelId,
+        providers = settings.providers,
+        type = ModelType.CHAT,
+    )
+
+    Column {
+        CardGroup(title = { Text(title) }) {
+            item(
+                headlineContent = { Text(stringResource(R.string.setting_model_page_enable_suggestion)) },
+                trailingContent = {
+                    Switch(
+                        checked = settings.enableSuggestion,
+                        onCheckedChange = {
+                            vm.updateSettings(settings.copy(enableSuggestion = it))
+                        }
+                    )
+                },
+            )
+            if (settings.enableSuggestion) {
+                item(
+                    onClick = { state.open() },
+                    headlineContent = { Text(title) },
+                    trailingContent = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Text(
+                                text = state.currentModel?.displayName
+                                    ?: stringResource(R.string.model_list_select_model),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            if (state.currentModel != null) {
+                                IconButton(
+                                    onClick = { vm.updateSettings(settings.copy(suggestionModelId = null)) },
+                                    modifier = Modifier.size(20.dp),
+                                ) {
+                                    Icon(HugeIcons.Cancel01, contentDescription = null, modifier = Modifier.size(14.dp))
+                                }
+                            } else {
+                                Icon(
+                                    HugeIcons.ArrowRight01,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            }
+                        }
+                    },
+                )
+            }
+        }
+        Text(
+            text = stringResource(R.string.setting_model_page_suggestion_model_desc),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
+        )
+    }
+
+    ModelListSheet(state = state, onSelect = { vm.updateSettings(settings.copy(suggestionModelId = it.id)) })
+}
+
 }

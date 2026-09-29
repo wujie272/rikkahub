@@ -620,4 +620,9 @@ internal fun AssistantBasicContent(
             }
         }
     }
+
+internal fun normalizeContextMessageLimit(value: Int): Int =
+    if (value in 1 until MIN_CONTEXT_MESSAGE_LIMIT) MIN_CONTEXT_MESSAGE_LIMIT else value
+
+
 }

@@ -516,6 +516,20 @@ data class SkillMetadata(
     val builtin: Boolean = false,
 ) {
     val skillFile: File get() = skillDir.resolve("SKILL.md")
+
+
+    /** Thrown by [readCached] when a skill file exceeds [MAX_SKILL_FILE_BYTES]. */
+    class SkillFileTooLargeException(val lengthBytes: Long) :
+
+    class SkillFileTooLargeException(val lengthBytes: Long) :
+
+    fun saveSkillFilesAtomically(skillName: String, files: Map<String, String>): Boolean {
+        return saveSkillFileBytesAtomically(
+            skillName = skillName,
+            files = files.mapValues { it.value.toByteArray() },
+        )
+    }
+
 }
 
 /**

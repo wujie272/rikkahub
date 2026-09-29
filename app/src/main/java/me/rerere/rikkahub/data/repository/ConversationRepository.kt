@@ -513,6 +513,14 @@ class ConversationRepository(
         }
         messageNodeDAO.insertAll(entities)
     }
+
+
+    suspend fun togglePinStatus(conversationId: Uuid) {
+        // Single atomic UPDATE — avoids the read→write TOCTOU that existed when
+        // we read isPinned with getConversationById() and then flipped it.
+        conversationDAO.togglePinStatus(conversationId.toString())
+    }
+
 }
 
 /**

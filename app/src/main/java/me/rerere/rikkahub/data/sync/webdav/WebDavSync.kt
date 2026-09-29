@@ -114,6 +114,89 @@ class WebDavSync(
         includeFiles = WebDavConfig.BackupItem.FILES in config.items,
     )
 
+
+    private fun addDirectoryToZip(
+        zipOut: ZipOutputStream,
+        rootDir: File,
+        currentDir: File,
+        entryPrefix: String,
+    ) {
+        currentDir.listFiles()?.forEach { file ->
+            if (file.isDirectory) {
+                addDirectoryToZip(
+                    zipOut = zipOut,
+                    rootDir = rootDir,
+                    currentDir = file,
+                    entryPrefix = entryPrefix,
+                )
+            } else if (file.isFile) {
+                val relativePath = file.relativeTo(rootDir).invariantSeparatorsPath
+                addFileToZip(zipOut, file, "$entryPrefix$relativePath")
+            }
+        }
+    }
+
+    private fun addFileToZip(zipOut: ZipOutputStream, file: File, entryName: String) {
+        FileInputStream(file).use { fis ->
+            val zipEntry = ZipEntry(entryName)
+            zipOut.putNextEntry(zipEntry)
+            fis.copyTo(zipOut)
+            zipOut.closeEntry()
+            Log.d(TAG, "addFileToZip: Added $entryName (${file.length()} bytes) to zip")
+        }
+    }
+
+    private fun addVirtualFileToZip(zipOut: ZipOutputStream, name: String, content: String) {
+        val zipEntry = ZipEntry(name)
+        zipOut.putNextEntry(zipEntry)
+        zipOut.write(content.toByteArray())
+        zipOut.closeEntry()
+        Log.i(TAG, "addVirtualFileToZip: $name (${content.length} bytes)")
+    }
+
+    private fun restoreSkillEntry(zipIn: ZipInputStream, entryName: String) {
+        val relativePath = entryName.substringAfter("${FileFolders.SKILLS}/")
+        val skillName = relativePath.substringBefore('/', missingDelimiterValue = "")
+        val skillRelativePath = relativePath.substringAfter('/', missingDelimiterValue = "")
+
+        if (skillName.isBlank() || skillRelativePath.isBlank()) {
+            Log.w(TAG, "restoreFromBackupFile: Invalid skill entry $entryName")
+            return
+        }
+
+        val skillsRoot = File(context.filesDir, FileFolders.SKILLS).apply { mkdirs() }
+        val skillDir = SkillPaths.resolveSkillDir(skillsRoot, skillName)
+            ?: throw Exception("Invalid skill directory: $entryName")
+        val targetFile = SkillPaths.resolveSkillFile(skillDir, skillRelativePath)
+            ?: throw Exception("Invalid skill file path: $entryName")
+
+        skillDir.mkdirs()
+        targetFile.parentFile?.mkdirs()
+
+        try {
+            FileOutputStream(targetFile).use { outputStream ->
+                zipIn.copyTo(outputStream)
+            }
+            Log.i(TAG, "restoreFromBackupFile: Restored skill file $entryName (${targetFile.length()} bytes)")
+        } catch (e: Exception) {
+            Log.e(TAG, "restoreFromBackupFile: Failed to restore skill file $entryName", e)
+            throw Exception("Failed to restore skill file $entryName: ${e.message}")
+        }
+    }
+
+
+    private fun checkpointDatabase() {
+        try {
+            appDatabase.openHelper.writableDatabase
+                .query("PRAGMA wal_checkpoint(TRUNCATE)").use { it.moveToFirst() }
+            Log.i(TAG, "checkpointDatabase: WAL checkpoint(TRUNCATE) done")
+        } catch (e: Exception) {
+            // Non-fatal: the -wal/-shm files are still copied below, so no committed data
+            // is lost — the snapshot just isn't guaranteed torn-free for this run.
+            Log.w(TAG, "checkpointDatabase: WAL checkpoint failed; copying db+wal+shm as-is", e)
+        }
+    }
+
 }
 
 data class WebDavBackupItem(

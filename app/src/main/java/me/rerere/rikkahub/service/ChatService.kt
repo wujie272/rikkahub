@@ -220,6 +220,14 @@ class ChatService(
      * themselves are NOT held under this mutex — only the persist boundaries.
      */
     private val sessionMutexes = ConcurrentHashMap<Uuid, Mutex>()
+    private val sessions = ConcurrentHashMap<Uuid, ConversationSession>()
+    private val _sessionsVersion = MutableStateFlow(0L)
+
+    /**
+    private val _sessionsVersion = MutableStateFlow(0L)
+
+    /**
+     * Per-conversation mutex serialising state-mutating operations: handleToolApproval,
 
     /** 自动继续失败次数记录（仅用于限制死循环，不是重试次数） */
     private val continueAttempts = ConcurrentHashMap<Uuid, Int>()
@@ -2679,4 +2687,117 @@ class ChatService(
         jobs.forEach { it.join() }
         finishInterruptedPendingTools(conversationId)
     }
+
+
+    private suspend fun createWorkspaceToolsIfReady(workspaceId: String?, cwd: String? = null): List<Tool> {
+        if (workspaceId.isNullOrBlank()) return emptyList()
+        val workspace = workspaceRepository.getById(workspaceId) ?: return emptyList()
+        if (workspace.shellStatus != WorkspaceShellStatus.READY.name) {
+            Log.d(
+                TAG,
+                "createWorkspaceToolsIfReady: skip workspace tools, workspace=$workspaceId, status=${workspace.shellStatus}"
+            )
+            return emptyList()
+        }
+        return createWorkspaceTools(workspaceId, workspaceRepository, cwd)
+    }
+
+    fun dropSession(conversationId: Uuid) {
+        val session = sessions.remove(conversationId) ?: return
+        session.cleanup()
+        sessionMutexes.remove(conversationId)
+        _sessionsVersion.value++
+        Log.i(TAG, "dropSession: $conversationId (remaining: ${sessions.size})")
+    }
+
+    fun getGroupChatTemplateId(conversationId: kotlin.uuid.Uuid): kotlin.uuid.Uuid? {
+        return groupChatTemplateIds[conversationId]
+    }
+
+    private fun getOrCreateSession(conversationId: Uuid): ConversationSession {
+        return sessions.computeIfAbsent(conversationId) { id ->
+            val settings = settingsStore.settingsFlow.value
+            ConversationSession(
+                id = id,
+                initial = Conversation.ofId(
+                    id = id,
+                    assistantId = settings.getCurrentAssistant().id
+                ),
+                scope = appScope,
+                onIdle = { removeSession(it) }
+            ).also {
+                _sessionsVersion.value++
+                Log.i(TAG, "createSession: $id (total: ${sessions.size + 1})")
+            }
+        }
+    }
+
+    private fun launchWithConversationReference(
+        conversationId: Uuid,
+        block: suspend () -> Unit
+    ): Job = appScope.launch {
+        addConversationReference(conversationId)
+        try {
+            block()
+        } finally {
+            removeConversationReference(conversationId)
+        }
+    }
+
+    private fun loadGroupChatMappings() {
+        groupChatTemplateIds.clear()
+        val raw = groupChatPrefs.getString("mappings", null) ?: return
+        try {
+            val pairs = kotlinx.serialization.json.Json.decodeFromString<List<List<String>>>(raw)
+            pairs.forEach { (convId, tmplId) ->
+                runCatching {
+                    groupChatTemplateIds[kotlin.uuid.Uuid.parse(convId)] = kotlin.uuid.Uuid.parse(tmplId)
+                }
+            }
+        } catch (_: Exception) {}
+    }
+
+    private fun removeGroupChatTemplateId(conversationId: kotlin.uuid.Uuid) {
+        groupChatTemplateIds.remove(conversationId)
+        saveGroupChatMappings()
+    }
+
+    private fun removeSession(conversationId: Uuid) {
+        val session = sessions[conversationId] ?: return
+        if (session.isInUse) {
+            Log.d(TAG, "removeSession: skipped $conversationId (still in use)")
+            return
+        }
+        if (sessions.remove(conversationId, session)) {
+            session.cleanup()
+            // Evict the per-conversation mutex so it doesn't accumulate forever.
+            // dropSession() already removes it; removeSession() (idle eviction path)
+            // was previously missing this cleanup, causing a slow leak on heavy-use
+            // sessions where many conversations cycle in and out of memory.
+            sessionMutexes.remove(conversationId)
+            _sessionsVersion.value++
+            Log.i(TAG, "removeSession: $conversationId (remaining: ${sessions.size})")
+        }
+    }
+
+    private fun saveGroupChatMappings() {
+        val pairs = groupChatTemplateIds.entries.map { (k, v) -> listOf(k.toString(), v.toString()) }
+        val raw = kotlinx.serialization.json.Json.encodeToString(pairs)
+        groupChatPrefs.edit().putString("mappings", raw).apply()
+    }
+
+    private fun setGroupChatTemplateId(conversationId: kotlin.uuid.Uuid, templateId: kotlin.uuid.Uuid) {
+        groupChatTemplateIds[conversationId] = templateId
+        saveGroupChatMappings()
+    }
+
+    private fun trimGroupChatContextForSeat(
+        messages: List<UIMessage>,
+        seatId: Uuid,
+        template: GroupChatTemplate,
+
+}
+
+internal fun shouldUseExternalWebSearch(assistant: Assistant, model: Model): Boolean {
+    return assistant.enableWebSearch && BuiltInTools.Search !in model.tools
 }

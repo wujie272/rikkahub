@@ -132,6 +132,30 @@ import okhttp3.OkHttpClient
 import org.koin.android.ext.android.inject
 import org.koin.compose.koinInject
 import kotlin.uuid.Uuid
+import androidx.compose.runtime.remember
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import me.rerere.rikkahub.ui.pages.assistant.groupchat.GroupChatTemplateDetailPage
+import me.rerere.rikkahub.ui.pages.developer.DeveloperPage
+import me.rerere.rikkahub.ui.pages.knowledge.DocumentChunkViewPage
+import me.rerere.rikkahub.ui.pages.knowledge.KnowledgeBaseDetailPage
+import me.rerere.rikkahub.ui.pages.knowledge.KnowledgeBaseListPage
+import me.rerere.rikkahub.ui.pages.knowledge.KnowledgeEditPage
+import me.rerere.rikkahub.ui.pages.log.LogDetailPage
+import me.rerere.rikkahub.ui.pages.setting.SettingAccessibilityPage
+import me.rerere.rikkahub.ui.pages.setting.SettingAdvancedPage
+import me.rerere.rikkahub.ui.pages.setting.SettingAndroidIntegrationPage
+import me.rerere.rikkahub.ui.pages.setting.SettingNotificationsPage
+import me.rerere.rikkahub.ui.pages.setting.SettingPermissionsPage
+import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesNetworkPage
+import me.rerere.rikkahub.ui.pages.setting.SettingShizukuPage
+import me.rerere.rikkahub.ui.pages.setting.SettingSshPage
+import me.rerere.rikkahub.ui.pages.setting.SettingToolApprovalsPage
+import me.rerere.rikkahub.ui.pages.setting.browser.SettingBrowserPage
+import me.rerere.rikkahub.ui.pages.setting.termux.SettingTermuxPage
+import me.rerere.rikkahub.workflow.execution.WorkflowEngine
+import org.koin.android.ext.android.get
 
 private const val TAG = "RouteActivity"
 private const val ACTION_TRANSLATE = "me.rerere.rikkahub.action.TRANSLATE"
@@ -530,6 +554,94 @@ class RouteActivity : ComponentActivity() {
                             entry<Screen.Stats> {
                                 StatsPage()
                             }
+
+                            entry<Screen.Developer> {
+                                DeveloperPage()
+                            }
+
+                            entry<Screen.GroupChatTemplateDetail> { key ->
+                                GroupChatTemplateDetailPage(key.id)
+                            }
+
+                            entry<Screen.KnowledgeBase> {
+                                KnowledgeBaseListPage()
+                            }
+
+                            entry<Screen.KnowledgeBaseChunks> { key ->
+                                DocumentChunkViewPage(kbId = key.id, filePath = key.filePath)
+                            }
+
+                            entry<Screen.KnowledgeBaseDetail> { key ->
+                                KnowledgeBaseDetailPage(kbId = key.id)
+                            }
+
+                            entry<Screen.KnowledgeBaseEdit> { key ->
+                                KnowledgeEditPage(kbId = key.id)
+                            }
+
+                            entry<Screen.LogDetail> { key ->
+                                LogDetailPage(key.id)
+                            }
+
+                            entry<Screen.ScheduledJobDetail> { key ->
+                                me.rerere.rikkahub.ui.pages.setting.scheduledjobs.ScheduledJobDetailScreen(jobId = key.id)
+                            }
+
+                            entry<Screen.SettingAccessibility> {
+                                SettingAccessibilityPage()
+                            }
+
+                            entry<Screen.SettingAdvanced> {
+                                SettingAdvancedPage()
+                            }
+
+                            entry<Screen.SettingAndroidIntegration> {
+                                SettingAndroidIntegrationPage()
+                            }
+
+                            entry<Screen.SettingBrowser> {
+                                SettingBrowserPage()
+                            }
+
+                            entry<Screen.SettingDoctor> {
+                                me.rerere.rikkahub.ui.pages.setting.doctor.DoctorScreen()
+                            }
+
+                            entry<Screen.SettingNotifications> {
+                                SettingNotificationsPage()
+                            }
+
+                            entry<Screen.SettingPermissions> {
+                                SettingPermissionsPage()
+                            }
+
+                            entry<Screen.SettingScheduledJobs> {
+                                me.rerere.rikkahub.ui.pages.setting.scheduledjobs.ScheduledJobsScreen()
+                            }
+
+                            entry<Screen.SettingShizuku> {
+                                SettingShizukuPage()
+                            }
+
+                            entry<Screen.SettingSsh> {
+                                SettingSshPage()
+                            }
+
+                            entry<Screen.SettingTermux> {
+                                SettingTermuxPage()
+                            }
+
+                            entry<Screen.SettingToolApprovals> {
+                                SettingToolApprovalsPage()
+                            }
+
+                            entry<Screen.SettingWorkflows> {
+                                me.rerere.rikkahub.workflow.ui.WorkflowsScreen()
+                            }
+
+                            entry<Screen.WorkflowDetail> { key ->
+                                me.rerere.rikkahub.workflow.ui.WorkflowDetailScreen(workflowId = key.id, initialEditMode = key.isNew)
+                            }
                         }
                     )
                     if (BuildConfig.DEBUG) {
@@ -732,4 +844,49 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object Stats : Screen
+
+    @Serializable
+    data object Developer : Screen
+    @Serializable
+    data class GroupChatTemplateDetail(val id: String) : Screen
+    @Serializable
+    data object KnowledgeBase : Screen
+    @Serializable
+    data class KnowledgeBaseChunks(val id: String, val filePath: String) : Screen
+    @Serializable
+    data class KnowledgeBaseDetail(val id: String) : Screen
+    @Serializable
+    data class KnowledgeBaseEdit(val id: String? = null) : Screen
+    @Serializable
+    data class LogDetail(val id: Long) : Screen
+    @Serializable
+    data class ScheduledJobDetail(val id: String) : Screen
+    @Serializable
+    data object SettingAccessibility : Screen
+    @Serializable
+    data object SettingAdvanced : Screen
+    @Serializable
+    data object SettingAndroidIntegration : Screen
+    @Serializable
+    data object SettingBrowser : Screen
+    @Serializable
+    data object SettingDoctor : Screen
+    @Serializable
+    data object SettingNotifications : Screen
+    @Serializable
+    data object SettingPermissions : Screen
+    @Serializable
+    data object SettingScheduledJobs : Screen
+    @Serializable
+    data object SettingShizuku : Screen
+    @Serializable
+    data object SettingSsh : Screen
+    @Serializable
+    data object SettingTermux : Screen
+    @Serializable
+    data object SettingToolApprovals : Screen
+    @Serializable
+    data object SettingWorkflows : Screen
+    @Serializable
+    data class WorkflowDetail(val id: String, val isNew: Boolean = false) : Screen
 }
