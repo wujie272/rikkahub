@@ -5,6 +5,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
+import android.widget.Toast
 import androidx.compose.foundation.ComposeFoundationFlags
 import androidx.compose.runtime.Composer
 import androidx.compose.runtime.tooling.ComposeStackTraceMode
@@ -21,10 +22,10 @@ import java.io.File
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
 import me.rerere.common.android.appTempFolder
-import com.whl.quickjs.android.QuickJSLoader
 import me.rerere.rikkahub.di.appModule
 import me.rerere.rikkahub.di.dataSourceModule
 import me.rerere.rikkahub.di.repositoryModule
@@ -32,7 +33,9 @@ import me.rerere.rikkahub.di.viewModelModule
 import me.rerere.rikkahub.di.knowledgeModule
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.datastore.SettingsStore
-import me.rerere.rikkahub.data.ai.tools.HeadlessConversations
+import me.rerere.rikkahub.data.sync.BackupManager
+import me.rerere.rikkahub.data.sync.RestoreFailedException
+import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.rikkahub.service.WebServerService
 import me.rerere.rikkahub.service.ShizukuManager
 import me.rerere.rikkahub.utils.CrashHandler
@@ -55,6 +58,18 @@ const val KNOWLEDGE_IMPORT_NOTIFICATION_CHANNEL_ID = "knowledge_import"
 class RikkaHubApp : Application() {
     override fun onCreate() {
         super.onCreate()
+        // Restore files and settings before eager Koin singletons or workers can access them.
+        try {
+            val restored = runBlocking(Dispatchers.IO) {
+                BackupManager.applyPendingRestore(this@RikkaHubApp, JsonInstant)
+            }
+            if (restored) {
+                Toast.makeText(this, R.string.backup_page_restore_success, Toast.LENGTH_LONG).show()
+            }
+        } catch (e: RestoreFailedException) {
+            Log.e(TAG, "Backup restore rolled back", e)
+            Toast.makeText(this, "备份恢复失败，已保留原数据。请重新导入备份。", Toast.LENGTH_LONG).show()
+        }
         startKoin {
             androidLogger()
             androidContext(this@RikkaHubApp)
@@ -75,9 +90,6 @@ class RikkaHubApp : Application() {
 
         // install crash handler
         CrashHandler.install(this)
-
-        // Init QuickJS native library
-        QuickJSLoader.init()
 
         // delete temp files
         deleteTempFiles()

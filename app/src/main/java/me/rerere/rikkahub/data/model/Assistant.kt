@@ -49,30 +49,7 @@ data class Assistant(
     val enabledSkills: Set<String> = emptySet(),        // 启用的 skill 名称列表
     val enabledKnowledgeBaseIds: Set<kotlin.uuid.Uuid> = emptySet(), // 启用的知识库 ID 列表
     val enableTimeReminder: Boolean = false,            // 时间间隔提醒注入
-    // Phase 11 — Sub-agents settings. Defaults to "inherit from main" (null model id +
-    // empty system prompt → built-in focused-sub-agent prompt). Each assistant has its
-    // own concurrency cap; we hard-cap globally at 16 across all assistants in the engine.
-    val subAgentModelId: Uuid? = null,
-    val subAgentSystemPrompt: String = "",
-    val maxConcurrentSubAgents: Int = 3,
-    // Phase 15 — Per-task token budget. Both null = no budget enforcement. The LLM
-    // checks via `check_token_usage`; auto-stop integration into GenerationHandler is
-    // Phase 15.5 follow-up.
-    val tokenBudgetSoftCap: Int? = null,
-    val tokenBudgetHardCap: Int? = null,
-    // Phase 16 — Fast-path router. Off by default per spec. When ON, ChatService runs
-    // FastPathRouter.route() on the user's message before firing the LLM; matched intents
-    // execute the matching tool directly and skip the LLM. Conservative matching — falls
-    // through to the LLM whenever in doubt. Per-tool HARDLINE / approval still apply at
-    // the dispatch level; v1 only matches read-only tools so approval is a non-issue.
-    val fastPathRouterEnabled: Boolean = false,
-    // ===== SillyTavern 兼容字段 =====
-    val alternateGreetings: List<UIMessage> = emptyList(),  // 备用开场白
-    val mesExample: String = "",                            // 示例对话
-    val creatorNotes: String = "",                          // 作者备注
-    val creator: String = "",                               // 作者
-    val characterVersion: String = "",                      // 角色版本
-    val postHistoryInstructions: String = "",                // 历史后指令
+    val timeReminderIntervalMinutes: Int = 60,          // 时间提醒间隔（分钟，至少 1 分钟）
     val allowConversationSystemPrompt: Boolean = false, // 允许对话单独重写 system prompt
     val allowConversationPromptInjection: Boolean = false, // 允许对话单独绑定提示词注入
     // Auto-continue on error. When enabled, interrupted generations automatically continue

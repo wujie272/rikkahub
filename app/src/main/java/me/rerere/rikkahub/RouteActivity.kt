@@ -31,7 +31,6 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.semantics
@@ -41,10 +40,6 @@ import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.lifecycleScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import me.rerere.rikkahub.workflow.execution.WorkflowEngine
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
@@ -113,13 +108,9 @@ import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesThemePage
 import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesNotificationPage
 import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesGeneralPage
 import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesUIPage
-import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesNetworkPage
 import me.rerere.rikkahub.ui.pages.setting.SettingThemePage
 import me.rerere.rikkahub.ui.pages.setting.SettingDonatePage
 import me.rerere.rikkahub.ui.pages.setting.SettingFilesPage
-
-import me.rerere.rikkahub.ui.pages.setting.SettingAdvancedPage
-
 import me.rerere.rikkahub.ui.pages.setting.SettingMcpPage
 import me.rerere.rikkahub.ui.pages.setting.SettingModelPage
 import me.rerere.rikkahub.ui.pages.setting.SettingPage
@@ -131,22 +122,6 @@ import me.rerere.rikkahub.ui.pages.setting.SettingSpeechPage
 import me.rerere.rikkahub.ui.pages.setting.SettingWebPage
 import me.rerere.rikkahub.ui.pages.share.handler.ShareHandlerPage
 import me.rerere.rikkahub.ui.pages.stats.StatsPage
-import me.rerere.rikkahub.ui.pages.setting.SettingSshPage
-import me.rerere.rikkahub.ui.pages.setting.browser.SettingBrowserPage
-import me.rerere.rikkahub.ui.pages.setting.termux.SettingTermuxPage
-import me.rerere.rikkahub.ui.pages.setting.SettingToolApprovalsPage
-import me.rerere.rikkahub.ui.pages.setting.SettingAndroidIntegrationPage
-import me.rerere.rikkahub.ui.pages.setting.SettingAccessibilityPage
-import me.rerere.rikkahub.ui.pages.setting.SettingNotificationsPage
-import me.rerere.rikkahub.ui.pages.setting.SettingPermissionsPage
-import me.rerere.rikkahub.ui.pages.setting.SettingShizukuPage
-import me.rerere.rikkahub.ui.pages.developer.DeveloperPage
-import me.rerere.rikkahub.ui.pages.log.LogDetailPage
-import me.rerere.rikkahub.ui.pages.assistant.groupchat.GroupChatTemplateDetailPage
-import me.rerere.rikkahub.ui.pages.knowledge.KnowledgeBaseListPage
-import me.rerere.rikkahub.ui.pages.knowledge.KnowledgeBaseDetailPage
-import me.rerere.rikkahub.ui.pages.knowledge.KnowledgeEditPage
-import me.rerere.rikkahub.ui.pages.knowledge.DocumentChunkViewPage
 import me.rerere.rikkahub.ui.pages.translator.TranslatorPage
 import me.rerere.rikkahub.ui.pages.webview.WebViewPage
 import me.rerere.rikkahub.ui.theme.LocalDarkMode
@@ -155,7 +130,6 @@ import me.rerere.rikkahub.utils.CrashHandler
 import me.rerere.rikkahub.utils.openUsageAccessSettings
 import okhttp3.OkHttpClient
 import org.koin.android.ext.android.inject
-import org.koin.android.ext.android.get
 import org.koin.compose.koinInject
 import kotlin.uuid.Uuid
 
@@ -163,20 +137,11 @@ private const val TAG = "RouteActivity"
 private const val ACTION_TRANSLATE = "me.rerere.rikkahub.action.TRANSLATE"
 private const val ACTION_IMAGE_GEN = "me.rerere.rikkahub.action.IMAGE_GEN"
 
-
-internal const val EXTRA_DIRECT_CHAT_TARGET_TYPE = "direct_chat_target_type"
-internal const val EXTRA_DIRECT_CHAT_TARGET_ID = "direct_chat_target_id"
-internal const val EXTRA_DIRECT_CHAT_TEXT = "direct_chat_text"
-internal const val EXTRA_DIRECT_CHAT_AUTO_SEND = "direct_chat_auto_send"
-internal const val DIRECT_CHAT_TARGET_TYPE_ASSISTANT = "assistant"
-internal const val DIRECT_CHAT_TARGET_TYPE_GROUP_CHAT = "group_chat"
-
-
-
 class RouteActivity : ComponentActivity() {
     private val okHttpClient by inject<OkHttpClient>()
     private val settingsStore by inject<SettingsStore>()
     private var navStack: MutableList<NavKey>? = null
+    private val pendingIntents = ArrayDeque<Intent>()
 
     // Volume key listener registry — last registered handler wins
     internal val volumeKeyListeners = mutableListOf<(isVolumeUp: Boolean) -> Boolean>()
@@ -202,6 +167,9 @@ class RouteActivity : ComponentActivity() {
             startActivity(Intent(this, SafeModeActivity::class.java))
             finish()
             return
+        }
+        if (savedInstanceState == null) {
+            handleIntent(intent)
         }
         setContent {
             RikkahubTheme {
@@ -235,82 +203,32 @@ class RouteActivity : ComponentActivity() {
         }
     }
 
-    @Composable
-    private fun ShareHandler(backStack: MutableList<NavKey>) {
-        val shareIntent = remember {
-            Intent().apply {
-                action = intent?.action
-                putExtra(Intent.EXTRA_TEXT, intent?.getStringExtra(Intent.EXTRA_TEXT))
-                putExtra(Intent.EXTRA_STREAM, intent?.getStringExtra(Intent.EXTRA_STREAM))
-                putExtra(Intent.EXTRA_PROCESS_TEXT, intent?.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT))
-            }
-        }
-
-        LaunchedEffect(backStack) {
-            when (shareIntent.action) {
-                ACTION_TRANSLATE -> {
-                    backStack.add(Screen.Translator)
-                }
-
-                ACTION_IMAGE_GEN -> {
-                    backStack.add(Screen.ImageGen)
-                }
-
-                Intent.ACTION_SEND -> {
-                    val text = shareIntent.getStringExtra(Intent.EXTRA_TEXT) ?: ""
-                    val imageUri = shareIntent.getStringExtra(Intent.EXTRA_STREAM)
-                    backStack.add(Screen.ShareHandler(text, imageUri))
-                }
-
-                Intent.ACTION_PROCESS_TEXT -> {
-                    val text = shareIntent.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)?.toString() ?: ""
-                    backStack.add(Screen.ShareHandler(text, null))
-                }
-            }
-        }
-    }
-
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        // 快捷方式（翻译 / 图片生成）热启动时入栈；冷启动由 ShareHandler 处理
-        when (intent.action) {
-            ACTION_TRANSLATE -> navStack?.add(Screen.Translator)
-            ACTION_IMAGE_GEN -> navStack?.add(Screen.ImageGen)
-        }
+        setIntent(intent)
+        handleIntent(intent)
+    }
 
-        // Navigate to the chat screen if a conversation ID is provided
-        intent.getStringExtra("conversationId")?.let { text ->
-            navStack?.add(Screen.Chat(text))
+    private fun handleIntent(intent: Intent) {
+        val backStack = navStack ?: run {
+            // Compose 尚未创建导航栈，待就绪后处理。
+            pendingIntents.addLast(intent)
+            return
         }
-
-        // Handle widget navigation intents
-        when (intent.getStringExtra("navigateTo")) {
-            "workflows" -> {
-                navStack?.add(Screen.SettingWorkflows)
-            }
-            "workflow_detail" -> {
-                intent.getStringExtra("workflowId")?.let { id ->
-                    navStack?.add(Screen.WorkflowDetail(id))
-                }
-            }
-            "workflow_run_now" -> {
-                intent.getStringExtra("workflowId")?.let { id ->
-                    // 立即运行工作流（后台 headless 执行）
-                    lifecycleScope.launch(Dispatchers.IO) {
-                        runCatching {
-                            get<WorkflowEngine>().fire(id)
-                            // 触发小组件刷新
-                            me.rerere.rikkahub.widget.WorkflowStatusWidgetProvider.updateAll(this@RouteActivity)
-                        }
-                    }
-                    // 同时打开工作流详情页
-                    navStack?.add(Screen.WorkflowDetail(id))
-                }
-            }
-            // Token 仪表盘小组件：打开 AI 请求日志页
-            "log" -> {
-                navStack?.add(Screen.Log)
-            }
+        val destination = when (intent.action) {
+            ACTION_TRANSLATE -> Screen.Translator
+            ACTION_IMAGE_GEN -> Screen.ImageGen
+            Intent.ACTION_SEND -> Screen.ShareHandler(
+                text = intent.getStringExtra(Intent.EXTRA_TEXT).orEmpty(),
+                streamUri = intent.getStringExtra(Intent.EXTRA_STREAM),
+            )
+            Intent.ACTION_PROCESS_TEXT -> Screen.ShareHandler(
+                text = intent.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)?.toString().orEmpty(),
+            )
+            else -> intent.getStringExtra("conversationId")?.let { Screen.Chat(it) }
+        }
+        if (destination != null && backStack.lastOrNull() != destination) {
+            backStack.add(destination)
         }
     }
 
@@ -327,7 +245,6 @@ class RouteActivity : ComponentActivity() {
                 when (event) {
                     is AppEvent.Speak -> tts.speak(event.text)
                     is AppEvent.OpenUsageAccessSettings -> this@RouteActivity.openUsageAccessSettings()
-                    is AppEvent.McpOAuthCallback -> Unit // 由 McpManager 消费
                     is AppEvent.ChatGenerationUpdate -> Unit // 由 ChatNotificationManager 消费
                     is AppEvent.ChatGenerationEnded -> Unit // 由 ChatNotificationManager 消费
                 }
@@ -347,9 +264,12 @@ class RouteActivity : ComponentActivity() {
         )
 
         val backStack = rememberNavBackStack(startScreen)
-        SideEffect { this@RouteActivity.navStack = backStack }
-
-        ShareHandler(backStack)
+        SideEffect {
+            navStack = backStack
+            while (pendingIntents.isNotEmpty()) {
+                handleIntent(pendingIntents.removeFirst())
+            }
+        }
 
         SharedTransitionLayout {
             CompositionLocalProvider(
@@ -548,102 +468,11 @@ class RouteActivity : ComponentActivity() {
                             }
 
                             entry<Screen.SettingFiles> {
-
                                 SettingFilesPage()
-                            }
-
-                            entry<Screen.SettingAdvanced> {
-                                SettingAdvancedPage()
                             }
 
                             entry<Screen.SettingWeb> {
                                 SettingWebPage()
-                            }
-
-
-
-                            entry<Screen.SettingSsh> {
-                                SettingSshPage()
-                            }
-
-                            entry<Screen.SettingWorkflows> {
-                                me.rerere.rikkahub.workflow.ui.WorkflowsScreen()
-                            }
-
-                            entry<Screen.WorkflowDetail> { key ->
-                                me.rerere.rikkahub.workflow.ui.WorkflowDetailScreen(workflowId = key.id, initialEditMode = key.isNew)
-                            }
-
-                            entry<Screen.SettingScheduledJobs> {
-                                me.rerere.rikkahub.ui.pages.setting.scheduledjobs.ScheduledJobsScreen()
-                            }
-
-                            entry<Screen.SettingBrowser> {
-                                SettingBrowserPage()
-                            }
-
-                            entry<Screen.SettingTermux> {
-                                SettingTermuxPage()
-                            }
-
-                            entry<Screen.ScheduledJobDetail> { key ->
-                                me.rerere.rikkahub.ui.pages.setting.scheduledjobs.ScheduledJobDetailScreen(jobId = key.id)
-                            }
-
-                            entry<Screen.SettingDoctor> {
-                                me.rerere.rikkahub.ui.pages.setting.doctor.DoctorScreen()
-                            }
-
-                            entry<Screen.SettingToolApprovals> {
-                                SettingToolApprovalsPage()
-                            }
-
-                            entry<Screen.SettingAndroidIntegration> {
-                                SettingAndroidIntegrationPage()
-                            }
-
-                            entry<Screen.SettingAccessibility> {
-                                SettingAccessibilityPage()
-                            }
-
-                            entry<Screen.SettingNotifications> {
-                                SettingNotificationsPage()
-                            }
-
-                            entry<Screen.SettingPermissions> {
-                                SettingPermissionsPage()
-                            }
-
-                            entry<Screen.SettingShizuku> {
-                                SettingShizukuPage()
-                            }
-
-                            entry<Screen.Developer> {
-                                DeveloperPage()
-                            }
-
-                            entry<Screen.LogDetail> { key ->
-                                LogDetailPage(key.id)
-                            }
-
-                            entry<Screen.GroupChatTemplateDetail> { key ->
-                                GroupChatTemplateDetailPage(key.id)
-                            }
-
-                            entry<Screen.KnowledgeBase> {
-                                KnowledgeBaseListPage()
-                            }
-
-                            entry<Screen.KnowledgeBaseDetail> { key ->
-                                KnowledgeBaseDetailPage(kbId = key.id)
-                            }
-
-                            entry<Screen.KnowledgeBaseEdit> { key ->
-                                KnowledgeEditPage(kbId = key.id)
-                            }
-
-                            entry<Screen.KnowledgeBaseChunks> { key ->
-                                DocumentChunkViewPage(kbId = key.id, filePath = key.filePath)
                             }
 
                             entry<Screen.Debug> {
@@ -749,10 +578,8 @@ class RouteActivity : ComponentActivity() {
             }
         }
     }
-    companion object {
-        const val EXTRA_OPEN_CODEX_SETTINGS = "open_codex_settings"
-    }
 }
+
 sealed interface Screen : NavKey {
     @Serializable
     data class Chat(
@@ -864,77 +691,8 @@ sealed interface Screen : NavKey {
     @Serializable
     data object SettingFiles : Screen
 
-
-    @Serializable
-    data object SettingAdvanced : Screen
-
-
-
     @Serializable
     data object SettingWeb : Screen
-
-    @Serializable
-    data object SettingSsh : Screen
-
-    @Serializable
-    data object SettingWorkflows : Screen
-
-    @Serializable
-    data class WorkflowDetail(val id: String, val isNew: Boolean = false) : Screen
-
-    @Serializable
-    data object SettingScheduledJobs : Screen
-
-    @Serializable
-    data object SettingBrowser : Screen
-
-    @Serializable
-    data object SettingTermux : Screen
-
-    @Serializable
-    data class ScheduledJobDetail(val id: String) : Screen
-
-    @Serializable
-    data object SettingDoctor : Screen
-
-    @Serializable
-    data object SettingToolApprovals : Screen
-
-    @Serializable
-    data object SettingAndroidIntegration : Screen
-
-    @Serializable
-    data object SettingAccessibility : Screen
-
-    @Serializable
-    data object SettingNotifications : Screen
-
-    @Serializable
-    data object SettingPermissions : Screen
-
-    @Serializable
-    data object SettingShizuku : Screen
-
-    @Serializable
-    data object Developer : Screen
-
-    @Serializable
-    data class LogDetail(val id: Long) : Screen
-
-    @Serializable
-    data class GroupChatTemplateDetail(val id: String) : Screen
-
-    @Serializable
-    data object KnowledgeBase : Screen
-
-    @Serializable
-    data class KnowledgeBaseDetail(val id: String) : Screen
-
-    @Serializable
-    data class KnowledgeBaseEdit(val id: String? = null) : Screen
-
-    @Serializable
-    data class KnowledgeBaseChunks(val id: String, val filePath: String) : Screen
 
     @Serializable
     data object Debug : Screen

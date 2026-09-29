@@ -34,7 +34,6 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.Tool
@@ -56,6 +55,13 @@ import me.rerere.rikkahub.data.ai.transformers.InputMessageTransformer
 import me.rerere.rikkahub.data.ai.transformers.MessageTransformer
 import me.rerere.rikkahub.data.ai.transformers.OutputMessageTransformer
 import me.rerere.rikkahub.data.files.FileFolders
+import me.rerere.rikkahub.data.ai.transformers.onGenerationFinish
+import me.rerere.rikkahub.data.ai.transformers.transforms
+import me.rerere.rikkahub.data.ai.transformers.visualTransforms
+import me.rerere.rikkahub.data.datastore.Settings
+import me.rerere.rikkahub.data.datastore.findProvider
+import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.data.model.AssistantMemory
 import java.io.File
 import java.io.IOException
 import java.net.ConnectException
@@ -154,162 +160,10 @@ sealed interface GenerationChunk {
     ) : GenerationChunk
 }
 
-private const val TAG_GH_LOOP = "GenHandlerLoop"
-
-/**
- * If the model calls the same tool with the same exact JSON args this many times within a
- * single user turn, we refuse the next execution and inject a "loop_detected" envelope. The
- * threshold is INCLUSIVE of the prior occurrences, so a value of 3 means: first call runs,
- * second call runs, third call runs — fourth identical call is blocked. Picked low enough
- * that runaway loops can't drain the user's API tokens but high enough to allow legitimate
- * retries (a notification key going stale between read and dismiss, etc.).
- */
-private const val LOOP_GUARD_REPEAT_THRESHOLD = 3
-
-// The per-turn wall-clock budget was hardcoded here (most recently 10 min). It now lives in
-// ToolRuntimeLimits.turnBudgetMs (default 10 min), user-configurable via Settings -> Termux;
-// every read site below uses that holder directly.
-
-/**
- * Max number of times the loop guard can trip in a single turn before we force-end the
- * turn entirely. Prevents the "model keeps trying different tools, each gets loop-detected"
- * pattern that produced the 27-step / 141K-token disaster: one trip means the model is
- * confused; six trips means it's not coming back.
- */
-private const val MAX_LOOP_GUARD_TRIPS_PER_TURN = 6
-
-/**
- * Number of most-recent tool-result-bearing messages whose `Image` parts are kept
- * verbatim in the prompt. Older tool-result images are replaced with a small text
- * elision so the same JPEG isn't re-encoded into base64 on every step. Without this
- * a screen-automation turn that takes 5 screenshots makes the provider re-pay
- * ~1–2MB × 5 base64 encode + upload on every subsequent step.
- *
- * 2 is the smallest value that lets the model do "look at this screenshot, decide
- * action; take new screenshot, compare" — needs both the previous and the current
- * screenshot in context. Anything older has been superseded.
- */
-private const val IMAGE_KEEP_LAST_N_TOOL_RESULTS = 2
-
-/**
- * Tool name patterns that indicate the agent is browsing the web.
- * When a tool name contains any of these substrings, the overlay shows "正在上网浏览"
- * instead of the generic "正在调用工具".
- */
-private val BROWSING_TOOL_PATTERNS = setOf(
-    "browser_", "browse_",
-    "web_", "web_",
-    "search_",
-    "open_url", "open_url",
-    "fetch", "scrape",
-)
-
-/**
- * Some read-only tools measure a real-time signal where re-calling after a TTL is
- * legitimate (battery drains, screens change, sensors update). For these, the loop guard
- * lets identical calls through if the most recent identical call is older than the TTL.
- * Without this, asking the model "what's the battery now?" after a previous reading just
- * regurgitates the stale value and the user has no idea.
- *
- * Tools NOT in this map are treated as side-effecting / idempotent-input: re-calling with
- * identical args is a loop, not a refresh. Add new freshness-sensitive tools here.
- */
-private val FRESHNESS_TTL_MS_BY_TOOL: Map<String, Long> = mapOf(
-    "get_battery_status" to 30_000L,
-    "get_audio_info" to 30_000L,
-    "get_telephony_info" to 30_000L,
-    "get_wifi_info" to 30_000L,
-    "get_storage_info" to 60_000L,
-    "get_brightness" to 10_000L,
-    "get_volume" to 10_000L,
-    "get_location" to 30_000L,
-    "get_time_info" to 5_000L,
-    "read_sensor" to 5_000L,
-    "take_screenshot" to 5_000L,
-    "read_window_tree" to 5_000L,
-    "list_active_notifications" to 5_000L,
-    "list_jobs" to 60_000L,
-)
-
-/**
- * UI-observation tools that read screen/device state without changing it. Used by the loop
- * guard's reset rule below: when the model drives a UI it runs an act-observe cycle and
- * naturally repeats the same observation call (read_window_tree / take_screenshot with
- * identical args) after every action. Those repeats are progress, NOT a loop, so an
- * intervening ACTION (any executed tool NOT in this set) resets the observation repeat count.
- * Tools that ARE in this set do not reset each other, so a model that merely alternates
- * observers on a frozen screen still trips the guard (the token-drain case we must catch).
- *
- * This is the freshness-sensitive realtime readers plus find_node (the other pure screen
- * reader). Keep it to genuine read-only observers: wrongly adding an ACTION tool here would
- * stop it from resetting the counter and reintroduce the false-positive loop_detected.
- */
-private val READ_ONLY_OBSERVATION_TOOLS: Set<String> =
-    FRESHNESS_TTL_MS_BY_TOOL.keys + "find_node"
-
-/** One prior executed tool call in the current turn, in chronological order. */
-internal data class PriorToolCall(
-    val toolName: String,
-    val signature: String,
-    val epochMs: Long,
-)
-
-internal data class LoopGuardDecision(
-    val block: Boolean,
-    val priorOccurrences: Int,
-)
-
-/**
- * Pure, testable loop-detection decision, extracted from [GenerationHandler.generateText] so
- * the act-observe reset and freshness-TTL rules can be unit-tested without an Android Context.
- */
-internal object LoopGuard {
-    fun evaluate(
-        priorCalls: List<PriorToolCall>,
-        toolName: String,
-        signature: String,
-        nowMs: Long,
-        threshold: Int = LOOP_GUARD_REPEAT_THRESHOLD,
-        readOnlyTools: Set<String> = READ_ONLY_OBSERVATION_TOOLS,
-        freshnessTtlMs: Map<String, Long> = FRESHNESS_TTL_MS_BY_TOOL,
-    ): LoopGuardDecision {
-        // For observation tools, only repeats since the most recent ACTION count: acting on
-        // the world is progress, so identical observations taken before it are stale for
-        // loop-detection purposes. Side-effecting tools count every identical call in the
-        // turn (re-sending the same message 3x is a loop regardless of what ran between).
-        val relevant = if (toolName in readOnlyTools) {
-            val lastActionIdx = priorCalls.indexOfLast { it.toolName !in readOnlyTools }
-            if (lastActionIdx >= 0) priorCalls.subList(lastActionIdx + 1, priorCalls.size)
-            else priorCalls
-        } else {
-            priorCalls
-        }
-        val matching = relevant.filter { it.signature == signature }
-        val priorOccurrences = matching.size
-        if (priorOccurrences < threshold) return LoopGuardDecision(false, priorOccurrences)
-        // Freshness-TTL bypass: a real-time reader re-called after its TTL is a refresh, not
-        // a loop; let it through so the model gets a fresh reading instead of a stale one.
-        val ttl = freshnessTtlMs[toolName]
-        if (ttl != null && nowMs - matching.maxOf { it.epochMs } >= ttl) {
-            return LoopGuardDecision(false, priorOccurrences)
-        }
-        return LoopGuardDecision(true, priorOccurrences)
-    }
-}
-
-private const val MAX_PROVIDER_NETWORK_RETRIES = 3
-private const val INITIAL_PROVIDER_RETRY_DELAY_MS = 1_000L
-
-private class StreamChunkHandlingException(cause: Throwable) : RuntimeException(cause)
-
-class GenerationHandler(
+class GenerationLoop(
     private val context: Context,
     private val providerManager: ProviderManager,
     private val json: Json,
-    private val memoryRepo: MemoryRepository,
-    private val aiLoggingManager: AILoggingManager,
-    private val requestLogManager: AIRequestLogManager,
-    private val systemPromptBuilder: SystemPromptBuilder,
 ) {
     fun generateText(
         settings: Settings,
@@ -390,30 +244,6 @@ class GenerationHandler(
 
             Log.i(TAG, "streamText: start step #$stepIndex (${model.id})")
 
-            val toolsInternal = buildList {
-                Log.i(TAG, "generateInternal: build tools($assistant)")
-                if (assistant.enableMemory) {
-                    val memoryAssistantId = if (assistant.useGlobalMemory) {
-                        MemoryRepository.GLOBAL_MEMORY_ID
-                    } else {
-                        assistant.id.toString()
-                    }
-                    buildMemoryTools(
-                        json = json,
-                        onCreation = { content ->
-                            memoryRepo.addMemory(memoryAssistantId, content)
-                        },
-                        onUpdate = { id, content ->
-                            memoryRepo.updateContent(id, content)
-                        },
-                        onDelete = { id ->
-                            memoryRepo.deleteMemory(id)
-                        }
-                    ).let(this::addAll)
-                }
-                addAll(tools)
-            }
-
             // Check if we have tool calls ready to continue after user interaction.
             val pendingTools = messages.lastOrNull()?.getTools()?.filter {
                 it.canResumeExecution
@@ -465,50 +295,22 @@ class GenerationHandler(
                                     finishReasons = finishReasons,
                                 )
                             )
-                        },
-                        transformers = inputTransformers,
-                        model = model,
-                        providerImpl = providerImpl,
-                        provider = provider,
-                        tools = toolsInternal,
-                        memories = memories ?: emptyList(),
-                        stream = assistant.streamOutput,
-                        processingStatus = processingStatus,
-                        conversationSystemPrompt = conversationSystemPrompt,
-                        conversationId = conversationId,
-                        conversationModeInjectionIds = conversationModeInjectionIds,
-                        conversationLorebookIds = conversationLorebookIds,
-                        workspaceCwd = workspaceCwd,
-                        requestSource = requestSource,
-                    )
-                } catch (t: Throwable) {
-                    // CancellationException is honoured verbatim — stopGeneration has its
-                    // own cancelToolByUser path that marks tools cancelled. We only need
-                    // to handle non-cancel failures here.
-                    if (t !is CancellationException) {
-                        // Server 5xx, JSON parse failure, OOM during chunk-merge, etc. Without
-                        // this transition, any tool already at Auto/Pending in the just-built
-                        // assistant message is stranded — the next user turn replays the
-                        // conversation with tool parts in an in-between state and downstream
-                        // filtering misbehaves. We mark them Denied with a generation_failed
-                        // envelope so the shape is deterministic on replay.
-                        val lastMsg = messages.lastOrNull()
-                        if (lastMsg != null) {
-                            val newParts = lastMsg.parts.map { part ->
-                                if (part is UIMessagePart.Tool &&
-                                    (part.approvalState is ToolApprovalState.Auto ||
-                                        part.approvalState is ToolApprovalState.Pending)) {
-                                    part.copy(approvalState = ToolApprovalState.Denied(
-                                        "generation_failed: ${t.javaClass.simpleName}: ${t.message.orEmpty()}"
-                                    ))
-                                } else part
-                            }
-                            messages = messages.dropLast(1) + lastMsg.copy(parts = newParts)
-                            emit(GenerationChunk.Messages(messages))
-                        }
-                    }
-                    throw t
-                }
+                        )
+                    },
+                    transformers = inputTransformers,
+                    model = model,
+                    providerImpl = providerImpl,
+                    provider = provider,
+                    tools = tools,
+                    memories = memories ?: emptyList(),
+                    stream = assistant.streamOutput,
+                    processingStatus = processingStatus,
+                    conversationSystemPrompt = conversationSystemPrompt,
+                    conversationId = conversationId,
+                    conversationModeInjectionIds = conversationModeInjectionIds,
+                    conversationLorebookIds = conversationLorebookIds,
+                    workspaceCwd = workspaceCwd,
+                )
                 messages = messages.visualTransforms(
                     transformers = outputTransformers,
                     context = context,
@@ -529,8 +331,8 @@ class GenerationHandler(
                 )
                 emit(GenerationChunk.Messages(messages))
 
-                val tools = messages.last().getTools().filter { !it.isExecuted }
-                if (tools.isEmpty()) {
+                val toolCalls = messages.last().getTools().filter { !it.isExecuted }
+                if (toolCalls.isEmpty()) {
                     // no tool calls, break
                     break
                 }
@@ -542,32 +344,12 @@ class GenerationHandler(
                 // flips to Pending and a duplicate prompt is emitted even though X is
                 // now persisted-approved.
                 var hasPendingApproval = false
-                val updatedTools = ArrayList<UIMessagePart.Tool>(tools.size)
-                for (tool in tools) {
-                    val toolDef = toolsInternal.find { it.name == tool.toolName }
-                    // HARDLINE check: certain command patterns (rm -rf /, mkfs, shutdown,
-                    // fork bomb, …) are blocked unconditionally — even "Always Allow"
-                    // can't override. We check BEFORE the auto-approval lookup so a
-                    // permanently-allowed termux/ssh tool still can't smuggle one of
-                    // these through. Result: tool is marked Denied with the hardline
-                    // reason, the regular Denied branch downstream emits an error
-                    // envelope to the model without executing.
-                    val hardlineReason = me.rerere.rikkahub.data.ai.tools
-                        .HardlineCommandGuard.checkTool(tool.toolName, tool.input)
-                    val transformed = when {
-                        hardlineReason != null && tool.approvalState is ToolApprovalState.Auto -> {
-                            Log.w(TAG, "hardline-blocked ${tool.toolName}: $hardlineReason")
-                            tool.copy(approvalState = ToolApprovalState.Denied(
-                                "blocked by safety floor (hardline): $hardlineReason. " +
-                                    "This command cannot run via the agent under any " +
-                                    "circumstances. If the user genuinely needs it, they " +
-                                    "should run it themselves in a terminal outside the agent."
-                            ))
-                        }
-                        // ask_user always enters Pending for the interactive question card UI,
-                        // regardless of needsApproval. This decouples the approval gate from
-                        // the question flow — no approve/deny buttons, just answer input.
-                        tool.toolName == "ask_user" && tool.approvalState is ToolApprovalState.Auto -> {
+                val updatedTools = toolCalls.map { tool ->
+                    val toolDef = tools.find { it.name == tool.toolName }
+                    when {
+                        // Tool needs approval and state is Auto -> set to Pending
+                        toolDef?.needsApproval(tool.inputAsJson()) == true &&
+                            tool.approvalState is ToolApprovalState.Auto -> {
                             hasPendingApproval = true
                             tool.copy(approvalState = ToolApprovalState.Pending)
                         }
@@ -598,7 +380,7 @@ class GenerationHandler(
                 }
 
                 // If any tools were updated to Pending, update the message and break
-                if (updatedTools != tools) {
+                if (updatedTools != toolCalls) {
                     val lastMessage = messages.last()
                     val updatedParts = lastMessage.parts.map { part ->
                         if (part is UIMessagePart.Tool) {
@@ -662,19 +444,18 @@ class GenerationHandler(
                     }
 
                     else -> {
-                        // Auto or Approved - execute the tool.
-                        //
-                        // Defence-in-depth HARDLINE re-check: the primary check at line ~442
-                        // only runs when approvalState is Auto (the generation step that just
-                        // proposed the tool). On the resume path (pendingTools branch above)
-                        // tools arrive here with state=Approved and skip that block entirely.
-                        // Re-check here so that a hardline-matched tool persisted in Approved
-                        // state from an old DB row (pre-hardline schema, direct DB edit) can
-                        // never execute via the resume path.
-                        val resumeHardlineReason = me.rerere.rikkahub.data.ai.tools
-                            .HardlineCommandGuard.checkTool(tool.toolName, tool.input)
-                        if (resumeHardlineReason != null) {
-                            Log.w(TAG, "generateText: resume-path hardline re-check blocked ${tool.toolName}: $resumeHardlineReason")
+                        // Auto or Approved - execute the tool
+                        runCatching {
+                            val toolDef = tools.find { toolDef -> toolDef.name == tool.toolName }
+                                ?: error("Tool ${tool.toolName} not found")
+                            val args = runCatching {
+                                json.parseToJsonElement(tool.input.ifBlank { "{}" })
+                            }.getOrElse {
+                                error("Invalid tool arguments JSON for ${tool.toolName}: ${it.message}")
+                            }
+                            Log.i(TAG, "generateText: executing tool ${toolDef.name} with args: $args")
+                            val result = toolDef.execute(args)
+                            val hasShellAccess = tools.any { it.name == "workspace_shell" }
                             executedTools += tool.copy(
                                 output = listOf(
                                     UIMessagePart.Text(
@@ -1082,7 +863,7 @@ class GenerationHandler(
                 addAll(assistant.customBodies)
                 addAll(model.customBodies)
             },
-            sessionId = conversationId?.toString(),
+            sessionId = (conversationId ?: Uuid.random()).toString(),
         )
         // 保存请求消息（API 调用前的输入），用于日志
         val requestMessages = messages
@@ -1146,11 +927,15 @@ class GenerationHandler(
                             error = error,
                             retryCount = retryCount,
                             processingStatus = processingStatus,
+                            enabled = settings.networkSetting.enableAutoRetry,
                         )
                     }
                 }
             } else {
-                val result = executeProviderRequestWithRetry(processingStatus) {
+                val result = executeProviderRequestWithRetry(
+                    processingStatus = processingStatus,
+                    enabled = settings.networkSetting.enableAutoRetry,
+                ) {
                     providerImpl.generateText(
                         providerSetting = provider,
                         messages = internalMessages,
@@ -1206,6 +991,7 @@ class GenerationHandler(
 
     private suspend fun <T> executeProviderRequestWithRetry(
         processingStatus: MutableStateFlow<String?>,
+        enabled: Boolean,
         block: suspend () -> T,
     ): T {
         var retryCount = 0
@@ -1217,6 +1003,7 @@ class GenerationHandler(
                     error = error,
                     retryCount = retryCount,
                     processingStatus = processingStatus,
+                    enabled = enabled,
                 )
             }
         }
@@ -1226,11 +1013,12 @@ class GenerationHandler(
         error: Throwable,
         retryCount: Int,
         processingStatus: MutableStateFlow<String?>,
+        enabled: Boolean,
     ): Int {
         // 用户主动停止生成时，底层连接也可能以 IOException("canceled") 收尾；
         // 先检查协程状态，确保取消不会被当作网络波动重新拉起。
         currentCoroutineContext().ensureActive()
-        if (error !is IOException || retryCount >= MAX_PROVIDER_NETWORK_RETRIES) {
+        if (!enabled || error !is IOException || retryCount >= MAX_PROVIDER_NETWORK_RETRIES) {
             throw error
         }
 

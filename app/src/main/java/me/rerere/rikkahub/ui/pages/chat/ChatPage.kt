@@ -49,7 +49,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -82,6 +82,7 @@ import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
+import me.rerere.rikkahub.data.datastore.getSelectedASRProvider
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
@@ -136,6 +137,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null, au
 
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val softwareKeyboardController = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
 
     // Handle back press when drawer is open
     BackHandler(enabled = drawerState.isOpen) {
@@ -144,9 +146,10 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null, au
         }
     }
 
-    // Hide keyboard when drawer is open
+    // Clear input focus so popup transitions cannot reopen the keyboard.
     LaunchedEffect(drawerState.isOpen) {
         if (drawerState.isOpen) {
+            focusManager.clearFocus(force = true)
             softwareKeyboardController?.hide()
         }
     }
@@ -163,6 +166,8 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null, au
             drawerState.close()
         }
     }
+
+    val startVoiceMode = rememberVoiceModeStarter(vm, setting)
 
     val inputState = vm.inputState
 
@@ -223,6 +228,7 @@ LaunchedEffect(nodeId, conversation.messageNodes.size) {
                 }
             ) {
                 ChatPageContent(
+                    onStartVoiceMode = startVoiceMode,
                     inputState = inputState,
                     loadingJob = loadingJob,
                     processingStatus = processingStatus,
@@ -255,6 +261,7 @@ LaunchedEffect(nodeId, conversation.messageNodes.size) {
                 }
             ) {
                 ChatPageContent(
+                    onStartVoiceMode = startVoiceMode,
                     inputState = inputState,
                     loadingJob = loadingJob,
                     processingStatus = processingStatus,
@@ -281,6 +288,7 @@ LaunchedEffect(nodeId, conversation.messageNodes.size) {
 
 @Composable
 private fun ChatPageContent(
+    onStartVoiceMode: () -> Unit,
     inputState: ChatInputState,
     loadingJob: Job?,
     processingStatus: String? = null,
@@ -373,8 +381,18 @@ private fun ChatPageContent(
                 )
             },
             bottomBar = {
+                val messageQueue by vm.messageQueue.collectAsStateWithLifecycle()
+                val voiceState by vm.voiceSession.state.collectAsStateWithLifecycle()
                 ChatInput(
+                    onStartVoiceMode = onStartVoiceMode,
+                    voiceState = voiceState,
+                    onStopVoiceMode = vm.voiceSession::stop,
                     state = inputState,
+                    messageQueue = messageQueue,
+                    onRemoveQueuedMessage = vm::removeQueuedMessage,
+                    onBeginEditQueuedMessage = vm::beginEditQueuedMessage,
+                    onFinishEditQueuedMessage = vm::finishEditQueuedMessage,
+                    onResumeMessageQueue = vm::resumeMessageQueue,
                     loading = loadingJob != null,
                     settings = setting,
                     hazeState = hazeState,
@@ -577,6 +595,8 @@ private fun ChatPageContent(
                 conversation = conversation,
                 assistant = assistant,
                 vm = vm,
+                attachmentPickerActions = attachmentPickerActions,
+                onStartVoiceMode = onStartVoiceMode,
                 onDismiss = { showFilesSheet = false },
             )
         }
@@ -590,11 +610,13 @@ private fun ChatFilesPickerSheet(
     conversation: Conversation,
     assistant: Assistant,
     vm: ChatVM,
+    attachmentPickerActions: ChatAttachmentPickerActions,
+    onStartVoiceMode: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val context = LocalContext.current
-    val toaster = LocalToaster.current
-    val filesManager: FilesManager = koinInject()
+    val voiceState by vm.voiceSession.state.collectAsStateWithLifecycle()
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
     var showInjectionSheet by remember { mutableStateOf(false) }
     var showCompressDialog by remember { mutableStateOf(false) }
 
@@ -779,14 +801,22 @@ private fun ChatFilesPickerSheet(
             showCompressDialog = showCompressDialog,
             onShowCompressDialogChange = { showCompressDialog = it },
             onDismiss = { dismissAll() },
-            onTakePic = onLaunchCamera,
-            onPickImage = { imagePickerLauncher.launch("image/*") },
-            onPickVideo = { videoPickerLauncher.launch("video/*") },
-            onPickAudio = { audioPickerLauncher.launch("audio/*") },
-            onPickFile = { filePickerLauncher.launch(arrayOf("*/*")) },
-            knowledgeBases = vm.knowledgeBases.collectAsStateWithLifecycle().value,
-            currentKbId = conversation.knowledgeBaseId?.toString(),
-            onSelectKnowledgeBase = { vm.setKnowledgeBase(it) },
+            onTakePic = attachmentPickerActions.onTakePicture,
+            onPickImage = attachmentPickerActions.onPickImage,
+            onPickVideo = attachmentPickerActions.onPickVideo,
+            onPickAudio = attachmentPickerActions.onPickAudio,
+            onPickFile = attachmentPickerActions.onPickFile,
+            onStartVoiceMode = if (
+                setting.getSelectedASRProvider()?.supportsServerVadVoiceMode == true &&
+                voiceState.phase == VoicePhase.Off
+            ) {
+                {
+                    dismissAll()
+                    focusManager.clearFocus(force = true)
+                    keyboardController?.hide()
+                    onStartVoiceMode()
+                }
+            } else null,
         )
     }
 }

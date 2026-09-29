@@ -93,7 +93,7 @@ sealed class ProviderSetting {
         var useResponseApi: Boolean = false,
         var promptCaching: Boolean = true,
         var includeHistoryReasoning: Boolean = true,
-        var routing: OpenRouterRouting = OpenRouterRouting(),
+        var responsesPath: String = "/responses",
     ) : ProviderSetting() {
         override fun addModel(model: Model): ProviderSetting = copy(models = models + model)
         override fun editModel(model: Model): ProviderSetting = copy(models = models.map { if (it.id == model.id) model.copy() else it })

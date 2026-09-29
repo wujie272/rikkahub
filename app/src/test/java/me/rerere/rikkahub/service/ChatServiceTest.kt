@@ -6,6 +6,7 @@ import me.rerere.ai.provider.BuiltInTools
 import me.rerere.ai.provider.CustomBody
 import me.rerere.ai.provider.CustomHeader
 import me.rerere.ai.provider.Model
+import me.rerere.rikkahub.data.ai.tools.shouldUseExternalWebSearch
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
 import org.junit.Assert.assertEquals
@@ -55,12 +56,14 @@ class ChatServiceTest {
             customBodies = bodies,
         )
 
-        val params = backgroundTextGenerationParams(model)
+        val conversationId = Uuid.random()
+        val params = backgroundTextGenerationParams(model, conversationId)
 
         assertEquals(model, params.model)
         assertEquals(ReasoningLevel.AUTO, params.reasoningLevel)
         assertEquals(headers, params.customHeaders)
         assertEquals(bodies, params.customBody)
+        assertEquals(conversationId.toString(), params.sessionId)
     }
 
     @Test

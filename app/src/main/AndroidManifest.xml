@@ -194,6 +194,16 @@
         <category android:name="android.intent.category.DEFAULT" />
       </intent-filter>
 
+      <intent-filter>
+        <action android:name="me.rerere.rikkahub.action.TRANSLATE" />
+        <category android:name="android.intent.category.DEFAULT" />
+      </intent-filter>
+
+      <intent-filter>
+        <action android:name="me.rerere.rikkahub.action.IMAGE_GEN" />
+        <category android:name="android.intent.category.DEFAULT" />
+      </intent-filter>
+
       <meta-data
         android:name="android.app.shortcuts"
         android:resource="@xml/shortcuts" />
@@ -227,22 +237,6 @@
 
         <data
           android:host="shortcut"
-          android:scheme="rikkahub" />
-      </intent-filter>
-    </activity>
-    <activity
-      android:name=".ui.activity.McpOAuthCallbackActivity"
-      android:exported="true"
-      android:launchMode="singleTask"
-      android:theme="@android:style/Theme.Translucent.NoTitleBar">
-      <intent-filter>
-        <action android:name="android.intent.action.VIEW" />
-
-        <category android:name="android.intent.category.DEFAULT" />
-        <category android:name="android.intent.category.BROWSABLE" />
-
-        <data
-          android:host="mcp-oauth-callback"
           android:scheme="rikkahub" />
       </intent-filter>
     </activity>

@@ -137,6 +137,7 @@ class WorkspaceManager(
         cwd: String = "",
         timeoutMillis: Long = DEFAULT_COMMAND_TIMEOUT_MS,
         stdin: ByteArray? = null,
+        shellCompatibilityMode: Boolean = false,
     ): WorkspaceCommandResult {
         require(command.isNotBlank()) { "Command is required" }
         val workingDir = fileSystem.resolve(filesDir(root), cwd)
@@ -154,6 +155,8 @@ class WorkspaceManager(
                 workingDir = workingDir,
                 timeoutMillis = timeoutMillis,
                 stdin = stdin,
+                bindMounts = bindMounts,
+                shellCompatibilityMode = shellCompatibilityMode,
             )
         )
     }
