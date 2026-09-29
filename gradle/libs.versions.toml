@@ -15,7 +15,6 @@ commons-text = "1.15.0"
 lifecycleRuntimeKtx = "2.11.0"
 activityCompose = "1.13.0"
 composeBom = "2026.08.00"
-# ↑ 钉回本地版本：app 模块本轮保留本地实现，依赖需与之一致
 material3 = "1.5.0-alpha26"
 # ↑ 钉回本地版本：app 模块本轮保留本地实现，依赖需与之一致
 media3 = "1.11.1"
@@ -60,7 +59,7 @@ browser = "1.10.0"
 appcompat = "1.8.0"
 material = "1.14.0"
 ucrop = "2.2.11-native"
-floatingx = "2.3.7"
+floatingx = "3.0.0"
 # ↑ 钉回本地版本：app 模块本轮保留本地实现，依赖需与之一致
 haze = "2.0.0-beta01"
 # ↑ 钉回本地版本：app 模块本轮保留本地实现，依赖需与之一致
