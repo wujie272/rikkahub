@@ -1,0 +1,52 @@
+name: Merge Compile Check
+
+on:
+  workflow_dispatch:
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+          submodules: true
+
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: Install pnpm
+        run: npm install -g pnpm
+
+      - name: Gradle cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-merge-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Generate dummy google-services.json
+        run: |
+          echo '{"project_info":{"project_number":"000000000000","project_id":"rikkahub-ci-dummy","storage_bucket":"rikkahub-ci-dummy.appspot.com"},"client":[{"client_info":{"mobilesdk_app_id":"1:000000000000:android:0000000000000000","android_client_info":{"package_name":"me.jaye.rikkahub"}},"oauth_client":[],"api_key":[{"current_key":"AIzaSyDummy0000000000000000000000000000"}],"services":{"analytics_service":{"status":1},"appinvite_service":{"status":1},"google_cast_service":{"status":1}}}],"configuration_version":"1"}' > app/google-services.json
+
+      - name: Compile all modules (continue on error)
+        run: |
+          chmod +x gradlew
+          ./gradlew :ai:compileReleaseKotlin :search:compileReleaseKotlin :speech:compileReleaseKotlin :common:compileReleaseKotlin :highlight:compileReleaseKotlin :workspace:compileReleaseKotlin --continue --build-cache || true
+          ./gradlew :app:compileReleaseKotlin --continue --build-cache || true
+
+      - name: Collect errors
+        run: |
+          echo "=== ERROR SUMMARY ==="
+          grep -rhoE "e: file:///home/runner/work/rikkahub/rikkahub/[^ ]+ .*" . 2>/dev/null | sed 's|file:///home/runner/work/rikkahub/rikkahub/||' | sort -u | head -200
