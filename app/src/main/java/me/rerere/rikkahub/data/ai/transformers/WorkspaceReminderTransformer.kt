@@ -8,6 +8,7 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.workspace.WorkspaceShellStatus
+import me.rerere.workspace.WorkspaceStorageArea
 import java.io.ByteArrayOutputStream
 import java.nio.file.Paths
 
@@ -56,10 +57,10 @@ class WorkspaceReminderTransformer(
         )
         val instructions = paths.mapNotNull { path ->
             try {
-                val size = workspaceRepository.rootfsFileSize(workspaceId, path)
+                val size = workspaceRepository.fileSize(workspaceId, WorkspaceStorageArea.LINUX, path)
                 require(size <= MAX_AGENTS_BYTES) { "AGENTS.md exceeds $MAX_AGENTS_BYTES bytes" }
                 val content = ByteArrayOutputStream().use { output ->
-                    workspaceRepository.exportRootfsFile(workspaceId, path, output)
+                    workspaceRepository.exportFile(workspaceId, WorkspaceStorageArea.LINUX, path, output)
                     output.toString(Charsets.UTF_8.name())
                 }
                 content.takeIf { it.isNotBlank() }?.let { path to it }

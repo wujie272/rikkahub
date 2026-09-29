@@ -18,7 +18,9 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
@@ -98,18 +100,6 @@ fun SkillsPage() {
             skills.filter { skill ->
                 skill.name.contains(searchQuery, ignoreCase = true) ||
                     skill.description.contains(searchQuery, ignoreCase = true)
-            }
-        }
-    }
-    val fileImportLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
-    ) { uri ->
-        uri ?: return@rememberLauncherForActivityResult
-        vm.importSkillFromFile(context, uri) { success, message ->
-            if (success) {
-                toaster.show(context.getString(R.string.skills_page_import_success, message))
-            } else {
-                toaster.show(context.getString(R.string.skills_page_import_failed, message))
             }
         }
     }
@@ -446,6 +436,7 @@ private fun SkillCard(
     onClick: () -> Unit,
     onDelete: () -> Unit,
 ) {
+    var menuExpanded by remember { mutableStateOf(false) }
     Card(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
