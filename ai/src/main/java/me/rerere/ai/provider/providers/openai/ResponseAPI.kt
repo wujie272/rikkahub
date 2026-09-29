@@ -84,6 +84,7 @@ class ResponseAPI(
         messages: List<UIMessage>,
         params: TextGenerationParams
     ): TextGenerationResult = withContext(Dispatchers.IO) {
+        val apiKey = providerSetting.pickApiKey(keyRoulette, providerSetting.id.toString())
         val requestBody = buildRequestBody(
             providerSetting = providerSetting,
             messages = messages,
@@ -108,10 +109,12 @@ class ResponseAPI(
         // await() waits for the response headers; reading the body can still block.
         client.newCall(request).await().use { response ->
             if (!response.isSuccessful) {
+                keyRoulette.reportFailure(apiKey, providerSetting.id.toString(), providerSetting.fallbackConfig.cooldownSeconds * 1000L)
                 throw Exception("Failed to get response: ${response.code} ${response.body.string()}")
             }
 
             val bodyStr = response.body.string()
+            keyRoulette.reportSuccess(apiKey, providerSetting.id.toString())
             Log.i(TAG, "generateText: $bodyStr")
             val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
             parseResponseOutput(bodyJson)

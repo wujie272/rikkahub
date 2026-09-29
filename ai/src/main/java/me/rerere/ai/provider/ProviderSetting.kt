@@ -94,6 +94,8 @@ sealed class ProviderSetting {
         var promptCaching: Boolean = true,
         var includeHistoryReasoning: Boolean = true,
         var responsesPath: String = "/responses",
+        // 本地定制：OpenRouter 路由偏好
+        var routing: OpenRouterRouting = OpenRouterRouting(),
     ) : ProviderSetting() {
         override fun addModel(model: Model): ProviderSetting = copy(models = models + model)
         override fun editModel(model: Model): ProviderSetting = copy(models = models.map { if (it.id == model.id) model.copy() else it })
