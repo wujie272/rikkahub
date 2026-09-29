@@ -176,6 +176,9 @@ kotlin {
 }
 
 dependencies {
+    // 本地 JS 引擎（JavascriptTool/LocalTools/RikkaHubApp 的 QuickJSLoader）使用旧 wrapper；
+    // 上游已将 common 的 quickjs 迁移为 quickjs-kt，app 需直接声明 legacy。
+    implementation(libs.legacy.quickjs)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.runtime)
