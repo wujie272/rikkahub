@@ -13,11 +13,7 @@ plugins {
 
 android {
     namespace = "me.rerere.rikkahub"
-    compileSdk {
-        version = release(37) {
-            minorApiLevel = 2
-        }
-    }
+    compileSdk = 37
 
     // CI 通过 -PabiFilter=arm64-v8a 只编单架构，默认全编
     val abiList = (project.findProperty("abiFilter") as? String)?.split(",") ?: listOf("arm64-v8a", "x86_64")
@@ -179,19 +175,7 @@ kotlin {
     }
 }
 
-// Local JVM tests need the desktop native library instead of the Android AAR.
-// 版本在这里一次性取出，避免在嵌套 lambda 里引用 version catalog accessor。
-val quickjsJvmVersion = libs.versions.quickjs.get()
-configurations.matching { it.name.endsWith("UnitTestRuntimeClasspath") }.configureEach {
-    resolutionStrategy.dependencySubstitution {
-        substitute(module("io.github.dokar3:quickjs-kt-android"))
-            .using(module("io.github.dokar3:quickjs-kt-jvm:$quickjsJvmVersion"))
-    }
-}
-
 dependencies {
-    implementation(libs.quickjs)
-    implementation(libs.legacy.quickjs)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.runtime)
@@ -234,12 +218,10 @@ dependencies {
     // https://github.com/drewnoakes/metadata-extractor
     implementation(libs.metadata.extractor)
 
-    // Haze (background blur and glass)
+    // Haze (background blur)
     implementation(libs.haze)
     implementation(libs.haze.blur)
     implementation(libs.haze.blur.material3)
-    implementation(libs.haze.glass)
-    implementation(libs.haze.glass.material3)
 
     // koin
     implementation(platform(libs.koin.bom))
@@ -364,7 +346,6 @@ dependencies {
     implementation(project(":common"))
     implementation(project(":material3"))
     implementation(project(":workspace"))
-    implementation(project(":oauth"))
     implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.jar", "*.aar"))))
     implementation(kotlin("reflect"))
 

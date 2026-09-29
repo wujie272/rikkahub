@@ -1777,4 +1777,5 @@
   <string name="workspace_terminal_close_tab">Закрыть терминал %1$d</string>
   <string name="workspace_terminal_no_tabs">Нет открытых вкладок терминала</string>
   <string name="assistant_page_context_message_limit_too_small">Лимит сообщений контекста не может быть меньше %1$d. Значение сброшено до %1$d.</string>
+  <string name="chat_page_check_title_model_settings">Проверьте настройки модели заголовков</string>
 </resources>

@@ -2345,4 +2345,5 @@
   <string name="setting_display_page_background_effect_type">Background effect type</string>
   <string name="setting_display_page_background_effect_blur">Blur</string>
   <string name="setting_display_page_background_effect_glass">Glass</string>
+  <string name="chat_page_check_title_model_settings">Check title model settings</string>
 </resources>
