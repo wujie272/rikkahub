@@ -6,48 +6,25 @@ import androidx.compose.runtime.setValue
 import android.app.Application
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
-import me.rerere.rikkahub.data.datastore.SettingsStore
-import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.db.fts.MessageSearchResult
 import me.rerere.rikkahub.data.db.fts.MessageSearchSort
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.ui.hooks.readStringPreference
 import me.rerere.rikkahub.ui.hooks.writeStringPreference
-import kotlin.uuid.Uuid
 
 private const val SORT_ORDER_PREF_KEY = "search_page_sort_order"
-
-enum class MessageSearchScope {
-    CURRENT_ASSISTANT,
-    ALL_ASSISTANTS,
-}
-
-private data class SearchRequest(
-    val query: String,
-    val sort: MessageSearchSort,
-    val scope: MessageSearchScope,
-    val assistantId: Uuid?,
-    val debounce: Boolean,
-)
 
 class SearchVM(
     private val context: Application,
     private val conversationRepo: ConversationRepository,
-    private val settingsStore: SettingsStore,
 ) : ViewModel() {
-    private val searchRequests = Channel<SearchRequest>(Channel.CONFLATED)
-    private var currentAssistantId: Uuid? = null
+    private val _searchQuery = MutableStateFlow("")
 
     var searchQuery by mutableStateOf("")
-        private set
-    var searchScope by mutableStateOf(MessageSearchScope.CURRENT_ASSISTANT)
         private set
     var sortOrder by mutableStateOf(
         runCatching {
@@ -68,57 +45,31 @@ class SearchVM(
 
     init {
         viewModelScope.launch {
-            searchRequests.receiveAsFlow().collectLatest { request -> performSearch(request) }
-        }
-        viewModelScope.launch {
-            settingsStore.settingsFlow
-                .map { it.getCurrentAssistant().id }
-                .distinctUntilChanged()
-                .collect { assistantId ->
-                    currentAssistantId = assistantId
-                    if (searchScope == MessageSearchScope.CURRENT_ASSISTANT) {
-                        search()
-                    }
-                }
+            @OptIn(kotlinx.coroutines.FlowPreview::class)
+            _searchQuery
+                .debounce(300L)
+                .collectLatest { query -> performSearch(query) }
         }
     }
 
     fun onQueryChange(query: String) {
         searchQuery = query
-        requestSearch(debounce = true)
-    }
-
-    fun onScopeChange(scope: MessageSearchScope) {
-        if (searchScope == scope) return
-        searchScope = scope
-        search()
+        _searchQuery.value = query
     }
 
     fun onSortChange(sort: MessageSearchSort) {
         if (sortOrder == sort) return
         sortOrder = sort
         context.writeStringPreference(SORT_ORDER_PREF_KEY, sort.name)
-        search()
+        viewModelScope.launch {
+            performSearch(searchQuery)
+        }
     }
 
     fun search() {
-        requestSearch()
-    }
-
-    private fun requestSearch(debounce: Boolean = false) {
-        val assistantId = when (searchScope) {
-            MessageSearchScope.CURRENT_ASSISTANT -> currentAssistantId
-            MessageSearchScope.ALL_ASSISTANTS -> null
+        viewModelScope.launch {
+            performSearch(searchQuery)
         }
-        searchRequests.trySend(
-            SearchRequest(
-                query = searchQuery,
-                sort = sortOrder,
-                scope = searchScope,
-                assistantId = assistantId,
-                debounce = debounce,
-            )
-        )
     }
 
     fun rebuildIndex() {
@@ -135,17 +86,14 @@ class SearchVM(
         }
     }
 
-    private suspend fun performSearch(request: SearchRequest) {
-        results = emptyList()
-        if (request.query.isBlank() ||
-            (request.scope == MessageSearchScope.CURRENT_ASSISTANT && request.assistantId == null)
-        ) {
+    private suspend fun performSearch(query: String) {
+        if (query.isBlank()) {
+            results = emptyList()
             return
         }
         isLoading = true
         try {
-            if (request.debounce) delay(300L)
-            results = conversationRepo.searchMessages(request.query, request.sort, request.assistantId)
+            results = conversationRepo.searchMessages(query, sortOrder)
         } finally {
             isLoading = false
         }

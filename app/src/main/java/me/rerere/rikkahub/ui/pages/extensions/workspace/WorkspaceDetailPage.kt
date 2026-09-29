@@ -7,9 +7,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
-import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,7 +25,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -84,7 +81,6 @@ import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import androidx.compose.ui.res.stringResource
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.nav.BackButton
-import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.components.ui.ImagePreviewDialog
 import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
 import me.rerere.rikkahub.ui.context.LocalNavController
@@ -107,7 +103,6 @@ fun WorkspaceDetailPage(id: String) {
     val state by vm.state.collectAsStateWithLifecycle()
     val installProgress by vm.installProgress.collectAsStateWithLifecycle()
     val installError by vm.installError.collectAsStateWithLifecycle()
-    val settingsError by vm.settingsError.collectAsStateWithLifecycle()
     val pagerState = rememberPagerState { 2 }
     val scope = rememberCoroutineScope()
     var deleteTarget by remember { mutableStateOf<WorkspaceFileEntry?>(null) }
@@ -135,11 +130,6 @@ fun WorkspaceDetailPage(id: String) {
         if (uri == null) return@rememberLauncherForActivityResult
         val outputStream = context.contentResolver.openOutputStream(uri) ?: return@rememberLauncherForActivityResult
         vm.exportFile(entry, outputStream)
-    }
-    val directoryExportLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocumentTree(),
-    ) { uri ->
-        vm.exportFilesToDirectory(uri, context.contentResolver)
     }
 
     BackHandler(enabled = pagerState.currentPage == 1 && state.path.isNotBlank()) {
@@ -208,12 +198,10 @@ fun WorkspaceDetailPage(id: String) {
                     installProgress = installProgress,
                     onInstallRootfs = { showInstallDialog = true },
                     onToolApprovalChange = vm::setToolApproval,
-                    onShellCompatibilityModeChange = vm::setShellCompatibilityMode,
                 )
 
                 1 -> WorkspaceFilesPage(
                     state = state,
-                    isActive = pagerState.currentPage == 1,
                     contentPadding = PaddingValues(),
                     onSelectArea = vm::selectArea,
                     onGoUp = vm::goUp,
@@ -259,9 +247,6 @@ fun WorkspaceDetailPage(id: String) {
                         }
                     },
                     onDelete = { deleteTarget = it },
-                    onBatchExport = { entries ->
-                        if (vm.prepareBatchExport(entries)) directoryExportLauncher.launch(null)
-                    },
                     onExport = { entry ->
                         exportTarget = entry
                         exportLauncher.launch(entry.name)
@@ -286,17 +271,6 @@ fun WorkspaceDetailPage(id: String) {
         }
     }
 
-    state.exportResult?.let { result ->
-        AlertDialog(
-            onDismissRequest = vm::dismissExportResult,
-            title = { Text("导出结果") },
-            text = { Text(result, modifier = Modifier.verticalScroll(rememberScrollState())) },
-            confirmButton = {
-                TextButton(onClick = vm::dismissExportResult) { Text(stringResource(R.string.common_confirm)) }
-            },
-        )
-    }
-
     state.workspace?.let { workspace ->
         if (showInstallDialog) {
             InstallRootfsDialog(
@@ -317,19 +291,6 @@ fun WorkspaceDetailPage(id: String) {
             text = { Text(message) },
             confirmButton = {
                 TextButton(onClick = vm::dismissInstallError) {
-                    Text(stringResource(R.string.common_confirm))
-                }
-            },
-        )
-    }
-
-    settingsError?.let { message ->
-        AlertDialog(
-            onDismissRequest = vm::dismissSettingsError,
-            title = { Text(stringResource(R.string.workspace_detail_settings_save_failed)) },
-            text = { Text(message.ifBlank { stringResource(R.string.workspace_detail_settings_save_failed) }) },
-            confirmButton = {
-                TextButton(onClick = vm::dismissSettingsError) {
                     Text(stringResource(R.string.common_confirm))
                 }
             },
@@ -366,7 +327,6 @@ private fun WorkspaceBasicPage(
     installProgress: RootfsInstallProgress?,
     onInstallRootfs: () -> Unit,
     onToolApprovalChange: (String, Boolean) -> Unit,
-    onShellCompatibilityModeChange: (Boolean) -> Unit,
 ) {
     val shellStatus = workspace?.shellStatus
     val installing = installProgress != null || shellStatus == WorkspaceShellStatus.INSTALLING.name
@@ -383,76 +343,63 @@ private fun WorkspaceBasicPage(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
-            CardGroup(
-                title = { Text(stringResource(R.string.workspace_detail_workspace_info)) },
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CustomColors.cardColorsOnSurfaceContainer,
             ) {
-                item(
-                    headlineContent = { Text(stringResource(R.string.workspace_detail_name)) },
-                    supportingContent = {
-                        Text(workspace?.name ?: stringResource(R.string.workspace_detail_loading))
-                    },
-                )
-                item(
-                    headlineContent = { Text(stringResource(R.string.workspace_detail_shell_status)) },
-                    supportingContent = { Text(shellStatus?.toShellStatusLabel() ?: "-") },
-                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.workspace_detail_workspace_info),
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    WorkspaceInfoRow(stringResource(R.string.workspace_detail_name), workspace?.name ?: stringResource(R.string.workspace_detail_loading))
+                    WorkspaceInfoRow(stringResource(R.string.workspace_detail_shell_status), workspace?.shellStatus?.toShellStatusLabel() ?: "-")
+                }
             }
         }
 
         item {
-            CardGroup(
-                title = { Text(stringResource(R.string.workspace_detail_enable_shell)) },
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CustomColors.cardColorsOnSurfaceContainer,
             ) {
-                item(
-                    headlineContent = {
-                        Text(stringResource(R.string.workspace_detail_enable_shell_desc))
-                    },
-                    supportingContent = {
-                        Column(
-                            modifier = Modifier.padding(top = 8.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
-                        ) {
-                            Button(
-                                onClick = onInstallRootfs,
-                                enabled = workspace != null && !installing,
-                                modifier = Modifier.fillMaxWidth(),
-                            ) {
-                                Icon(HugeIcons.Bash, contentDescription = null)
-                                Text(
-                                    text = installButtonText,
-                                    modifier = Modifier.padding(start = 8.dp),
-                                )
-                            }
-                            installProgress?.let { RootfsProgress(it) }
-                        }
-                    },
-                )
-            }
-        }
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.workspace_detail_enable_shell),
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Text(
+                        text = stringResource(R.string.workspace_detail_enable_shell_desc),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
 
-        item {
-            CardGroup(
-                title = {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(stringResource(R.string.workspace_detail_compatibility_mode))
+                    Button(
+                        onClick = onInstallRootfs,
+                        enabled = workspace != null && !installing,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Icon(HugeIcons.Bash, contentDescription = null)
                         Text(
-                            text = stringResource(R.string.workspace_detail_compatibility_mode_desc),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            text = installButtonText,
+                            modifier = Modifier.padding(start = 8.dp),
                         )
                     }
-                },
-            ) {
-                item(
-                    headlineContent = { Text(stringResource(R.string.workspace_detail_compatibility_mode)) },
-                    trailingContent = {
-                        Switch(
-                            checked = workspace?.shellCompatibilityMode ?: false,
-                            onCheckedChange = onShellCompatibilityModeChange,
-                            enabled = workspace != null,
-                        )
-                    },
-                )
+
+                    installProgress?.let { progress ->
+                        RootfsProgress(progress)
+                    }
+                }
             }
         }
 
@@ -471,38 +418,58 @@ private fun WorkspaceToolApprovalCard(
     onToolApprovalChange: (String, Boolean) -> Unit,
 ) {
     val overrides = workspace?.toolApprovalOverrides().orEmpty()
-    val tools = workspaceToolApprovalItems()
 
-    CardGroup(
-        title = {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CustomColors.cardColorsOnSurfaceContainer,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(stringResource(R.string.workspace_detail_tool_approval))
+                Text(
+                    text = stringResource(R.string.workspace_detail_tool_approval),
+                    style = MaterialTheme.typography.titleMedium,
+                )
                 Text(
                     text = stringResource(R.string.workspace_detail_tool_approval_desc),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-        },
-    ) {
-        tools.forEach { (toolName, label) ->
-            item(
-                headlineContent = { Text(label) },
-                supportingContent = {
-                    Text(
-                        text = toolName,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                },
-                trailingContent = {
+
+            workspaceToolApprovalItems().forEach { (toolName, label) ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Text(
+                            text = label,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        Text(
+                            text = toolName,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                     Switch(
                         checked = resolveWorkspaceToolApproval(toolName, overrides),
                         onCheckedChange = { onToolApprovalChange(toolName, it) },
                         enabled = workspace != null,
                     )
-                },
-            )
+                }
+            }
         }
     }
 }
@@ -514,6 +481,34 @@ private fun workspaceToolApprovalItems() = listOf(
     "workspace_edit_file" to stringResource(R.string.workspace_detail_tool_edit_file),
     "workspace_shell" to stringResource(R.string.workspace_detail_tool_shell),
 )
+
+@Composable
+private fun WorkspaceInfoRow(
+    label: String,
+    value: String,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            modifier = Modifier.weight(0.35f),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            text = value,
+            modifier = Modifier.weight(0.65f),
+            style = MaterialTheme.typography.bodyMedium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
 
 @Composable
 private fun RootfsProgress(progress: RootfsInstallProgress) {
@@ -600,7 +595,6 @@ private fun InstallRootfsDialog(
 @Composable
 private fun WorkspaceFilesPage(
     state: WorkspaceDetailState,
-    isActive: Boolean,
     contentPadding: PaddingValues,
     onSelectArea: (WorkspaceStorageArea) -> Unit,
     onGoUp: () -> Unit,
@@ -608,20 +602,8 @@ private fun WorkspaceFilesPage(
     onOpen: (WorkspaceFileEntry) -> Unit,
     onDelete: (WorkspaceFileEntry) -> Unit,
     onExport: (WorkspaceFileEntry) -> Unit,
-    onBatchExport: (List<WorkspaceFileEntry>) -> Unit,
     onShare: (WorkspaceFileEntry) -> Unit,
 ) {
-    var selecting by remember(state.area, state.path) { mutableStateOf(false) }
-    var selectedPaths by remember(state.area, state.path) { mutableStateOf(emptySet<String>()) }
-    val files = state.entries.filterNot { it.isDirectory }
-    val selectedFiles = files.filter { it.path in selectedPaths }
-    fun toggleSelection(entry: WorkspaceFileEntry) {
-        selectedPaths = if (entry.path in selectedPaths) selectedPaths - entry.path else selectedPaths + entry.path
-    }
-    BackHandler(enabled = selecting && isActive) {
-        selecting = false
-        selectedPaths = emptySet()
-    }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = contentPadding + PaddingValues(16.dp),
@@ -642,34 +624,6 @@ private fun WorkspaceFilesPage(
             )
         }
 
-        if (selecting || state.exporting) item {
-            Column {
-                if (selecting) Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    TextButton(
-                        onClick = {
-                            selecting = false
-                            selectedPaths = emptySet()
-                        },
-                    ) { Text("取消多选") }
-                    TextButton(onClick = {
-                        selectedPaths = if (selectedFiles.size == files.size) emptySet() else files.map { it.path }.toSet()
-                    }) { Text(if (files.isNotEmpty() && selectedFiles.size == files.size) "取消全选" else "全选") }
-                    TextButton(
-                        onClick = { onBatchExport(selectedFiles) },
-                        enabled = selectedFiles.isNotEmpty() && !state.exporting,
-                    ) { Text("导出 (${selectedFiles.size})") }
-                }
-                if (state.exporting) {
-                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                    Text("正在导出 ${state.exportCompleted}/${state.exportTotal}")
-                }
-            }
-        }
-
         state.error?.let { error ->
             item {
                 ErrorCard(error)
@@ -687,16 +641,7 @@ private fun WorkspaceFilesPage(
                 entry = entry,
                 area = state.area,
                 onResolveImage = { onResolveImage(entry, state.area) },
-                selecting = selecting,
-                selected = entry.path in selectedPaths,
-                onToggleSelection = { toggleSelection(entry) },
-                onLongClick = {
-                    selecting = true
-                    selectedPaths = selectedPaths + entry.path
-                },
-                onOpen = {
-                    if (selecting && !entry.isDirectory) toggleSelection(entry) else onOpen(entry)
-                },
+                onOpen = { onOpen(entry) },
                 onDelete = { onDelete(entry) },
                 onExport = { onExport(entry) },
                 onShare = { onShare(entry) },
@@ -760,10 +705,6 @@ private fun WorkspaceFileCard(
     entry: WorkspaceFileEntry,
     area: WorkspaceStorageArea,
     onResolveImage: suspend () -> File?,
-    selecting: Boolean,
-    selected: Boolean,
-    onToggleSelection: () -> Unit,
-    onLongClick: () -> Unit,
     onOpen: () -> Unit,
     onDelete: () -> Unit,
     onExport: () -> Unit,
@@ -791,11 +732,7 @@ private fun WorkspaceFileCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .combinedClickable(
-                onClick = onOpen,
-                onLongClick = if (entry.isDirectory) null else onLongClick,
-                onLongClickLabel = if (entry.isDirectory) null else "选择文件",
-            ),
+            .clickable(onClick = onOpen),
         colors = CustomColors.cardColorsOnSurfaceContainer,
     ) {
         Row(
@@ -804,9 +741,6 @@ private fun WorkspaceFileCard(
                 .padding(start = 16.dp, top = 12.dp, bottom = 12.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (selecting && !entry.isDirectory) {
-                Checkbox(checked = selected, onCheckedChange = { onToggleSelection() })
-            }
             if (isImage) {
                 val context = LocalContext.current
                 val imageRequest = remember(imageFile, entry.updatedAt, entry.sizeBytes) {
@@ -876,7 +810,7 @@ private fun WorkspaceFileCard(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            if (!selecting) Box {
+            Box {
                 IconButton(onClick = { menuExpanded = true }) {
                     Icon(HugeIcons.MoreVertical, contentDescription = null)
                 }
@@ -977,34 +911,6 @@ internal fun String.toShellStatusLabel(): String = when (this) {
     WorkspaceShellStatus.READY.name -> stringResource(R.string.workspace_detail_shell_ready)
     WorkspaceShellStatus.BROKEN.name -> stringResource(R.string.workspace_detail_shell_broken)
     else -> lowercase()
-
-private fun WorkspaceInfoRow(
-    label: String,
-    value: String,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = label,
-            modifier = Modifier.weight(0.35f),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        Text(
-            text = value,
-            modifier = Modifier.weight(0.65f),
-            style = MaterialTheme.typography.bodyMedium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-    }
-}
-
 }
 
 private const val DEFAULT_ROOTFS_URL =

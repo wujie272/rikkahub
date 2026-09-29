@@ -28,7 +28,6 @@ data class McpOAuthState(
     val authorizationEndpoint: String? = null,
     val tokenEndpoint: String? = null,
     val registrationEndpoint: String? = null,
-    val redirectUri: String? = null,
     val scope: String? = null,
     val accessToken: String? = null,
     val refreshToken: String? = null,
@@ -40,7 +39,7 @@ data class McpOAuthState(
     override fun toString(): String =
         "McpOAuthState(enabled=$enabled, clientId=$clientId, clientSecret=${clientSecret.masked()}, " +
             "authorizationEndpoint=$authorizationEndpoint, tokenEndpoint=$tokenEndpoint, " +
-            "registrationEndpoint=$registrationEndpoint, redirectUri=$redirectUri, scope=$scope, " +
+            "registrationEndpoint=$registrationEndpoint, scope=$scope, " +
             "accessToken=${accessToken.masked()}, refreshToken=${refreshToken.masked()}, expiresAt=$expiresAt)"
 
     private fun String?.masked(): String = when {

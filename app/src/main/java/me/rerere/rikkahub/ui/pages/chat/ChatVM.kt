@@ -71,10 +71,6 @@ class ChatVM(
     // 聊天输入状态 - 保存在 ViewModel 中避免 TransactionTooLargeException
     val inputState = ChatInputState()
 
-    val voiceSession = VoiceSessionController(viewModelScope, context::getString) {
-        chatService.enqueueVoiceMessage(_conversationId, it)
-    }
-
     // 异步任务 (从ChatService获取，响应式)
     val conversationJob: StateFlow<Job?> =
         chatService
@@ -103,7 +99,6 @@ class ChatVM(
     }
 
     override fun onCleared() {
-        voiceSession.stop()
         super.onCleared()
         // 移除对话引用
         chatService.removeConversationReference(_conversationId)
@@ -158,17 +153,6 @@ class ChatVM(
     fun dismissError(id: Uuid) = chatService.dismissError(id)
 
     fun clearAllErrors() = chatService.clearAllErrors()
-
-    val messageQueue = chatService.getMessageQueueFlow(_conversationId)
-
-    fun removeQueuedMessage(id: Uuid) = chatService.removeQueuedMessage(_conversationId, id)
-
-    fun beginEditQueuedMessage(id: Uuid) = chatService.beginEditQueuedMessage(_conversationId, id)
-
-    fun finishEditQueuedMessage(id: Uuid, parts: List<UIMessagePart>?) =
-        chatService.finishEditQueuedMessage(_conversationId, id, parts)
-
-    fun resumeMessageQueue() = chatService.resumeMessageQueue(_conversationId)
 
     // 生成完成
     val generationDoneFlow: SharedFlow<Uuid> = chatService.generationDoneFlow
@@ -368,15 +352,28 @@ class ChatVM(
 
     fun updatePinnedStatus(conversation: Conversation) {
         viewModelScope.launch {
-            chatService.toggleConversationPinned(conversation.id)
+            conversationRepo.togglePinStatus(conversation.id)
         }
     }
 
     fun moveConversationToAssistant(conversation: Conversation, targetAssistantId: Uuid) {
         viewModelScope.launch {
-            chatService.moveConversationToAssistant(conversation.id, targetAssistantId)
+            val conversationFull = conversationRepo.getConversationById(conversation.id) ?: return@launch
+            val updatedConversation = conversationFull.copy(
+                assistantId = targetAssistantId,
+                folderId = null,
+            )
+            // Drop any "Allow for this chat" grants the user gave the previous assistant.
+            // The grants apply to a tool surface the new assistant may use very differently
+            // (different prompt, different tool list), and the user authorised them under
+            // the old persona's behaviour, not this one's. Persistent "Always Allow" grants
+            // stay (they were granted globally) but ChatScope is reset.
+            me.rerere.rikkahub.data.ai.tools.ToolApprovalAllowList.clearChat(conversation.id)
             if (conversation.id == _conversationId) {
+                chatService.saveConversation(_conversationId, updatedConversation)
                 settingsStore.updateAssistant(targetAssistantId)
+            } else {
+                conversationRepo.updateConversation(updatedConversation)
             }
         }
     }

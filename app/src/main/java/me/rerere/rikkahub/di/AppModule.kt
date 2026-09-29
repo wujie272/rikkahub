@@ -3,8 +3,11 @@ package me.rerere.rikkahub.di
 
 import kotlinx.serialization.json.Json
 import me.rerere.rikkahub.AppScope
-import me.rerere.rikkahub.data.ai.tools.local.LocalTools
-import me.rerere.rikkahub.data.ai.tools.ChatToolFactory
+import me.rerere.rikkahub.data.ai.AILoggingManager
+import me.rerere.rikkahub.data.ai.requestlog.AIRequestLogManager
+import me.rerere.rikkahub.data.ai.tools.LocalTools
+import me.rerere.rikkahub.data.ai.tools.local.BiometricResultBuffer
+import me.rerere.rikkahub.data.ai.tools.local.CameraResultBuffer
 import me.rerere.rikkahub.data.event.AppEventBus
 import me.rerere.rikkahub.data.ai.tools.local.InteractiveToolStreamer
 import me.rerere.rikkahub.data.repository.ScheduledJobRepository
@@ -226,15 +229,7 @@ val appModule = module {
     }
 
     single {
-        ChatToolFactory(
-            json = get(),
-            memoryRepository = get(),
-            conversationRepository = get(),
-            localTools = get(),
-            mcpManager = get(),
-            skillManager = get(),
-            workspaceRepository = get(),
-        )
+        AILoggingManager(get(), get(), get())
     }
 
     single {
@@ -245,13 +240,14 @@ val appModule = module {
             settingsStore = get(),
             conversationRepo = get(),
             memoryRepository = get(),
-            generationLoop = get(),
-            translationHandler = get(),
+            generationHandler = get(),
             templateTransformer = get(),
             providerManager = get(),
-            chatToolFactory = get(),
+            localTools = get(),
             mcpManager = get(),
             filesManager = get(),
+            skillManager = get(),
+            toolApprovalPreferences = get(),
             workspaceRepository = get(),
             folderRepository = get(),
             knowledgeService = get(),

@@ -1,11 +1,8 @@
 package me.rerere.rikkahub.data.ai.tools.local
 
-import com.dokar.quickjs.QuickJsException
-import com.dokar.quickjs.QuickJsInterruptedException
-import com.dokar.quickjs.binding.function
-import com.dokar.quickjs.quickJs
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import com.whl.quickjs.wrapper.QuickJSContext
+import com.whl.quickjs.wrapper.QuickJSObject
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
@@ -17,7 +14,6 @@ import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
-import kotlin.time.Duration.Companion.milliseconds
 
 private const val EVAL_JS_TIMEOUT_MS = 5_000L
 
@@ -43,103 +39,78 @@ internal fun buildJavascriptTool(): Tool = Tool(
         )
     },
     execute = {
-        val code = requireNotNull(it.jsonObject["code"]?.jsonPrimitive?.contentOrNull) {
-            "JavaScript code is required"
+        val code = it.jsonObject["code"]?.jsonPrimitive?.contentOrNull
+
+        val done = CompletableDeferred<String>()
+        Thread {
+            val logs = arrayListOf<String>()
+            var context: QuickJSContext? = null
+            try {
+                context = QuickJSContext.create()
+                context.setMemoryLimit(64 * 1024 * 1024)
+                context.setMaxStackSize(512 * 1024)
+                context.setConsole(object : QuickJSContext.Console {
+                    override fun log(info: String?) {
+                        logs.add("[LOG] $info")
+                    }
+
+                    override fun info(info: String?) {
+                        logs.add("[INFO] $info")
+                    }
+
+                    override fun warn(info: String?) {
+                        logs.add("[WARN] $info")
+                    }
+
+                    override fun error(info: String?) {
+                        logs.add("[ERROR] $info")
+                    }
+                })
+                val result = context.evaluate(code)
+                val payload = buildJsonObject {
+                    if (logs.isNotEmpty()) {
+                        put("logs", JsonPrimitive(logs.joinToString("\n")))
+                    }
+                    put(
+                        key = "result",
+                        element = when (result) {
+                            null -> JsonNull
+                            is QuickJSObject -> JsonPrimitive(result.stringify())
+                            else -> JsonPrimitive(result.toString())
+                        }
+                    )
+                }
+                done.complete(payload.toString())
+            } catch (e: Throwable) {
+                val payload = buildJsonObject {
+                    if (logs.isNotEmpty()) {
+                        put("logs", JsonPrimitive(logs.joinToString("\n")))
+                    }
+                    put("error", JsonPrimitive(e.message ?: e.toString()))
+                }
+                done.complete(payload.toString())
+            } finally {
+                try {
+                    context?.destroy()
+                } catch (_: Throwable) {
+                }
+            }
+        }.apply {
+            name = "eval-js-${System.nanoTime()}"
+            isDaemon = true
+            start()
         }
-        listOf(UIMessagePart.Text(evaluateJavascript(code)))
+
+        val payload = withTimeoutOrNull(EVAL_JS_TIMEOUT_MS) { done.await() }
+            ?: buildJsonObject {
+                put(
+                    "error",
+                    JsonPrimitive(
+                        "JavaScript execution exceeded ${EVAL_JS_TIMEOUT_MS}ms and was abandoned. " +
+                            "Avoid infinite loops or long-running computations."
+                    )
+                )
+            }.toString()
+        listOf(UIMessagePart.Text(payload))
     }
 )
-
-internal suspend fun evaluateJavascript(
-    code: String,
-    timeoutMillis: Long = JS_EXECUTION_TIMEOUT_MS,
-): String = withContext(Dispatchers.Default) {
-    val logs = StringBuilder()
-    var logsTruncated = false
-    fun appendLog(line: String) {
-        val remaining = JS_MAX_LOG_CHARS - logs.length
-        if (remaining <= 0) {
-            logsTruncated = true
-            return
-        }
-        val entry = if (logs.isEmpty()) line else "\n$line"
-        logs.append(entry.take(remaining))
-        if (entry.length > remaining) logsTruncated = true
-    }
-
-    fun errorPayload(message: String) = buildJsonObject {
-        put("error", message)
-    }.toString()
-
-    try {
-        withTimeoutOrNull(timeoutMillis.milliseconds) {
-            // This binding interrupts native evaluation on timeout/cancellation and closes
-            // the runtime only after execution stops, including result serialization.
-            quickJs(Dispatchers.Default) {
-                memoryLimit = JS_MEMORY_LIMIT_BYTES
-                maxStackSize = JS_MAX_STACK_BYTES
-                evaluationTimeoutMillis = timeoutMillis
-                function("__rikkahubLog") { args ->
-                    appendLog(args[0] as String)
-                }
-                // Convert values inside the timed evaluation: getters/toJSON can run JS,
-                // and returning arbitrary objects would also bypass the output limit.
-                val result = evaluate<String?>(
-                    """
-                    (() => {
-                        const log = globalThis.__rikkahubLog;
-                        delete globalThis.__rikkahubLog;
-                        const stringify = JSON.stringify;
-                        const toString = String;
-                        const format = value => {
-                            if (value !== null && typeof value === 'object') {
-                                try { return stringify(value); } catch (_) {}
-                            }
-                            return toString(value);
-                        };
-                        globalThis.console = {};
-                        for (const level of ['log', 'info', 'warn', 'error', 'debug']) {
-                            console[level] = (...args) => {
-                                let line = '[' + (level === 'debug' ? 'LOG' : level.toUpperCase()) + ']';
-                                for (const arg of args) {
-                                    line += ' ' + format(arg);
-                                    if (line.length > $JS_MAX_LOG_CHARS) {
-                                        line = line.slice(0, $JS_MAX_LOG_CHARS) + ' [truncated]';
-                                        break;
-                                    }
-                                }
-                                log(line);
-                            };
-                        }
-                        const result = (0, eval)(${JsonPrimitive(code)});
-                        if (result == null) return null;
-                        const type = typeof result;
-                        const text = type === 'object' || type === 'function'
-                            ? stringify(result) : toString(result);
-                        if (text != null && text.length > $JS_MAX_RESULT_CHARS) {
-                            throw new Error('JavaScript result exceeds output limit');
-                        }
-                        return text == null ? null : text;
-                    })()
-                    """.trimIndent()
-                )
-                buildJsonObject {
-                    if (logs.isNotEmpty()) {
-                        put("logs", logs.toString() + if (logsTruncated) "\n[Logs truncated]" else "")
-                    }
-                    put("result", result?.let(::JsonPrimitive) ?: JsonNull)
-                }.toString()
-            }
-        } ?: errorPayload("JavaScript execution timed out after ${timeoutMillis}ms")
-    } catch (_: QuickJsInterruptedException) {
-        errorPayload("JavaScript execution timed out after ${timeoutMillis}ms")
-    } catch (e: QuickJsException) {
-        errorPayload((e.message ?: "JavaScript execution failed").take(JS_MAX_LOG_CHARS))
-    }
-}
-
-private const val JS_EXECUTION_TIMEOUT_MS = 10_000L
-private const val JS_MEMORY_LIMIT_BYTES = 64L * 1024 * 1024
-private const val JS_MAX_STACK_BYTES = 256L * 1024
-private const val JS_MAX_LOG_CHARS = 64 * 1024
-private const val JS_MAX_RESULT_CHARS = 1024 * 1024

@@ -19,10 +19,7 @@ fun TTSAutoPlay(vm: ChatVM, setting: Settings, conversation: Conversation) {
     val updatedSetting by rememberUpdatedState(setting)
     LaunchedEffect(Unit) {
         vm.generationDoneFlow.collect { conversationId ->
-            if (conversationId == currentConversation.id &&
-                !vm.voiceSession.state.value.isActive &&
-                updatedSetting.displaySetting.autoPlayTTSAfterGeneration
-            ) {
+            if (updatedSetting.displaySetting.autoPlayTTSAfterGeneration) {
                 val lastMessage = currentConversation.currentMessages.lastOrNull()
                 if (lastMessage != null && lastMessage.role == MessageRole.ASSISTANT) {
                     val text = lastMessage.toText()

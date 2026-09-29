@@ -14,7 +14,6 @@ import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.repository.ConversationRepository
-import me.rerere.rikkahub.service.ChatService
 import kotlin.uuid.Uuid
 
 private const val TAG = "HistoryVM"
@@ -22,7 +21,6 @@ private const val TAG = "HistoryVM"
 class HistoryVM(
     private val conversationRepo: ConversationRepository,
     private val settingsStore: SettingsStore,
-    private val chatService: ChatService,
 ) : ViewModel() {
     val assistant = settingsStore.settingsFlow
         .map { it.getCurrentAssistant() }
@@ -49,7 +47,7 @@ class HistoryVM(
 
     fun togglePinStatus(conversationId: Uuid) {
         viewModelScope.launch {
-            chatService.toggleConversationPinned(conversationId)
+            conversationRepo.togglePinStatus(conversationId)
         }
     }
 

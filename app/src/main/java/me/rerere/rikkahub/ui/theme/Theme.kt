@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.ui.theme
 
+import android.app.Activity
 import android.os.Build
 import androidx.compose.foundation.LocalOverscrollFactory
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -23,7 +24,6 @@ import kotlinx.serialization.Serializable
 import me.rerere.rikkahub.ui.hooks.rememberAmoledDarkMode
 import me.rerere.rikkahub.ui.hooks.rememberCurrentColorMode
 import me.rerere.rikkahub.ui.hooks.rememberUserSettingsState
-import me.rerere.rikkahub.utils.getActivity
 
 private val ExtendLightColors = lightExtendColors()
 private val ExtendDarkColors = darkExtendColors()
@@ -79,11 +79,9 @@ fun RikkahubTheme(
 
     // 更新状态栏图标颜色
     val view = LocalView.current
-    val activity = view.context.getActivity()
-    // 浮窗可能使用 Application Context，没有可更新系统栏的 Activity。
-    if (!view.isInEditMode && activity != null) {
-        DisposableEffect(view, activity, darkTheme) {
-            val window = activity.window
+    if (!view.isInEditMode) {
+        DisposableEffect(view, darkTheme) {
+            val window = (view.context as Activity).window
             val controller = WindowCompat.getInsetsController(window, view)
             val previousLightStatusBars = controller.isAppearanceLightStatusBars
             val previousLightNavigationBars = controller.isAppearanceLightNavigationBars

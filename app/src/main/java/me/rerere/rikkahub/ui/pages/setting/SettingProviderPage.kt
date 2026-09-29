@@ -4,7 +4,7 @@ import android.net.Uri
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.rikkahub.ui.pages.setting.components.ProviderRequirement
 import me.rerere.hugeicons.stroke.Camera01
-import me.rerere.hugeicons.stroke.Delete01
+import me.rerere.hugeicons.stroke.DragDropHorizontal
 import me.rerere.hugeicons.stroke.Image02
 import me.rerere.hugeicons.stroke.FileImport
 import me.rerere.hugeicons.stroke.Add01
@@ -59,8 +59,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -74,13 +77,9 @@ import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.RECOMMENDED_PROVIDERS
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
-import me.rerere.rikkahub.ui.components.ui.ItemAction
-import me.rerere.rikkahub.ui.components.ui.ItemActionMenu
-import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
 import me.rerere.rikkahub.ui.components.ui.Tag
 import me.rerere.rikkahub.ui.components.ui.TagType
 import me.rerere.rikkahub.ui.components.ui.decodeProviderSetting
-import me.rerere.rikkahub.ui.components.ui.longPressReorder
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.hooks.useEditState
@@ -99,7 +98,6 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
     val navController = LocalNavController.current
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     var searchQuery by remember { mutableStateOf("") }
-    var deleteTarget by remember { mutableStateOf<ProviderSetting?>(null) }
     val lazyListState = rememberLazyListState()
     var providerToDelete by remember { mutableStateOf<ProviderSetting?>(null) }
     val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
@@ -203,14 +201,34 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
                     ) { isDragging ->
                         ProviderItem(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .then(longPressReorder(isDragging, enabled = searchQuery.isBlank())),
+                                .scale(if (isDragging) 0.95f else 1f)
+                                .fillMaxWidth(),
                             provider = provider,
+                            dragHandle = {
+                                val haptic = LocalHapticFeedback.current
+                                IconButton(
+                                    onClick = {},
+                                    modifier = Modifier
+                                        .longPressDraggableHandle(
+                                            onDragStarted = {
+                                                haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
+                                            },
+                                            onDragStopped = {
+                                                haptic.performHapticFeedback(HapticFeedbackType.GestureEnd)
+                                            }
+                                        )
+                                ) {
+                                    Icon(
+                                        imageVector = HugeIcons.DragDropHorizontal,
+                                        contentDescription = null
+                                    )
+                                }
+                            },
                             onClick = {
                                 navController.navigate(Screen.SettingProviderDetail(providerId = provider.id.toString()))
                             },
-                            onDelete = {
-                                deleteTarget = provider
+                            onLongClick = {
+                                providerToDelete = provider
                             }
                         )
                     }
@@ -256,22 +274,6 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
                 },
             )
         }
-    }
-
-    RikkaConfirmDialog(
-        show = deleteTarget != null,
-        title = stringResource(R.string.confirm_delete),
-        confirmText = stringResource(R.string.delete),
-        dismissText = stringResource(R.string.cancel),
-        onConfirm = {
-            deleteTarget?.let { target ->
-                vm.updateSettings(settings.copy(providers = settings.providers.filter { it.id != target.id }))
-            }
-            deleteTarget = null
-        },
-        onDismiss = { deleteTarget = null },
-    ) {
-        Text(stringResource(R.string.setting_provider_page_delete_dialog_text))
     }
 }
 
@@ -580,7 +582,7 @@ private fun handleImageQRCode(
 @Composable
 private fun AddButton(onAdd: (ProviderSetting) -> Unit) {
     val dialogState = useEditState<ProviderSetting> {
-        onAdd(it.copyProvider(name = it.name.trim()))
+        onAdd(it)
     }
 
     IconButton(
@@ -636,8 +638,9 @@ private fun AddButton(onAdd: (ProviderSetting) -> Unit) {
 private fun ProviderItem(
     provider: ProviderSetting,
     modifier: Modifier = Modifier,
+    dragHandle: @Composable () -> Unit,
     onClick: () -> Unit,
-    onDelete: () -> Unit,
+    onLongClick: () -> Unit = {},
 ) {
     Card(
         modifier = modifier.combinedClickable(
@@ -701,17 +704,7 @@ private fun ProviderItem(
                     }
                 }
             }
-            ItemActionMenu(
-                actions = listOf(
-                    ItemAction(
-                        text = stringResource(R.string.delete),
-                        icon = HugeIcons.Delete01,
-                        destructive = true,
-                        enabled = !provider.builtIn,
-                        onClick = onDelete,
-                    ),
-                )
-            )
+            dragHandle()
         }
     }
 }

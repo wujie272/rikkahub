@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -38,7 +37,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastForEach
@@ -114,46 +112,6 @@ private fun AssistantMemoryContent(
         }
     }
     var pendingDeleteMemory by remember { mutableStateOf<AssistantMemory?>(null) }
-
-    var showTimeReminderIntervalDialog by remember(assistant.id) { mutableStateOf(false) }
-    var timeReminderIntervalInput by remember(assistant.id) { mutableStateOf("") }
-
-    if (showTimeReminderIntervalDialog) {
-        val interval = timeReminderIntervalInput.toIntOrNull()?.takeIf { it > 0 }
-        AlertDialog(
-            onDismissRequest = { showTimeReminderIntervalDialog = false },
-            title = { Text(stringResource(R.string.assistant_page_time_reminder_interval)) },
-            text = {
-                TextField(
-                    value = timeReminderIntervalInput,
-                    onValueChange = { timeReminderIntervalInput = it },
-                    label = { Text(stringResource(R.string.assistant_page_time_reminder_interval_label)) },
-                    supportingText = { Text(stringResource(R.string.assistant_page_time_reminder_interval_hint)) },
-                    isError = interval == null,
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    enabled = interval != null,
-                    onClick = {
-                        interval?.let {
-                            onUpdateAssistant(assistant.copy(timeReminderIntervalMinutes = it))
-                        }
-                        showTimeReminderIntervalDialog = false
-                    },
-                ) {
-                    Text(stringResource(R.string.assistant_page_save))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showTimeReminderIntervalDialog = false }) {
-                    Text(stringResource(R.string.assistant_page_cancel))
-                }
-            },
-        )
-    }
 
     // 记忆对话框
     memoryDialogState.EditStateContent { memory, update ->
@@ -269,9 +227,6 @@ private fun AssistantMemoryContent(
                     )
                 }
             )
-        }
-
-        CardGroup {
             item(
                 headlineContent = { Text(stringResource(R.string.assistant_page_time_reminder)) },
                 supportingContent = {
@@ -292,17 +247,6 @@ private fun AssistantMemoryContent(
                     )
                 }
             )
-            if (assistant.enableTimeReminder) {
-                item(
-                    headlineContent = { Text(stringResource(R.string.assistant_page_time_reminder_interval)) },
-                    supportingContent = { Text(stringResource(R.string.assistant_page_time_reminder_interval_desc)) },
-                    trailingContent = { Text(stringResource(R.string.assistant_page_time_reminder_interval_value, assistant.timeReminderIntervalMinutes)) },
-                    onClick = {
-                        timeReminderIntervalInput = assistant.timeReminderIntervalMinutes.toString()
-                        showTimeReminderIntervalDialog = true
-                    },
-                )
-            }
         }
 
         Box(
@@ -389,7 +333,12 @@ private fun MemoryItem(
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Text(
+                    text = "#${memory.id}",
+                    style = MaterialTheme.typography.titleMediumEmphasized,
+                )
+                Text(
                     text = memory.content,
+
                     maxLines = 5,
                     overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.bodySmall,

@@ -13,9 +13,6 @@ import me.rerere.rikkahub.data.files.SkillMetadata
 // 与 Agent Skills 规范的 description 上限一致
 private const val MAX_SKILL_DESCRIPTION_LENGTH = 1024
 
-// 与 Agent Skills 规范的 description 上限一致
-private const val MAX_SKILL_DESCRIPTION_LENGTH = 1024
-
 fun createSkillTools(
     enabledSkills: Set<String>,
     allSkills: List<SkillMetadata>,
@@ -40,15 +37,46 @@ fun createSkillTools(
             """.trimIndent(),
             systemPrompt = { _, _ ->
                 buildString {
-                    appendLine("**Skills**")
-                    appendLine("You have access to the following skills. Use the `use_skill` tool to load a skill's instructions when the user's request matches.")
-                    appendLine("<available_skills>")
-                    available.forEach { skill ->
-                        appendLine("  <skill>")
-                        // 技能可能来自第三方导入，转义并限长，防止 name/description 闭合标签注入任意系统提示
-                        appendLine("    <name>${skill.name.escapeXml()}</name>")
-                        appendLine("    <description>${skill.description.take(MAX_SKILL_DESCRIPTION_LENGTH).escapeXml()}</description>")
-                        appendLine("  </skill>")
+                    // Auto-load skills with `auto_load: true` in their SKILL.md frontmatter:
+                    // their body (auto_load_path file if set, else SKILL.md) is inlined into
+                    // the system prompt every turn, no `use_skill` call needed. Use for the
+                    // "core persona" skills (agent-core/SOUL.md). Models that previously
+                    // never bothered to discover the SOUL via use_skill now see it on turn 1.
+                    val autoLoaded = available.filter { it.autoLoad }
+                    autoLoaded.forEach { skill ->
+                        val path = skill.autoLoadPath
+                        // Both branches go through SkillManager's mtime-aware cache so
+                        // the per-turn auto-load reads are O(stat) on cache hit rather
+                        // than O(file I/O) — N auto-load skills × every turn used to
+                        // re-read SOUL/HEARTBEAT/etc from disk every time.
+                        val body = runCatching {
+                            if (path.isNullOrBlank()) {
+                                skillManager.readSkillBody(skill.name)
+                            } else {
+                                skillManager.readSkillFileCached(skill.name, path)
+                            }
+                        }.getOrNull()
+                        if (!body.isNullOrBlank()) {
+                            appendLine(body.trim())
+                            appendLine()
+                        }
+                    }
+
+                    // Lazy skills — listed for discovery; loaded on demand via `use_skill`.
+                    val lazy = available.filterNot { it.autoLoad }
+                    if (lazy.isNotEmpty()) {
+                        appendLine("**Skills**")
+                        appendLine("You have access to the following skills. Use the `use_skill` tool to load a skill's instructions when the user's request matches.")
+                        appendLine("<available_skills>")
+                        lazy.forEach { skill ->
+                            appendLine("  <skill>")
+                            // 技能可能来自第三方导入，转义并限长，防止 name/description 闭合标签注入任意系统提示
+                            appendLine("    <name>${skill.name.escapeXml()}</name>")
+                            appendLine("    <description>${skill.description.take(MAX_SKILL_DESCRIPTION_LENGTH).escapeXml()}</description>")
+                            appendLine("  </skill>")
+                        }
+                        append("</available_skills>")
+                        appendLine()
                     }
                 }
             },
@@ -107,19 +135,20 @@ fun createSkillTools(
                     )
                 )
                 val name = it.jsonObject["name"]?.jsonPrimitive?.content
-                    ?: error("name is required")
-                // 模型可能照抄系统提示中转义后的名称，两种形式都接受
-                val skill = available.firstOrNull { skill -> skill.name == name || skill.name.escapeXml() == name }
-                    ?: error("Skill '$name' is not available. Available skills: ${available.joinToString { it.name }}")
-                val path = it.jsonObject["path"]?.jsonPrimitive?.content
-                val content = if (path.isNullOrBlank()) {
-                    require(skill.skillFile.exists()) { "Skill '$name' not found" }
-                    SkillFrontmatterParser.extractBody(skill.skillFile.readText())
-                } else {
-                    val target = SkillPaths.resolveSkillFile(skill.skillDir, path)
-                        ?: error("Path '$path' is outside the skill directory")
-                    require(target.exists()) { "File '$path' not found in skill '$name'" }
-                    target.readText()
+                    // 模型可能照抄系统提示中转义后的名称，两种形式都接受
+                    ?.let { raw ->
+                        available.firstOrNull { skill -> skill.name == raw || skill.name.escapeXml() == raw }?.name
+                            ?: raw
+                    }
+                    ?: return@Tool err(
+                        "missing_required_arg",
+                        "use_skill requires a 'name' argument identifying which skill to load.",
+                    )
+                if (name !in enabledSkills) {
+                    return@Tool err(
+                        "skill_not_enabled",
+                        "Skill '$name' is not in the enabled-skills set for this assistant.",
+                    )
                 }
                 val path = it.jsonObject["path"]?.jsonPrimitive?.content
                 if (path.isNullOrBlank()) {

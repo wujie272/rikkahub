@@ -24,6 +24,9 @@ class SkillManager(
         const val MAX_SKILL_FILE_BYTES: Long = 512L * 1024L
     }
 
+    /** Thrown by [readCached] when a skill file exceeds [MAX_SKILL_FILE_BYTES]. */
+    class SkillFileTooLargeException(val lengthBytes: Long) :
+        java.io.IOException("Skill file is $lengthBytes bytes, over the ${MAX_SKILL_FILE_BYTES}-byte cap")
     private val builtinLock = Any()
 
     @Volatile
@@ -256,6 +259,14 @@ class SkillManager(
         } finally {
             if (tempFile.exists()) tempFile.delete()
         }
+    }
+
+    // 本地定制（Phase 19C 本地文件导入）仍需要字符串版本；上游已删除该便捷包装，这里保留。
+    fun saveSkillFilesAtomically(skillName: String, files: Map<String, String>): Boolean {
+        return saveSkillFileBytesAtomically(
+            skillName = skillName,
+            files = files.mapValues { it.value.toByteArray() },
+        )
     }
 
     fun saveSkillFileBytesAtomically(skillName: String, files: Map<String, ByteArray>): Boolean {
@@ -516,20 +527,6 @@ data class SkillMetadata(
     val builtin: Boolean = false,
 ) {
     val skillFile: File get() = skillDir.resolve("SKILL.md")
-
-
-    /** Thrown by [readCached] when a skill file exceeds [MAX_SKILL_FILE_BYTES]. */
-    class SkillFileTooLargeException(val lengthBytes: Long) :
-
-    class SkillFileTooLargeException(val lengthBytes: Long) :
-
-    fun saveSkillFilesAtomically(skillName: String, files: Map<String, String>): Boolean {
-        return saveSkillFileBytesAtomically(
-            skillName = skillName,
-            files = files.mapValues { it.value.toByteArray() },
-        )
-    }
-
 }
 
 /**

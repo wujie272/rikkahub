@@ -24,7 +24,6 @@ internal fun createWorkspaceTerminalSession(
     context: Context,
     root: String,
     client: TerminalSessionClient,
-    shellCompatibilityMode: Boolean,
 ): TerminalSession {
     val appContext = context.applicationContext
     val workspaceDir = File(File(appContext.filesDir, "workspaces"), root)
@@ -71,21 +70,17 @@ internal fun createWorkspaceTerminalSession(
         "/bin/bash",
     )
 
-    val env = mutableListOf(
+    val env = arrayOf(
         "PROOT_LOADER=${loader.absolutePath}",
         "PROOT_TMP_DIR=${tempDir.absolutePath}",
         "TMPDIR=${tempDir.absolutePath}",
     )
 
-    if (shellCompatibilityMode) {
-        env += "PROOT_NO_SECCOMP=1"
-    }
-
     return TerminalSession(
         proot.absolutePath,
         filesDir.absolutePath,
         args.toTypedArray(),
-        env.toTypedArray(),
+        env,
         2_000,
         client,
     ).apply {
@@ -113,7 +108,6 @@ internal fun workspaceRootfsReady(context: Context, root: String): Boolean {
 
 internal class WorkspaceTerminalSessionClient(
     private val context: Context,
-    private val onTitleUpdated: (String?) -> Unit,
     private val onFinished: () -> Unit,
 ) : TerminalSessionClient {
     var terminalView: TerminalView? = null
@@ -122,9 +116,7 @@ internal class WorkspaceTerminalSessionClient(
         terminalView?.onScreenUpdated()
     }
 
-    override fun onTitleChanged(changedSession: TerminalSession) {
-        onTitleUpdated(changedSession.title)
-    }
+    override fun onTitleChanged(changedSession: TerminalSession) = Unit
 
     override fun onSessionFinished(finishedSession: TerminalSession) {
         terminalView?.onScreenUpdated()
