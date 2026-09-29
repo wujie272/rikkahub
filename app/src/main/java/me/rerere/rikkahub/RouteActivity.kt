@@ -160,6 +160,8 @@ import org.koin.compose.koinInject
 import kotlin.uuid.Uuid
 
 private const val TAG = "RouteActivity"
+private const val ACTION_TRANSLATE = "me.rerere.rikkahub.action.TRANSLATE"
+private const val ACTION_IMAGE_GEN = "me.rerere.rikkahub.action.IMAGE_GEN"
 
 
 internal const val EXTRA_DIRECT_CHAT_TARGET_TYPE = "direct_chat_target_type"
@@ -246,6 +248,14 @@ class RouteActivity : ComponentActivity() {
 
         LaunchedEffect(backStack) {
             when (shareIntent.action) {
+                ACTION_TRANSLATE -> {
+                    backStack.add(Screen.Translator)
+                }
+
+                ACTION_IMAGE_GEN -> {
+                    backStack.add(Screen.ImageGen)
+                }
+
                 Intent.ACTION_SEND -> {
                     val text = shareIntent.getStringExtra(Intent.EXTRA_TEXT) ?: ""
                     val imageUri = shareIntent.getStringExtra(Intent.EXTRA_STREAM)
@@ -262,6 +272,12 @@ class RouteActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        // 快捷方式（翻译 / 图片生成）热启动时入栈；冷启动由 ShareHandler 处理
+        when (intent.action) {
+            ACTION_TRANSLATE -> navStack?.add(Screen.Translator)
+            ACTION_IMAGE_GEN -> navStack?.add(Screen.ImageGen)
+        }
+
         // Navigate to the chat screen if a conversation ID is provided
         intent.getStringExtra("conversationId")?.let { text ->
             navStack?.add(Screen.Chat(text))
