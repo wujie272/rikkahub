@@ -596,6 +596,7 @@ private fun ChatPageContent(
                 conversation = conversation,
                 assistant = assistant,
                 vm = vm,
+                onStartVoiceMode = startVoiceMode,
                 onDismiss = { showFilesSheet = false },
             )
         }
@@ -609,6 +610,7 @@ private fun ChatFilesPickerSheet(
     conversation: Conversation,
     assistant: Assistant,
     vm: ChatVM,
+    onStartVoiceMode: () -> Unit = {},
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
