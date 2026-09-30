@@ -21,6 +21,8 @@ class ConversationSession(
     initial: Conversation,
     private val scope: CoroutineScope,
     private val onIdle: (Uuid) -> Unit,
+    /** 上游 66de8b306：生成结束时回调（用于恢复/推进消息队列）。 */
+    private val onGenerationFinished: (Uuid, Throwable?) -> Unit = { _, _ -> },
 ) {
     // 会话状态
     val state = MutableStateFlow(initial)
@@ -90,8 +92,9 @@ class ConversationSession(
         // Identity-checked completion handler: only null the StateFlow if the value is
         // STILL the same job we just set. Without this an out-of-order setJob(B) →
         // A.invokeOnCompletion → clobber-B race could null out the live job.
-        job?.invokeOnCompletion {
+        job?.invokeOnCompletion { cause ->
             _generationJob.compareAndSet(job, null)
+            onGenerationFinished(id, cause)
             if (refCount.get() <= 0) {
                 scheduleIdleCheck()
             }

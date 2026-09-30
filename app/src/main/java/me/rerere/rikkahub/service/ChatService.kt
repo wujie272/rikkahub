@@ -450,7 +450,7 @@ class ChatService(
         conversationId: Uuid,
         keepAliveInBackground: Boolean = true,
         block: suspend () -> Unit,
-    ): Job = appScope.launch(start = CoroutineStart.LAZY) { block() }
+    ): Job = appScope.launch { block() }
 
     // ---- 初始化对话 ----
 
@@ -1186,7 +1186,7 @@ class ChatService(
         }.onFailure { error ->
             // 兜底取消 Live Update 通知（生成开始前失败时 onCompletion 不会执行）
             appEventBus.tryEmit(AppEvent.ChatGenerationEnded(conversationId, senderName, null))
-            if (it is CancellationException) throw it
+            if (error is CancellationException) throw error
             sessions[conversationId]?.messageQueue?.pause()
 
             // Persist the in-memory snapshot so the Auto/Pending → Denied transitions
