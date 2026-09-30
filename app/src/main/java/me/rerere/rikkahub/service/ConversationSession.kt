@@ -24,6 +24,13 @@ class ConversationSession(
 ) {
     // 会话状态
     val state = MutableStateFlow(initial)
+    // 移植上游 66de8b306：消息发送队列（排队发送 / 暂停继续 / 编辑）
+    val messageQueue = MessageQueue()
+    // 从队列取出到写入会话历史之间，附件仍需作为有效引用保留。
+    @Volatile
+    var submittingMessage: QueuedMessage? = null
+        internal set
+
 
     // 原子引用计数
     private val refCount = AtomicInteger(0)
@@ -35,7 +42,9 @@ class ConversationSession(
     private val _generationJob = MutableStateFlow<Job?>(null)
     val generationJob: StateFlow<Job?> = _generationJob.asStateFlow()
     val isGenerating: Boolean get() = _generationJob.value?.isActive == true
-    val isInUse: Boolean get() = refCount.get() > 0 || isGenerating
+    val isInUse: Boolean
+        get() = refCount.get() > 0 || isGenerating ||
+            messageQueue.state.value.messages.isNotEmpty()
 
     // 空闲检查任务
     private var idleCheckJob: Job? = null
