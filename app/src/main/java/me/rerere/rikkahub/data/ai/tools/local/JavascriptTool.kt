@@ -1,9 +1,9 @@
 package me.rerere.rikkahub.data.ai.tools.local
 
-import com.whl.quickjs.wrapper.QuickJSContext
-import com.whl.quickjs.wrapper.QuickJSObject
-import kotlinx.coroutines.CompletableDeferred
+import com.dokar.quickjs.quickJs
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -16,6 +16,18 @@ import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
 
 private const val EVAL_JS_TIMEOUT_MS = 5_000L
+
+/** 把 console.* 收敛到一个绑定的 Kotlin 函数，便于把日志带回给模型。 */
+private const val CONSOLE_POLYFILL = """
+globalThis.console = {
+    log: (...a) => __log('LOG', ...a),
+    info: (...a) => __log('INFO', ...a),
+    warn: (...a) => __log('WARN', ...a),
+    error: (...a) => __log('ERROR', ...a),
+    debug: (...a) => __log('DEBUG', ...a),
+};
+void 0;
+"""
 
 internal fun buildJavascriptTool(): Tool = Tool(
     name = "eval_javascript",
@@ -39,78 +51,44 @@ internal fun buildJavascriptTool(): Tool = Tool(
         )
     },
     execute = {
-        val code = it.jsonObject["code"]?.jsonPrimitive?.contentOrNull
+        val code = it.jsonObject["code"]?.jsonPrimitive?.contentOrNull.orEmpty()
+        val logs = mutableListOf<String>()
 
-        val done = CompletableDeferred<String>()
-        Thread {
-            val logs = arrayListOf<String>()
-            var context: QuickJSContext? = null
-            try {
-                context = QuickJSContext.create()
-                context.setMemoryLimit(64 * 1024 * 1024)
-                context.setMaxStackSize(512 * 1024)
-                context.setConsole(object : QuickJSContext.Console {
-                    override fun log(info: String?) {
-                        logs.add("[LOG] $info")
+        val payload = withTimeoutOrNull(EVAL_JS_TIMEOUT_MS) {
+            runCatching {
+                // 迁移自旧 wang.harlon.quickjs wrapper（上游已统一到 quickjs-kt）。
+                val resultJson: String? = quickJs(Dispatchers.Default) {
+                    function("__log") { args ->
+                        val level = args.getOrNull(0) as? String ?: "LOG"
+                        val message = args.drop(1).joinToString(" ") { arg -> arg?.toString() ?: "null" }
+                        logs += "[$level] $message"
+                        null
                     }
-
-                    override fun info(info: String?) {
-                        logs.add("[INFO] $info")
-                    }
-
-                    override fun warn(info: String?) {
-                        logs.add("[WARN] $info")
-                    }
-
-                    override fun error(info: String?) {
-                        logs.add("[ERROR] $info")
-                    }
-                })
-                val result = context.evaluate(code)
-                val payload = buildJsonObject {
-                    if (logs.isNotEmpty()) {
-                        put("logs", JsonPrimitive(logs.joinToString("\n")))
-                    }
-                    put(
-                        key = "result",
-                        element = when (result) {
-                            null -> JsonNull
-                            is QuickJSObject -> JsonPrimitive(result.stringify())
-                            else -> JsonPrimitive(result.toString())
-                        }
-                    )
+                    evaluate<Unit>(CONSOLE_POLYFILL)
+                    // 用 (0, eval) 间接调用取得最后表达式的值；undefined -> JSON.stringify 返回 null
+                    evaluate("JSON.stringify((0, eval)(${Json.encodeToString(JsonPrimitive(code))}))")
                 }
-                done.complete(payload.toString())
-            } catch (e: Throwable) {
-                val payload = buildJsonObject {
-                    if (logs.isNotEmpty()) {
-                        put("logs", JsonPrimitive(logs.joinToString("\n")))
-                    }
+                buildJsonObject {
+                    if (logs.isNotEmpty()) put("logs", JsonPrimitive(logs.joinToString("\n")))
+                    put("result", resultJson?.let { JsonPrimitive(it) } ?: JsonNull)
+                }.toString()
+            }.getOrElse { e ->
+                buildJsonObject {
+                    if (logs.isNotEmpty()) put("logs", JsonPrimitive(logs.joinToString("\n")))
                     put("error", JsonPrimitive(e.message ?: e.toString()))
-                }
-                done.complete(payload.toString())
-            } finally {
-                try {
-                    context?.destroy()
-                } catch (_: Throwable) {
-                }
+                }.toString()
             }
-        }.apply {
-            name = "eval-js-${System.nanoTime()}"
-            isDaemon = true
-            start()
-        }
-
-        val payload = withTimeoutOrNull(EVAL_JS_TIMEOUT_MS) { done.await() }
-            ?: buildJsonObject {
-                put(
-                    "error",
-                    JsonPrimitive(
-                        "JavaScript execution exceeded ${EVAL_JS_TIMEOUT_MS}ms and was abandoned. " +
-                            "Avoid infinite loops or long-running computations."
-                    )
+        } ?: buildJsonObject {
+            if (logs.isNotEmpty()) put("logs", JsonPrimitive(logs.joinToString("\n")))
+            put(
+                "error",
+                JsonPrimitive(
+                    "JavaScript execution exceeded ${EVAL_JS_TIMEOUT_MS}ms and was abandoned. " +
+                        "Avoid infinite loops or long-running computations."
                 )
-            }.toString()
+            )
+        }.toString()
+
         listOf(UIMessagePart.Text(payload))
     }
 )

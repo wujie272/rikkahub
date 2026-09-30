@@ -30,8 +30,6 @@ retrofit = "3.0.0"
 coil = "3.6.3"
 # ↑ 钉回本地版本：app 模块本轮保留本地实现，依赖需与之一致
 quickjs = "1.0.15"
-# 本地 JS 引擎（data/ai/tools/LocalTools.kt）仍使用旧 wrapper；迁移到 quickjs-kt 留作后续
-legacy-quickjs = "3.2.3"
 room = "2.8.5"
 koin-bom = "4.2.2"
 datastore = "1.2.1"
@@ -140,7 +138,6 @@ coil-okhttp = { group = "io.coil-kt.coil3", name = "coil-network-okhttp", versio
 coil-svg = { group = "io.coil-kt.coil3", name = "coil-svg", version.ref = "coil" }
 coil-cache-control = { group = "io.coil-kt.coil3", name = "coil-network-cache-control", version.ref = "coil" }
 quickjs = { module = "io.github.dokar3:quickjs-kt", version.ref = "quickjs" }
-legacy-quickjs = { group = "wang.harlon.quickjs", name = "wrapper-android", version.ref = "legacy-quickjs" }
 koin-bom = { group = "io.insert-koin", name = "koin-bom", version.ref = "koin-bom" }
 koin-android = { group = "io.insert-koin", name = "koin-android" }
 koin-compose = { group = "io.insert-koin", name = "koin-androidx-compose" }
