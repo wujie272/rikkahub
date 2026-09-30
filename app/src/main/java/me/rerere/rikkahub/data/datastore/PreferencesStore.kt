@@ -16,6 +16,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStoreFile
 import io.pebbletemplates.pebble.PebbleEngine
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -183,6 +184,20 @@ class SettingsStore(
     scope: AppScope,
 ) : KoinComponent {
     companion object {
+
+        /**
+         * 备份恢复发生在新进程启动早期：Koin / Room / 设置流都还没初始化，
+         * 因此不依赖单例，临时建一个 Store 走本地既有的写入路径把设置落盘。
+         * 移植自上游 540b9dfaf（上游为逐字段 persistSettings，本地字段集不同，故复用 update 路径）。
+         */
+        internal suspend fun restoreBeforeInitialization(context: Context, settings: Settings) {
+            val scope = AppScope()
+            try {
+                SettingsStore(context = context, scope = scope).update(settings)
+            } finally {
+                scope.cancel()
+            }
+        }
         // 版本号
         val VERSION = intPreferencesKey("data_version")
 
