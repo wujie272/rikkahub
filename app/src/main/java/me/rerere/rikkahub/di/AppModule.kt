@@ -14,6 +14,7 @@ import me.rerere.rikkahub.data.repository.ScheduledJobRepository
 import me.rerere.rikkahub.data.repository.SshHostRepository
 import me.rerere.rikkahub.data.notifications.NotificationListenerPreferences
 import me.rerere.rikkahub.service.ChatNotificationManager
+import me.rerere.rikkahub.data.ai.tools.ChatToolFactory
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.service.CronJobScheduler
 import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspaceTerminalSessionManager
@@ -251,6 +252,7 @@ val appModule = module {
             workspaceRepository = get(),
             folderRepository = get(),
             knowledgeService = get(),
+            chatToolFactory = get(),
         )
     }
 
