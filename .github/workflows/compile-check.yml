@@ -58,17 +58,9 @@ jobs:
         run: |
           echo '{"project_info":{"project_number":"000000000000","project_id":"rikkahub-ci-dummy","storage_bucket":"rikkahub-ci-dummy.appspot.com"},"client":[{"client_info":{"mobilesdk_app_id":"1:000000000000:android:0000000000000000","android_client_info":{"package_name":"me.jaye.rikkahub"}},"oauth_client":[],"api_key":[{"current_key":"AIzaSyDummy0000000000000000000000000000"}],"services":{"analytics_service":{"status":1},"appinvite_service":{"status":1},"google_cast_service":{"status":1}}}],"configuration_version":"1"}' > app/google-services.json
 
-      - name: Compile all modules (continue on error)
+      - name: Compile check
         run: |
           chmod +x gradlew
-          ./gradlew :ai:compileReleaseKotlin :search:compileReleaseKotlin :speech:compileReleaseKotlin :common:compileReleaseKotlin :highlight:compileReleaseKotlin :workspace:compileReleaseKotlin --continue --build-cache || true
-          ./gradlew :app:compileReleaseKotlin --continue --build-cache || true
-
-      - name: Error summary
-        run: |
-          grep -rhoE "e: file:///home/runner/work/rikkahub/rikkahub/[^ ]+ .*" . 2>/dev/null | sed 's|file:///home/runner/work/rikkahub/rikkahub/||' | sort -u > ~/errs.txt || true
-          echo "=== ALL ERRORS ($(wc -l < ~/errs.txt)) ==="
-          head -200 ~/errs.txt
-          if [ -s ~/errs.txt ]; then exit 1; fi
+          ./gradlew :app:compileReleaseKotlin :ai:compileReleaseKotlin --build-cache
 
 
