@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.data.ai.tools.local
 
+import com.dokar.quickjs.binding.function
 import com.dokar.quickjs.quickJs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withTimeoutOrNull
