@@ -54,6 +54,7 @@ import me.rerere.rikkahub.data.network.SettingsProxyAuthenticator
 import me.rerere.rikkahub.data.network.SettingsSocks5Authenticator
 import me.rerere.rikkahub.data.sync.webdav.WebDavSync
 import me.rerere.search.SearchService
+import me.rerere.rikkahub.data.sync.BackupManager
 import me.rerere.rikkahub.data.sync.S3Sync
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -283,12 +284,14 @@ val dataSourceModule = module {
     }
 
     single {
+        BackupManager(context = get(), database = get(), settingsStore = get(), json = get())
+    }
+
+    single {
         WebDavSync(
-            settingsStore = get(),
-            json = get(),
+            backupManager = get(),
             context = get(),
-            httpClient = get(),
-            appDatabase = get()
+            httpClient = get()
         )
     }
 
@@ -309,11 +312,9 @@ val dataSourceModule = module {
 
     single {
         S3Sync(
-            settingsStore = get(),
-            json = get(),
+            backupManager = get(),
             context = get(),
-            httpClient = get(),
-            appDatabase = get()
+            httpClient = get()
         )
     }
 

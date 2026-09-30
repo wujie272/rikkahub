@@ -37,6 +37,7 @@ import me.rerere.rikkahub.service.WebServerService
 import me.rerere.rikkahub.service.ShizukuManager
 import android.widget.Toast
 import kotlinx.coroutines.runBlocking
+import me.rerere.rikkahub.data.db.ImportedDatabaseReconciler
 import me.rerere.rikkahub.data.sync.BackupManager
 import me.rerere.rikkahub.data.sync.RestoreFailedException
 import me.rerere.rikkahub.utils.JsonInstant
@@ -75,6 +76,9 @@ class RikkaHubApp : Application() {
                 BackupManager.applyPendingRestore(this@RikkaHubApp, JsonInstant)
             }
             if (restored) {
+                // 本地增强：恢复后对导入数据库做一次一致性矫正（原实现在 S3Sync/WebDavSync 内）
+                runCatching { ImportedDatabaseReconciler.reconcile(this@RikkaHubApp) }
+                    .onFailure { Log.w(TAG, "ImportedDatabaseReconciler after restore failed", it) }
                 Toast.makeText(this, R.string.backup_page_restore_success, Toast.LENGTH_LONG).show()
             }
         } catch (e: RestoreFailedException) {
