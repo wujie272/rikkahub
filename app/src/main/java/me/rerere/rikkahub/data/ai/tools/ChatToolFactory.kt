@@ -1,5 +1,8 @@
 package me.rerere.rikkahub.data.ai.tools
 
+import android.util.Log
+import kotlinx.serialization.json.jsonObject
+import me.rerere.workspace.WorkspaceShellStatus
 import me.rerere.ai.core.Tool
 import me.rerere.ai.provider.Modality
 import me.rerere.ai.core.MessageRole
@@ -13,6 +16,8 @@ import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import kotlin.uuid.Uuid
+
+private const val TAG = "ChatToolFactory"
 
 /**
  * MCP 服务器名不合法（含非 ASCII 字母/数字字符）时抛出。
@@ -35,12 +40,12 @@ class ChatToolFactory(
     private val conversationRepo: ConversationRepository,
     private val skillManager: SkillManager,
 ) {
-    private suspend fun createChatTools(
+    suspend fun createTools(
         settings: Settings,
         assistant: Assistant,
         model: Model,
         conversationId: Uuid,
-        conversation: Conversation,
+        workspaceCwd: String?,
         useExternalWebSearch: Boolean,
     ): List<Tool> = buildList {
                     if (useExternalWebSearch) {
@@ -64,7 +69,7 @@ class ChatToolFactory(
                     if (assistant.enableRecentChatsReference) {
                         addAll(createConversationTools(conversationRepo, assistant.id))
                     }
-                    addAll(createWorkspaceToolsIfReady(assistant.workspaceId?.toString(), conversation.workspaceCwd))
+                    addAll(createWorkspaceToolsIfReady(assistant.workspaceId?.toString(), workspaceCwd))
                     if (assistant.enabledKnowledgeBaseIds.isNotEmpty()) {
                         addAll(createKnowledgeBaseTools(knowledgeService))
                     }
@@ -128,7 +133,7 @@ class ChatToolFactory(
                     }
     }
 
-    private suspend fun createWorkspaceToolsIfReady(workspaceId: String?, cwd: String? = null): List<Tool> {
+    suspend fun createWorkspaceToolsIfReady(workspaceId: String?, cwd: String? = null): List<Tool> {
         if (workspaceId.isNullOrBlank()) return emptyList()
         val workspace = workspaceRepository.getById(workspaceId) ?: return emptyList()
         if (workspace.shellStatus != WorkspaceShellStatus.READY.name) {
