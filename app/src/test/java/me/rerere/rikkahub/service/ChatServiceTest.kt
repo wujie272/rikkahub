@@ -55,12 +55,15 @@ class ChatServiceTest {
             customBodies = bodies,
         )
 
-        val params = backgroundTextGenerationParams(model)
+        val conversationId = Uuid.random()
+        val params = backgroundTextGenerationParams(model, conversationId)
 
         assertEquals(model, params.model)
         assertEquals(ReasoningLevel.AUTO, params.reasoningLevel)
         assertEquals(headers, params.customHeaders)
         assertEquals(bodies, params.customBody)
+        // 非聊天请求也应带 session id，且与所属会话关联（上游 bd936caa1）
+        assertEquals(conversationId.toString(), params.sessionId)
     }
 
     @Test

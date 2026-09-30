@@ -115,12 +115,16 @@ private const val TAG = "ChatService"
 
 internal fun backgroundTextGenerationParams(
     model: Model,
+    // 移植上游 bd936caa1：非聊天请求（标题/建议/压缩）也要带 session id 头，
+    // 且与所属会话关联，便于 provider 侧会话亲和与日志排查。
+    conversationId: Uuid = Uuid.random(),
     reasoningLevel: ReasoningLevel = ReasoningLevel.AUTO,
 ): TextGenerationParams = TextGenerationParams(
     model = model,
     reasoningLevel = reasoningLevel,
     customHeaders = model.customHeaders,
     customBody = model.customBodies,
+    sessionId = conversationId.toString(),
 )
 
 internal fun shouldUseExternalWebSearch(assistant: Assistant, model: Model): Boolean {
@@ -1414,7 +1418,7 @@ class ChatService(
                                 .takeLast(4).joinToString("\n\n") { it.summaryAsText(maxLength = 500) })
                     ),
                 ),
-                params = backgroundTextGenerationParams(model),
+                params = backgroundTextGenerationParams(model, conversationId),
             )
 
             // 生成完，conversation可能不是最新了，因此需要重新获取
@@ -1467,7 +1471,7 @@ class ChatService(
                                 .takeLast(8).joinToString("\n\n") { it.summaryAsText(maxLength = 500) }),
                     )
                 ),
-                params = backgroundTextGenerationParams(model),
+                params = backgroundTextGenerationParams(model, conversationId),
             )
             val suggestions =
                 result.message.toText().split("\n").map { it.trim() }
@@ -1556,7 +1560,7 @@ class ChatService(
             val result = providerHandler.generateText(
                 providerSetting = provider,
                 messages = listOf(UIMessage.user(prompt)),
-                params = backgroundTextGenerationParams(model),
+                params = backgroundTextGenerationParams(model, conversationId),
             )
 
             return result.message.toText().trim().takeIf { it.isNotBlank() }
