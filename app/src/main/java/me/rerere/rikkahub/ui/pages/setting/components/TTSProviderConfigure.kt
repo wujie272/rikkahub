@@ -17,6 +17,8 @@ import androidx.compose.ui.text.input.VisualTransformation
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.View
 import me.rerere.hugeicons.stroke.ViewOff
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -1506,6 +1508,7 @@ private fun StepTTSConfiguration(
     }
 }
 
+@Composable
 private fun VolcengineTTSConfiguration(
     setting: TTSProviderSetting.Volcengine,
     onValueChange: (TTSProviderSetting) -> Unit
