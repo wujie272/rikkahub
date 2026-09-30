@@ -17,7 +17,7 @@ import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.data.ai.requestlog.AIRequestLogManager
 import me.rerere.rikkahub.data.ai.transformers.AssistantTemplateLoader
-import me.rerere.rikkahub.data.ai.GenerationHandler
+import me.rerere.rikkahub.data.ai.GenerationLoop
 import me.rerere.rikkahub.data.ai.transformers.TemplateTransformer
 import me.rerere.rikkahub.data.api.RikkaHubAPI
 import me.rerere.rikkahub.data.api.SponsorAPI
@@ -147,7 +147,7 @@ val dataSourceModule = module {
     single { McpManager(context = get(), settingsStore = get(), appScope = get(), filesManager = get(), appEventBus = get()) }
 
     single {
-        GenerationHandler(
+        GenerationLoop(
             context = get(),
             providerManager = get(),
             json = get(),

@@ -80,7 +80,7 @@ import java.util.Locale
 import kotlin.time.Clock
 import kotlin.uuid.Uuid
 
-private const val TAG = "GenerationHandler"
+private const val TAG = "GenerationLoop"
 private const val MAX_TOOL_OUTPUT_CHARS = 32 * 1024
 private const val TOOL_OUTPUT_PREVIEW_CHARS = 4 * 1024
 
@@ -260,7 +260,7 @@ internal data class LoopGuardDecision(
 )
 
 /**
- * Pure, testable loop-detection decision, extracted from [GenerationHandler.generateText] so
+ * Pure, testable loop-detection decision, extracted from [GenerationLoop.generateText] so
  * the act-observe reset and freshness-TTL rules can be unit-tested without an Android Context.
  */
 internal object LoopGuard {
@@ -302,7 +302,7 @@ private const val INITIAL_PROVIDER_RETRY_DELAY_MS = 1_000L
 
 private class StreamChunkHandlingException(cause: Throwable) : RuntimeException(cause)
 
-class GenerationHandler(
+class GenerationLoop(
     private val context: Context,
     private val providerManager: ProviderManager,
     private val json: Json,
@@ -1177,7 +1177,7 @@ class GenerationHandler(
             messages.lastOrNull()?.toText()?.take(120_000) ?: ""
         } else ""
         // 使用 AppScope 避免协程泄漏
-        // 注：此处不能直接用 appScope 因为 GenerationHandler 没有注入
+        // 注：此处不能直接用 appScope 因为 GenerationLoop 没有注入
         // 用 fire-and-forget 的 IO 协程，正常情况在 stepError 抛出前完成
         CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
             requestLogManager.logTextGeneration(
@@ -1196,7 +1196,7 @@ class GenerationHandler(
             )
             // v36: AI 调用完成后刷新 Token 仪表盘小组件
             runCatching {
-                me.rerere.rikkahub.widget.TokenDashboardWidgetProvider.updateAll(this@GenerationHandler.context)
+                me.rerere.rikkahub.widget.TokenDashboardWidgetProvider.updateAll(this@GenerationLoop.context)
             }
         }
 

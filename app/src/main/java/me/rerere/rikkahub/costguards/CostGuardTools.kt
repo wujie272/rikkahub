@@ -22,7 +22,7 @@ import kotlin.uuid.Uuid
  * hard token caps and a simple budget classification (UNDER_SOFT / WARN / OVER_HARD /
  * NO_BUDGET). The model is expected to self-throttle on WARN and stop on OVER_HARD.
  *
- * v2 (Phase 15.5) will add the live header pill + GenerationHandler-side auto-stop
+ * v2 (Phase 15.5) will add the live header pill + GenerationLoop-side auto-stop
  * integration. Ship the data surface first so the LLM can react in the meantime.
  *
  * Stuck-detection on screen-automation flows (the second half of Phase 15 per spec) is

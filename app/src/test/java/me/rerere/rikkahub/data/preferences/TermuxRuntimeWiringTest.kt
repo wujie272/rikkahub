@@ -7,7 +7,7 @@ import org.junit.Test
 
 /**
  * Verifies that [TermuxRuntime] is the single source of truth for non-suspend read sites
- * (TermuxTool, GenerationHandler). Setting a value via the @Volatile field must be visible
+ * (TermuxTool, GenerationLoop). Setting a value via the @Volatile field must be visible
  * immediately to all subsequent reads in the same process.
  *
  * Full end-to-end wiring (TermuxPreferences.init -> TermuxRuntime -> tool call) requires a

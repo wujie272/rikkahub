@@ -57,7 +57,7 @@ import me.rerere.common.android.Logging
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.GenerationChunk
-import me.rerere.rikkahub.data.ai.GenerationHandler
+import me.rerere.rikkahub.data.ai.GenerationLoop
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.ai.tools.createConversationTools
 import me.rerere.rikkahub.data.ai.tools.InvalidMcpServerNamesException
@@ -203,7 +203,7 @@ class ChatService(
     private val settingsStore: SettingsStore,
     private val conversationRepo: ConversationRepository,
     private val memoryRepository: MemoryRepository,
-    private val generationHandler: GenerationHandler,
+    private val generationLoop: GenerationLoop,
     private val templateTransformer: TemplateTransformer,
     private val providerManager: ProviderManager,
     private val localTools: LocalTools,
@@ -1068,7 +1068,7 @@ class ChatService(
             // start generating
             val session = getOrCreateSession(conversationId)
 
-            generationHandler.generateText(
+            generationLoop.generateText(
                 settings = settings,
                 model = model,
                 processingStatus = session.processingStatus,
@@ -1087,7 +1087,7 @@ class ChatService(
                     // YOLO mode ("I AM STUPID" toggle in Settings → Tool approvals): every
                     // tool auto-approves. User opted into this explicitly. HARDLINE still
                     // blocks rm -rf / et al — that check runs BEFORE auto-approval in
-                    // GenerationHandler, so YOLO can't smuggle one through.
+                    // GenerationLoop, so YOLO can't smuggle one through.
                     //
                     // Headless conversations (cron-driven) also auto-approve EVERY tool;
                     // the user pre-authorised the schedule itself at job-creation time
@@ -1202,7 +1202,7 @@ class ChatService(
                         // Persist immediately when a tool transitions to "execution
                         // started but no output yet" — this writes the executionStartedAt
                         // breadcrumb to disk so a process kill mid-execute leaves a clear
-                        // signal for the next replay (see GenerationHandler.kt's replay
+                        // signal for the next replay (see GenerationLoop.kt's replay
                         // safety pass: Approved + executionStartedAt + empty → Denied
                         // interrupted_unknown_outcome). Without this, the marker stays in
                         // memory only and replay can't distinguish "freshly approved,
@@ -1234,7 +1234,7 @@ class ChatService(
             sessions[conversationId]?.messageQueue?.pause()
 
             // Persist the in-memory snapshot so the Auto/Pending → Denied transitions
-            // GenerationHandler did inside its try/catch (the "generation_failed" recovery
+            // GenerationLoop did inside its try/catch (the "generation_failed" recovery
             // path) survive a process restart. Without this, the failure path only
             // updates memory and the persisted DB row keeps the stale Pending state
             // forever — replay would re-run the loop against unrecoverable shape.
@@ -1247,7 +1247,7 @@ class ChatService(
 
             // ═══ 自动继续逻辑（FLIT 风格：隐藏指令 + 去重） ═══
             // 保留失败的回复，注入隐藏 continue 指令让 LLM 从断点继续
-            // 网络错误已在 GenerationHandler 层自动重试，重试耗尽后才走到这里；
+            // 网络错误已在 GenerationLoop 层自动重试，重试耗尽后才走到这里；
             // 网络错误不应触发"续写"（没有已生成内容可续），交给外层报错即可
             if (assistant.autoContinueOnError && error !is java.io.IOException) {
                 val attemptCount = continueAttempts.getOrDefault(conversationId, 0)
@@ -1822,7 +1822,7 @@ class ChatService(
                 val loadingText = context.getString(R.string.translating)
                 updateTranslationField(conversationId, message.id, loadingText)
 
-                generationHandler.translateText(
+                generationLoop.translateText(
                     settings = settings,
                     sourceText = messageText,
                     targetLanguage = targetLanguage
@@ -2312,8 +2312,8 @@ class ChatService(
             }
 
             try {
-                // 使用 generationHandler.generateText（支持工具调用、记忆注入、流式输出）
-                generationHandler.generateText(
+                // 使用 generationLoop.generateText（支持工具调用、记忆注入、流式输出）
+                generationLoop.generateText(
                     settings = settings,
                     model = model,
                     messages = promptMessages,
@@ -2583,7 +2583,7 @@ class ChatService(
                 }
 
                 try {
-                    generationHandler.generateText(
+                    generationLoop.generateText(
                         settings = settings,
                         model = speakerModel,
                         messages = interPromptMessages,

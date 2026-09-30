@@ -76,7 +76,7 @@ class AILoggingManager(
             logs.value = logs.value.drop(1)
         }
 
-        // 完整请求/响应日志由 GenerationHandler 在 API 调用后写入 Room 数据库（含真实响应体）
+        // 完整请求/响应日志由 GenerationLoop 在 API 调用后写入 Room 数据库（含真实响应体）
         // AILoggingManager 只负责轻量内存日志供 DeveloperPage 实时查看
     }
 

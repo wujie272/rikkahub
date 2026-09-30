@@ -160,7 +160,7 @@ class TermuxDefaultsTest {
 
     @Test
     fun turnBudget_defaultIs10Minutes() {
-        // Pin that the default matches the original GenerationHandler constant (10 min),
+        // Pin that the default matches the original GenerationLoop constant (10 min),
         // not the spec's 5 min — per the task override instruction.
         assertEquals(10L * 60L * 1_000L, TermuxDefaults.DEFAULT_TURN_BUDGET_MS)
     }

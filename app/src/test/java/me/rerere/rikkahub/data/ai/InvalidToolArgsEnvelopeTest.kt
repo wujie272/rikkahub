@@ -11,13 +11,13 @@ import org.junit.Test
 /**
  * Regression: when the LLM provider's stream gets cut off mid-string (max_tokens, network
  * drop, etc.), the tool args JSON arrives truncated. Without the explicit pre-parse path
- * in [GenerationHandler], kotlinx.serialization's exception message — which contains the
+ * in [GenerationLoop], kotlinx.serialization's exception message — which contains the
  * entire failed JSON input — used to land verbatim in the LLM-facing `detail` field. A
  * 4000-char emoji message produced an 8000+ char `detail` blob shown to the user and
  * burned back into context on the next turn. This test pins the shape of the new envelope
  * so a future refactor can't silently re-leak the truncated payload.
  *
- * The envelope is built inline in `GenerationHandler.generateText`'s tool-execution branch,
+ * The envelope is built inline in `GenerationLoop.generateText`'s tool-execution branch,
  * so this test rebuilds it identically to assert the contract: error code, capped detail,
  * recovery hint pointing at "split into smaller calls", exception class hint.
  */
@@ -25,7 +25,7 @@ class InvalidToolArgsEnvelopeTest {
 
     private val json = Json { ignoreUnknownKeys = true }
 
-    /** Mirrors the envelope structure built at GenerationHandler.kt for parsedArgs.isFailure. */
+    /** Mirrors the envelope structure built at GenerationLoop.kt for parsedArgs.isFailure. */
     private fun buildInvalidToolArgsEnvelope(cause: Throwable): String {
         return json.encodeToString(
             kotlinx.serialization.json.buildJsonObject {
