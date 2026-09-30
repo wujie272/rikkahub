@@ -35,6 +35,11 @@ import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.ai.tools.HeadlessConversations
 import me.rerere.rikkahub.service.WebServerService
 import me.rerere.rikkahub.service.ShizukuManager
+import android.widget.Toast
+import kotlinx.coroutines.runBlocking
+import me.rerere.rikkahub.data.sync.BackupManager
+import me.rerere.rikkahub.data.sync.RestoreFailedException
+import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.rikkahub.utils.CrashHandler
 import me.rerere.rikkahub.utils.DatabaseUtil
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
@@ -62,6 +67,20 @@ class RikkaHubApp : Application() {
             modules(appModule, viewModelModule, dataSourceModule, repositoryModule, knowledgeModule)
         }
         this.createNotificationChannel()
+
+        // 移植上游 540b9dfaf：先把待恢复的备份（数据库 + 文件 + 设置）安全落地，
+        // 再让其它初始化/Worker 读取数据，避免读到半恢复状态。
+        try {
+            val restored = runBlocking(Dispatchers.IO) {
+                BackupManager.applyPendingRestore(this@RikkaHubApp, JsonInstant)
+            }
+            if (restored) {
+                Toast.makeText(this, R.string.backup_page_restore_success, Toast.LENGTH_LONG).show()
+            }
+        } catch (e: RestoreFailedException) {
+            Log.e(TAG, "Backup restore rolled back", e)
+            Toast.makeText(this, "备份恢复失败，已保留原数据。请重新导入备份。", Toast.LENGTH_LONG).show()
+        }
 
         // Restore any headless conversation IDs that survived a process kill; must run
         // before any cron worker fires so mark/unmark are consistent.
