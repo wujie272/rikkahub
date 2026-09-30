@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
+import androidx.compose.material3.SliderState
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -107,10 +108,16 @@ private fun AutoContinuePicker(
     )
 
     val currentIndex = continueOptions.indexOf(currentMaxCount).coerceAtLeast(0)
-    var sliderValue by remember { mutableFloatStateOf(currentIndex.toFloat()) }
+    val sliderState = remember {
+        SliderState(
+            value = currentIndex.toFloat(),
+            trackRange = 0f..(continueOptions.lastIndex).toFloat(),
+            steps = continueOptions.size - 2,
+        )
+    }
 
     LaunchedEffect(currentMaxCount) {
-        sliderValue = continueOptions.indexOf(currentMaxCount).coerceAtLeast(0).toFloat()
+        sliderState.value = continueOptions.indexOf(currentMaxCount).coerceAtLeast(0).toFloat()
     }
 
     ModalBottomSheet(
@@ -241,16 +248,14 @@ private fun AutoContinuePicker(
                     )
 
                     Slider(
-                        value = sliderValue,
-                        onValueChange = { sliderValue = it },
+                        state = sliderState,
+                        onValueChange = { sliderState.value = it },
                         onValueChangeFinished = {
-                            val snapped = sliderValue.roundToInt()
+                            val snapped = sliderState.value.roundToInt()
                                 .coerceIn(0, continueOptions.lastIndex)
                             currentMaxCount = continueOptions[snapped]
                             onUpdate(enabled, currentMaxCount, selectedModelId)
                         },
-                        valueRange = 0f..(continueOptions.lastIndex).toFloat(),
-                        steps = continueOptions.size - 2,
                         modifier = Modifier.fillMaxWidth(),
                         thumb = {
                             Box(
