@@ -14,6 +14,8 @@ data class QueuedMessage(
     val parts: List<UIMessagePart>,
     val answer: Boolean = true,
     val isEditing: Boolean = false,
+    // 本地定制：群聊「指定发言席」覆盖（上游无此字段）
+    val groupChatSpeakerSeatIds: List<Uuid>? = null,
     // Optional in-memory observer; null result means the queued message was withdrawn.
     val reply: CompletableDeferred<String?>? = null,
 )
@@ -42,7 +44,12 @@ class MessageQueue {
     val state = mutableState.asStateFlow()
 
     @Synchronized
-    fun enqueue(parts: List<UIMessagePart>, answer: Boolean = true, reply: CompletableDeferred<String?>? = null) {
+    fun enqueue(
+        parts: List<UIMessagePart>,
+        answer: Boolean = true,
+        reply: CompletableDeferred<String?>? = null,
+        groupChatSpeakerSeatIds: List<Uuid>? = null,
+    ) {
         if (parts.isEmptyInputMessage()) {
             reply?.complete(null)
             return
@@ -52,6 +59,7 @@ class MessageQueue {
                 parts = parts.toList(),
                 answer = answer,
                 reply = reply,
+                groupChatSpeakerSeatIds = groupChatSpeakerSeatIds,
             ),
         )
     }

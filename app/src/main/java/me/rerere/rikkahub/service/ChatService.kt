@@ -442,6 +442,16 @@ class ChatService(
         }
     }
 
+    /**
+     * 上游 66de8b306 的生成启动样板。本地没有 ChatGenerationForegroundService，
+     * 因此只保留 LAZY 启动语义（与本地原先的 appScope.launch 行为一致）。
+     */
+    private fun launchGenerationJob(
+        conversationId: Uuid,
+        keepAliveInBackground: Boolean = true,
+        block: suspend () -> Unit,
+    ): Job = appScope.launch(start = CoroutineStart.LAZY) { block() }
+
     // ---- 初始化对话 ----
 
     suspend fun initializeConversation(conversationId: Uuid) {
@@ -519,7 +529,6 @@ class ChatService(
         dispatchNextQueuedMessage(conversationId)
     }
 
-    fun sendMessage(conversationId: Uuid, content: List<UIMessagePart>, answer: Boolean = true) {
     fun sendMessage(
         conversationId: Uuid,
         content: List<UIMessagePart>,
@@ -530,7 +539,11 @@ class ChatService(
         val session = getOrCreateSession(conversationId)
         synchronized(session) {
             if (session.messageQueue.state.value.messages.isEmpty()) session.messageQueue.resume()
-            session.messageQueue.enqueue(content, answer)
+            session.messageQueue.enqueue(
+                parts = content,
+                answer = answer,
+                groupChatSpeakerSeatIds = groupChatSpeakerSeatIdsOverride,
+            )
             dispatchNextQueuedMessage(conversationId)
         }
     }
@@ -556,7 +569,6 @@ class ChatService(
             conversationId = conversationId,
             keepAliveInBackground = answer,
         ) {
-        val job = appScope.launch {
             try {
                 finishInterruptedPendingTools(conversationId)
 
@@ -597,7 +609,7 @@ class ChatService(
                             settings = settings,
                             conversation = withUser,
                             template = template,
-                            forcedSpeakerSeatIds = groupChatSpeakerSeatIdsOverride,
+                            forcedSpeakerSeatIds = queued.groupChatSpeakerSeatIds,
                             baseMessages = withUser.messageNodes.map { it.currentMessage },
                         )
                         true
