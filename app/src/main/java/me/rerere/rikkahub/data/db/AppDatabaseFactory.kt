@@ -20,6 +20,7 @@ import me.rerere.rikkahub.data.db.migrations.Migration_31_32
 import me.rerere.rikkahub.data.db.migrations.Migration_32_33
 import me.rerere.rikkahub.data.db.migrations.MIGRATION_34_35
 import me.rerere.rikkahub.data.db.migrations.MIGRATION_35_36
+import me.rerere.rikkahub.data.db.migrations.MIGRATION_36_37
 
 /**
  * 共享的 schema / 迁移 / 扩展配置，供 App 与「备份校验」两条路径复用。
@@ -40,6 +41,7 @@ internal object AppDatabaseFactory {
                 Migration_32_33,
                 MIGRATION_34_35,
                 MIGRATION_35_36,
+                MIGRATION_36_37,
             )
             .addCallback(object : RoomDatabase.Callback() {
                 override fun onOpen(db: SupportSQLiteDatabase) {

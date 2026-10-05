@@ -40,6 +40,7 @@ import me.rerere.rikkahub.data.db.ImportedDatabaseReconciler
 import me.rerere.rikkahub.data.sync.BackupManager
 import me.rerere.rikkahub.data.sync.RestoreFailedException
 import me.rerere.rikkahub.utils.JsonInstant
+import me.rerere.rikkahub.service.MediaCreationService
 import me.rerere.rikkahub.utils.CrashHandler
 import me.rerere.rikkahub.utils.DatabaseUtil
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
@@ -56,6 +57,7 @@ const val CHAT_COMPLETED_NOTIFICATION_CHANNEL_ID = "chat_completed"
 const val CHAT_LIVE_UPDATE_NOTIFICATION_CHANNEL_ID = "chat_live_update"
 const val WEB_SERVER_NOTIFICATION_CHANNEL_ID = "web_server"
 const val KNOWLEDGE_IMPORT_NOTIFICATION_CHANNEL_ID = "knowledge_import"
+const val MEDIA_CREATION_NOTIFICATION_CHANNEL_ID = "media_creation"
 
 class RikkaHubApp : Application() {
     override fun onCreate() {
@@ -133,6 +135,9 @@ class RikkaHubApp : Application() {
         // dir on first launch. SkillManager guards via a per-skill .seeded sentinel so this
         // is a one-time install — user edits / deletes are respected on subsequent launches.
         seedDefaultSkillsIfNeeded()
+
+        // Resume media generations interrupted by the last process death
+        resumeMediaCreations()
 
         // Increment launch count
         incrementLaunchCount()
@@ -240,6 +245,15 @@ class RikkaHubApp : Application() {
         }
     }
 
+    private fun resumeMediaCreations() {
+        get<AppScope>().launch(Dispatchers.IO) {
+            runCatching {
+                get<MediaCreationService>().resumePending()
+            }.onFailure {
+                Log.e(TAG, "resumeMediaCreations failed", it)
+            }
+        }
+    }
     private fun incrementLaunchCount() {
         get<AppScope>().launch {
             runCatching {
@@ -409,6 +423,12 @@ class RikkaHubApp : Application() {
             .setShowBadge(false)
             .build()
         notificationManager.createNotificationChannel(webServerChannel)
+
+        val mediaCreationChannel = NotificationChannelCompat
+            .Builder(MEDIA_CREATION_NOTIFICATION_CHANNEL_ID, NotificationManagerCompat.IMPORTANCE_DEFAULT)
+            .setName(getString(R.string.media_creation_title))
+            .build()
+        notificationManager.createNotificationChannel(mediaCreationChannel)
     }
 
     override fun onTerminate() {

@@ -105,6 +105,8 @@ import me.rerere.workspace.WorkspaceStorageArea
 import me.rerere.rikkahub.ui.pages.favorite.FavoritePage
 import me.rerere.rikkahub.ui.pages.history.HistoryPage
 import me.rerere.rikkahub.ui.pages.imggen.ImageGenPage
+import me.rerere.rikkahub.ui.pages.mediacreation.MediaCreationPage
+import me.rerere.rikkahub.ui.pages.mediacreation.MediaCreationSessionsPage
 import me.rerere.rikkahub.ui.pages.log.LogPage
 import me.rerere.rikkahub.ui.pages.search.SearchPage
 import me.rerere.rikkahub.ui.pages.setting.SettingAboutPage
@@ -123,6 +125,7 @@ import me.rerere.rikkahub.ui.pages.setting.SettingAdvancedPage
 import me.rerere.rikkahub.ui.pages.setting.SettingMcpPage
 import me.rerere.rikkahub.ui.pages.setting.SettingModelPage
 import me.rerere.rikkahub.ui.pages.setting.SettingPage
+import me.rerere.rikkahub.ui.pages.setting.SettingMediaPage
 import me.rerere.rikkahub.ui.pages.setting.SettingProviderDetailPage
 import me.rerere.rikkahub.ui.pages.setting.SettingProviderPage
 import me.rerere.rikkahub.ui.pages.setting.SettingSearchDetailPage
@@ -477,6 +480,20 @@ class RouteActivity : ComponentActivity() {
                                 ImageGenPage()
                             }
 
+                            entry<Screen.MediaCreationSessions> {
+                                MediaCreationSessionsPage()
+                            }
+
+                            entry<Screen.MediaCreation>(
+                                metadata = NavDisplay.transitionSpec { fadeIn() togetherWith fadeOut() }
+                                    + NavDisplay.popTransitionSpec { fadeIn() togetherWith fadeOut() }
+                            ) { key ->
+                                MediaCreationPage(key.id)
+                            }
+
+                            entry<Screen.SettingMedia> {
+                                SettingMediaPage()
+                            }
                             entry<Screen.WebView> { key ->
                                 WebViewPage(key.url, key.contentId)
                             }
@@ -805,10 +822,19 @@ sealed interface Screen : NavKey {
     data object Setting : Screen
 
     @Serializable
+    data object SettingMedia : Screen
+
+    @Serializable
     data object Backup : Screen
 
     @Serializable
     data object ImageGen : Screen
+
+    @Serializable
+    data object MediaCreationSessions : Screen
+
+    @Serializable
+    data class MediaCreation(val id: String) : Screen
 
     @Serializable
     data class WebView(val url: String = "", val contentId: String = "") : Screen

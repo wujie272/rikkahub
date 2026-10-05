@@ -13,8 +13,9 @@ import io.requery.android.database.sqlite.SQLiteCustomExtension
 import kotlinx.serialization.json.Json
 import me.rerere.ai.provider.ProviderManager
 import me.rerere.common.http.AcceptLanguageBuilder
-import me.rerere.rikkahub.BuildConfig
+import me.rerere.mediagen.provider.MediaGenerationManager
 import me.rerere.rikkahub.AppScope
+import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.data.ai.requestlog.AIRequestLogManager
 import me.rerere.rikkahub.data.ai.transformers.AssistantTemplateLoader
 import me.rerere.rikkahub.data.ai.GenerationLoop
@@ -26,8 +27,10 @@ import me.rerere.rikkahub.data.codex.CodexCredentialStore
 import me.rerere.rikkahub.data.codex.CodexOAuthManager
 import me.rerere.rikkahub.data.codex.CodexProvider
 import me.rerere.rikkahub.data.datastore.SettingsStore
-import me.rerere.rikkahub.data.db.AppDatabase
+import me.rerere.rikkahub.data.files.RemoteFileStore
+import me.rerere.rikkahub.data.sync.BackupManager
 import me.rerere.rikkahub.data.db.AppDatabaseFactory
+import me.rerere.rikkahub.data.db.AppDatabase
 import me.rerere.rikkahub.data.db.fts.MessageFtsManager
 import me.rerere.rikkahub.data.db.fts.SimpleDictManager
 import me.rerere.rikkahub.data.db.migrations.Migration_6_7
@@ -54,7 +57,6 @@ import me.rerere.rikkahub.data.network.SettingsProxyAuthenticator
 import me.rerere.rikkahub.data.network.SettingsSocks5Authenticator
 import me.rerere.rikkahub.data.sync.webdav.WebDavSync
 import me.rerere.search.SearchService
-import me.rerere.rikkahub.data.sync.BackupManager
 import me.rerere.rikkahub.data.sync.S3Sync
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -124,6 +126,10 @@ val dataSourceModule = module {
 
     single {
         get<AppDatabase>().aiRequestLogDao()
+    }
+
+    single {
+        get<AppDatabase>().mediaCreationDao()
     }
 
     single {
@@ -316,6 +322,18 @@ val dataSourceModule = module {
             context = get(),
             httpClient = get()
         )
+    }
+
+    single {
+        RemoteFileStore(
+            settingsStore = get(),
+            httpClient = get(),
+            scope = get<AppScope>()
+        )
+    }
+
+    single {
+        MediaGenerationManager(client = get())
     }
 
     single<Retrofit> {

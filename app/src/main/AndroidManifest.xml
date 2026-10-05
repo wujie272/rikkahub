@@ -190,7 +190,7 @@
       </intent-filter>
 
       <intent-filter>
-        <action android:name="me.rerere.rikkahub.action.IMAGE_GEN" />
+        <action android:name="me.rerere.rikkahub.action.MEDIA_CREATION" />
         <category android:name="android.intent.category.DEFAULT" />
       </intent-filter>
 
@@ -360,6 +360,10 @@
         <action android:name="me.rerere.rikkahub.workflow.GEOFENCE_TRANSITION" />
       </intent-filter>
     </receiver>
+    <service
+      android:name=".service.MediaCreationForegroundService"
+      android:exported="false"
+      android:foregroundServiceType="dataSync" />
     <service
       android:name=".service.WebServerService"
       android:exported="false"

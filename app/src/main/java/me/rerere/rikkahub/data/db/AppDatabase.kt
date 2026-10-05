@@ -13,6 +13,7 @@ import me.rerere.rikkahub.data.db.dao.FavoriteDAO
 import me.rerere.rikkahub.data.db.dao.FolderDAO
 import me.rerere.rikkahub.data.db.dao.GenMediaDAO
 import me.rerere.rikkahub.data.db.dao.ManagedFileDAO
+import me.rerere.rikkahub.data.db.dao.MediaCreationDAO
 import me.rerere.rikkahub.data.db.dao.MemoryDAO
 import me.rerere.rikkahub.data.db.dao.MessageNodeDAO
 import me.rerere.rikkahub.data.db.dao.ScheduledJobDao
@@ -25,6 +26,9 @@ import me.rerere.rikkahub.data.db.entity.FavoriteEntity
 import me.rerere.rikkahub.data.db.entity.FolderEntity
 import me.rerere.rikkahub.data.db.entity.GenMediaEntity
 import me.rerere.rikkahub.data.db.entity.ManagedFileEntity
+import me.rerere.rikkahub.data.db.entity.MediaCreationNodeEntity
+import me.rerere.rikkahub.data.db.entity.MediaCreationRecordEntity
+import me.rerere.rikkahub.data.db.entity.MediaCreationSessionEntity
 import me.rerere.rikkahub.data.db.entity.MemoryEntity
 import me.rerere.rikkahub.data.db.entity.MessageNodeEntity
 import me.rerere.rikkahub.data.db.entity.ScheduledJobEntity
@@ -68,8 +72,11 @@ import me.rerere.rikkahub.workflow.db.WorkflowRunEntity
         WorkspaceEntity::class,
         FolderEntity::class,
         AIRequestLogEntity::class,
+        MediaCreationSessionEntity::class,
+        MediaCreationNodeEntity::class,
+        MediaCreationRecordEntity::class,
     ],
-    version = 36,
+    version = 37,
     autoMigrations = [
         // v1→v23: Using auto-migrations for early versions (no manual migrations overlap)
         AutoMigration(from = 1, to = 2),
@@ -126,6 +133,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun folderDao(): FolderDAO
 
     abstract fun aiRequestLogDao(): AIRequestLogDao
+
+    abstract fun mediaCreationDao(): MediaCreationDAO
 }
 
 object TokenUsageConverter {
