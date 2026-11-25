@@ -314,35 +314,16 @@ private fun MediaProviderItem(
 
 @Composable
 private fun AddMediaProviderButton(onAdd: (MediaGenerationProviderSetting) -> Unit) {
-    var showTypeMenu by remember { mutableStateOf(false) }
-    var newProvider by remember { mutableStateOf<MediaGenerationProviderSetting?>(null) }
-
-    Box {
-        IconButton(
-            onClick = { showTypeMenu = true }
-        ) {
-            Icon(HugeIcons.Add01, stringResource(R.string.setting_media_page_add_provider))
-        }
-        DropdownMenu(
-            expanded = showTypeMenu,
-            onDismissRequest = { showTypeMenu = false }
-        ) {
-            listOf<() -> MediaGenerationProviderSetting>(
-                { MediaGenerationProviderSetting.OpenAI() },
-                { MediaGenerationProviderSetting.Aliyun() },
-                { MediaGenerationProviderSetting.Volcengine() },
-                { MediaGenerationProviderSetting.MiniMax() },
-                { MediaGenerationProviderSetting.OpenRouter() },
-            ).forEach { create ->
-                DropdownMenuItem(
-                    text = { Text(remember { create() }.typeName) },
-                    onClick = {
-                        newProvider = create()
-                        showTypeMenu = false
-                    }
-                )
-            }
-        }
+    var showTypeSheet by remember { mutableStateOf(false) }
+    val factories = remember {
+        listOf<() -> MediaGenerationProviderSetting>(
+            { MediaGenerationProviderSetting.OpenAI() },
+            { MediaGenerationProviderSetting.Aliyun() },
+            { MediaGenerationProviderSetting.Volcengine() },
+            { MediaGenerationProviderSetting.MiniMax() },
+            { MediaGenerationProviderSetting.OpenRouter() },
+            { MediaGenerationProviderSetting.ApiMart() },
+        )
     }
 
     newProvider?.let { provider ->
