@@ -61,7 +61,9 @@ jobs:
 
       - name: Generate dummy google-services.json
         run: |
-          pkg=$(grep -m1 'applicationId = ' app/build.gradle.kts | sed -E 's/.*"([^"]+)".*/\1/").debug  # debug applicationIdSuffix
+          base=$(grep -m1 'applicationId = ' app/build.gradle.kts | sed -E 's/.*"([^"]+)".*/\1/')
+          # debug buildType 带 applicationIdSuffix = ".debug"
+          pkg="${base}.debug" 
           echo "applicationId = $pkg"
           cat > app/google-services.json <<JSON
           {
