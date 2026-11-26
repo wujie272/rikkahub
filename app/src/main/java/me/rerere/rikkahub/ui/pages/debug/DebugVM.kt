@@ -199,7 +199,7 @@ class DebugVM(
                     role = role,
                     parts = listOf(UIMessagePart.Text(text)),
                     createdAt = Clock.System.now().toLocalDateTime(timeZone),
-                    lastUsage = if (isLast) {
+                    usage = if (isLast) {
                         TokenUsage(
                             promptTokens = messageCount * tokensPerMessage - tokensPerMessage,
                             completionTokens = tokensPerMessage,
