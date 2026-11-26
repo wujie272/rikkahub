@@ -62,6 +62,20 @@ bouncycastle = "1.86"
 apache-sshd = "2.20.1"
 diffutils = "4.18"
 snakeyaml = "2.7"
+glance = "1.1.1"
+shizuku = "13.1.5"
+webkit = "1.16.0"
+barcodeScanning = "17.3.0"
+cameraCore = "1.6.2"
+jlatexmath = "1.5"
+markdown = "d79a97cc8e"
+lucide-icons = "1.1.0"
+quickie-bundled = "1.11.0"
+sonner = "0.4.0"
+appcompat = "1.8.0"
+material = "1.14.0"
+ucrop = "2.2.11-native"
+sqlite-vector = "1.0.0"
 
 [libraries]
 android-gradle-plugin = { module = "com.android.tools.build:gradle", version.ref = "agp" }
@@ -187,6 +201,28 @@ slf4j-android = { module = "uk.uuid.slf4j:slf4j-android", version = "2.0.17-0" }
 sqlite-android = { module = "com.github.rikkahub:sqlite-android", version.ref = "sqlite-android" }
 termux-terminal-view = { module = "com.termux.termux-app:terminal-view", version.ref = "termux" }
 guava-listenablefuture = { module = "com.google.guava:listenablefuture", version = "9999.0-empty-to-avoid-conflict-with-guava" }
+androidx-glance = { group = "androidx.glance", name = "glance", version.ref = "glance" }
+androidx-glance-appwidget = { group = "androidx.glance", name = "glance-appwidget", version.ref = "glance" }
+androidx-glance-material3 = { group = "androidx.glance", name = "glance-material3", version.ref = "glance" }
+androidx-lifecycle-runtime = { group = "androidx.lifecycle", name = "lifecycle-runtime", version.ref = "lifecycleRuntimeKtx" }
+androidx-lifecycle-runtime-compose = { group = "androidx.lifecycle", name = "lifecycle-runtime-compose", version.ref = "lifecycleRuntimeKtx" }
+androidx-webkit = { group = "androidx.webkit", name = "webkit", version.ref = "webkit" }
+shizuku-api = { module = "dev.rikka.shizuku:api", version.ref = "shizuku" }
+shizuku-provider = { module = "dev.rikka.shizuku:provider", version.ref = "shizuku" }
+androidx-camera-core = { module = "androidx.camera:camera-core", version.ref = "cameraCore" }
+barcode-scanning = { module = "com.google.mlkit:barcode-scanning", version.ref = "barcodeScanning" }
+jlatexmath = { module = "com.github.rikkahub.jlatexmath-android:jlatexmath", version.ref = "jlatexmath" }
+jlatexmath-font-greek = { module = "com.github.rikkahub.jlatexmath-android:jlatexmath-font-greek", version.ref = "jlatexmath" }
+jlatexmath-font-cyrillic = { module = "com.github.rikkahub.jlatexmath-android:jlatexmath-font-cyrillic", version.ref = "jlatexmath" }
+jetbrains-markdown = { module = "com.github.rikkahub:markdown", version.ref = "markdown" }
+lucide-icons = { group = "com.composables", name = "icons-lucide", version.ref = "lucide-icons" }
+quickie-bundled = { group = "io.github.g00fy2.quickie", name = "quickie-bundled", version.ref = "quickie-bundled" }
+sonner = { module = "io.github.dokar3:sonner", version.ref = "sonner" }
+androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
+material = { group = "com.google.android.material", name = "material", version.ref = "material" }
+ucrop = { group = "com.github.yalantis", name = "ucrop", version.ref = "ucrop" }
+ktor-server-auth-jwt = { module = "io.ktor:ktor-server-auth-jwt", version.ref = "ktor" }
+sqlite-vector = { module = "ai.sqlite:vector", version.ref = "sqlite-vector" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

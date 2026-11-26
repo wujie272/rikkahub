@@ -1,0 +1,123 @@
+name: Compile Check (rebase baseline)
+
+# 只为 "以上游为基线回植本地功能" 的实验分支服务：
+# 该分支保留了上游 3.3.1 的 app 源码，仅回植了本地独有文件，
+# 目的是一次性拿到真实的编译错误清单，用于合并排期。
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'rebase-3.3.1'
+      - 'rebase-**'
+
+permissions:
+  contents: read
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: Install pnpm
+        run: npm install -g pnpm
+
+      - name: pnpm cache
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.local/share/pnpm/store
+            web-ui/node_modules
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('web-ui/package.json', 'web-ui/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-
+
+      - name: Install web dependencies
+        run: cd web-ui && pnpm install
+
+      - name: Gradle cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Generate dummy google-services.json
+        run: |
+          pkg=$(grep -m1 'applicationId = ' app/build.gradle.kts | sed -E 's/.*"([^"]+)".*/\1/')
+          echo "applicationId = $pkg"
+          cat > app/google-services.json <<JSON
+          {
+            "project_info": {"project_number": "000000000000", "project_id": "rikkahub-ci-dummy", "storage_bucket": "rikkahub-ci-dummy.appspot.com"},
+            "client": [{
+              "client_info": {"mobilesdk_app_id": "1:000000000000:android:0000000000000000", "android_client_info": {"package_name": "$pkg"}},
+              "oauth_client": [],
+              "api_key": [{"current_key": "AIzaSyDummy0000000000000000000000000000"}],
+              "services": {"analytics_service": {"status": 1}, "appinvite_service": {"status": 1}, "google_cast_service": {"status": 1}}
+            }],
+            "configuration_version": "1"
+          }
+          JSON
+
+      - name: Compile (Kotlin only, 收集全部错误)
+        id: compile
+        continue-on-error: true
+        run: |
+          chmod +x gradlew
+          set -o pipefail
+          ./gradlew \
+            :highlight:compileDebugKotlin \
+            :ai:compileDebugKotlin \
+            :ui:compileDebugKotlin \
+            :search:compileDebugKotlin \
+            :app:compileDebugKotlin \
+            --continue --no-configuration-cache --stacktrace 2>&1 | tee build-log.txt
+
+      - name: Summarize errors
+        if: always()
+        run: |
+          LOG=build-log.txt
+          [ -f "$LOG" ] || { echo "没有 build-log.txt" >> $GITHUB_STEP_SUMMARY; exit 0; }
+          total=$(grep -c '^e: ' "$LOG" || true)
+          echo "## Kotlin 错误：${total} 条" >> $GITHUB_STEP_SUMMARY
+          if [ "${total:-0}" != "0" ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### 按错误文本聚合（前 300 组）" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            grep '^e: ' "$LOG" \
+              | sed -E 's#^e: file://[^ ]*/rikkahub/##' \
+              | sed -E 's#^e: file://[^ ]*/rikka-rebase/##' \
+              | sort | uniq -c | sort -rn | head -300 >> $GITHUB_STEP_SUMMARY || true
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 构建失败摘要" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          grep -E '^(> Task .* FAILED|FAILURE:|What went wrong|Caused by:)' "$LOG" | head -40 >> $GITHUB_STEP_SUMMARY || true
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compile-log
+          path: build-log.txt
+          if-no-files-found: warn
+          retention-days: 7

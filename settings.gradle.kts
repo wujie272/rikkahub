@@ -46,3 +46,4 @@ include(":terminal")
 include(":app:baselineprofile")
 include(":mediagen")
 include(":oauth")
+include(":highlight")  // 本地定制：高亮实现模块（本地新增，上游无）
