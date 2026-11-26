@@ -83,15 +83,27 @@ jobs:
         continue-on-error: true
         run: |
           chmod +x gradlew
-          set -o pipefail
-          # app 有 github / play 两个 flavor，任务名必须带 flavor
-          ./gradlew \
-            :highlight:compileDebugKotlin \
-            :ai:compileDebugKotlin \
-            :ui:compileDebugKotlin \
-            :search:compileDebugKotlin \
-            :app:compileGithubDebugKotlin \
-            --continue --no-configuration-cache --stacktrace 2>&1 | tee build-log.txt
+          set +e
+          # Maven Central 偶发 429 限流，失败就整体重试
+          for i in 1 2 3; do
+            ./gradlew \
+              :highlight:compileDebugKotlin \
+              :ai:compileDebugKotlin \
+              :ui:compileDebugKotlin \
+              :search:compileDebugKotlin \
+              :app:compileGithubDebugKotlin \
+              --continue --no-configuration-cache --max-workers=4 \
+              -Dorg.gradle.internal.repository.max.retries=10 \
+              -Dorg.gradle.internal.repository.initial.backoff=2000 \
+              2>&1 | tee build-log.txt
+            if grep -qE "status code 429|Too Many Requests" build-log.txt; then
+              echo "::warning::第 $i 次尝试命中 Maven 429 限流，30s 后重试"
+              sleep 30
+            else
+              break
+            fi
+          done
+          exit 0
 
       - name: Summarize errors
         if: always()
