@@ -80,7 +80,7 @@ import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
 import me.rerere.rikkahub.ui.components.ui.Tooltip
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalToaster
-import me.rerere.rikkahub.ui.context.ToasterState
+import com.dokar.sonner.ToasterState
 
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
