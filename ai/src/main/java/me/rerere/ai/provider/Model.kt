@@ -19,6 +19,10 @@ data class Model(
     val providerOverwrite: ProviderSetting? = null,
     // 上下文窗口大小(token)
     val contextLength: Int = 1_000_000,
+    // ↓ 本地定制：OpenRouter 等需要把「支持的参数」与价格带进模型描述
+    val supportedParameters: List<String> = emptyList(),
+    val pricePromptPerToken: Double? = null,
+    val priceCompletionPerToken: Double? = null,
 )
 
 /**

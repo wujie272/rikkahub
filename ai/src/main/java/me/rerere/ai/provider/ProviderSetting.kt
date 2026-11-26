@@ -5,9 +5,24 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
 import kotlin.uuid.Uuid
+import me.rerere.ai.provider.ProviderApiKey
+import me.rerere.ai.provider.ProviderKeyStrategy
+import me.rerere.ai.provider.ProviderProxy
 
 /** 账号登录得到的 OAuth 凭据 */
 @Serializable
+data class BalanceOption(
+    val enabled: Boolean = false,
+    val apiPath: String = "/credits",
+    val resultPath: String = "data.total_usage",
+)
+
+@Serializable
+data class FallbackConfig(
+    val enabled: Boolean = false,
+    val cooldownSeconds: Int = 60,
+    val maxRetries: Int = 3,
+)
 data class OAuthCredential(
     val accessToken: String,
     val refreshToken: String? = null,
@@ -54,6 +69,15 @@ sealed class ProviderSetting {
     abstract val enabled: Boolean
     abstract val name: String
     abstract val models: List<Model>
+    abstract val balanceOption: BalanceOption
+    abstract val fallbackConfig: FallbackConfig
+    abstract val multiKeyEnabled: Boolean
+    abstract val apiKeys: List<ProviderApiKey>
+    abstract val keyStrategy: ProviderKeyStrategy
+    abstract val proxy: ProviderProxy
+
+    /** 此 Provider 是否需要独立的 API Key 配置页（本地/设备端 Provider 不需要） */
+    open val hasKeyPage: Boolean get() = true
     abstract val customHeaders: List<CustomHeader>
 
     abstract val builtIn: Boolean
@@ -79,6 +103,12 @@ sealed class ProviderSetting {
         enabled: Boolean = this.enabled,
         name: String = this.name,
         models: List<Model> = this.models,
+        balanceOption: BalanceOption = this.balanceOption,
+        fallbackConfig: FallbackConfig = this.fallbackConfig,
+        multiKeyEnabled: Boolean = this.multiKeyEnabled,
+        apiKeys: List<ProviderApiKey> = this.apiKeys,
+        keyStrategy: ProviderKeyStrategy = this.keyStrategy,
+        proxy: ProviderProxy = this.proxy,
         customHeaders: List<CustomHeader> = this.customHeaders,
         builtIn: Boolean = this.builtIn,
         description: @Composable (() -> Unit) = this.description,
@@ -92,6 +122,12 @@ sealed class ProviderSetting {
         override var enabled: Boolean = true,
         override var name: String = "OpenAI",
         override var models: List<Model> = emptyList(),
+        override val balanceOption: BalanceOption = BalanceOption(),
+        override val fallbackConfig: FallbackConfig = FallbackConfig(),
+        override val multiKeyEnabled: Boolean = false,
+        override val apiKeys: List<ProviderApiKey> = emptyList(),
+        override val keyStrategy: ProviderKeyStrategy = ProviderKeyStrategy.ROUND_ROBIN,
+        override val proxy: ProviderProxy = ProviderProxy.None,
         override val quotaQuery: QuotaQuery = QuotaQuery(),
         override val customHeaders: List<CustomHeader> = emptyList(),
         @Transient override val builtIn: Boolean = false,
@@ -101,8 +137,28 @@ sealed class ProviderSetting {
         override var baseUrl: String = "https://api.openai.com/v1",
         var chatCompletionsPath: String = "/chat/completions",
         var useResponseApi: Boolean = false,
+        var promptCaching: Boolean = true,
         var includeHistoryReasoning: Boolean = true,
         var responsesPath: String = "/responses",
+        // 本地定制：OpenRouter 路由偏好
+        var routing: OpenRouterRouting = OpenRouterRouting(),
+    ) : ProviderSetting() {
+        override fun addModel(model: Model): ProviderSetting = copy(models = models + model)
+        override fun editModel(model: Model): ProviderSetting = copy(models = models.map { if (it.id == model.id) model.copy() else it })
+        override fun delModel(model: Model): ProviderSetting = copy(models = models.filter { it.id != model.id })
+        override fun moveMove(from: Int, to: Int): ProviderSetting = copy(models = models.toMutableList().apply { add(to, removeAt(from)) })
+        override fun copyProvider(
+            id: Uuid, enabled: Boolean, name: String, models: List<Model>,
+            balanceOption: BalanceOption, fallbackConfig: FallbackConfig,
+            multiKeyEnabled: Boolean, apiKeys: List<ProviderApiKey>, keyStrategy: ProviderKeyStrategy,
+            proxy: ProviderProxy, builtIn: Boolean,
+            description: @Composable (() -> Unit), shortDescription: @Composable (() -> Unit),
+        ): ProviderSetting = copy(
+            id = id, enabled = enabled, name = name, models = models,
+            balanceOption = balanceOption, fallbackConfig = fallbackConfig,
+            multiKeyEnabled = multiKeyEnabled, apiKeys = apiKeys, keyStrategy = keyStrategy,
+            proxy = proxy, builtIn = builtIn, description = description, shortDescription = shortDescription,
+        )
     ) : ApiKey() {
         override fun withQuotaQuery(query: QuotaQuery): ApiKey = copy(quotaQuery = query)
 
@@ -136,6 +192,12 @@ sealed class ProviderSetting {
         override var enabled: Boolean = true,
         override var name: String = "Google",
         override var models: List<Model> = emptyList(),
+        override val balanceOption: BalanceOption = BalanceOption(),
+        override val fallbackConfig: FallbackConfig = FallbackConfig(),
+        override val multiKeyEnabled: Boolean = false,
+        override val apiKeys: List<ProviderApiKey> = emptyList(),
+        override val keyStrategy: ProviderKeyStrategy = ProviderKeyStrategy.ROUND_ROBIN,
+        override val proxy: ProviderProxy = ProviderProxy.None,
         override val quotaQuery: QuotaQuery =
             QuotaQuery(headers = listOf(CustomHeader("x-goog-api-key", "{{apiKey}}"))),
         override val customHeaders: List<CustomHeader> = emptyList(),
@@ -146,6 +208,27 @@ sealed class ProviderSetting {
         override var baseUrl: String = "https://generativelanguage.googleapis.com/v1beta",
         var vertexAI: Boolean = false,
         var useServiceAccount: Boolean = false,
+        var privateKey: String = "",
+        var serviceAccountEmail: String = "",
+        var location: String = "us-central1",
+        var projectId: String = "",
+    ) : ProviderSetting() {
+        override fun addModel(model: Model): ProviderSetting = copy(models = models + model)
+        override fun editModel(model: Model): ProviderSetting = copy(models = models.map { if (it.id == model.id) model.copy() else it })
+        override fun delModel(model: Model): ProviderSetting = copy(models = models.filter { it.id != model.id })
+        override fun moveMove(from: Int, to: Int): ProviderSetting = copy(models = models.toMutableList().apply { add(to, removeAt(from)) })
+        override fun copyProvider(
+            id: Uuid, enabled: Boolean, name: String, models: List<Model>,
+            balanceOption: BalanceOption, fallbackConfig: FallbackConfig,
+            multiKeyEnabled: Boolean, apiKeys: List<ProviderApiKey>, keyStrategy: ProviderKeyStrategy,
+            proxy: ProviderProxy, builtIn: Boolean,
+            description: @Composable (() -> Unit), shortDescription: @Composable (() -> Unit),
+        ): ProviderSetting = copy(
+            id = id, enabled = enabled, name = name, models = models,
+            balanceOption = balanceOption, fallbackConfig = fallbackConfig,
+            multiKeyEnabled = multiKeyEnabled, apiKeys = apiKeys, keyStrategy = keyStrategy,
+            proxy = proxy, builtIn = builtIn, description = description, shortDescription = shortDescription,
+        )
         var privateKey: String = "", // only for vertex AI service account
         var serviceAccountEmail: String = "", // only for vertex AI service account
         var location: String = "us-central1", // only for vertex AI service account
@@ -184,6 +267,39 @@ sealed class ProviderSetting {
         override var enabled: Boolean = true,
         override var name: String = "Claude",
         override var models: List<Model> = emptyList(),
+        override val balanceOption: BalanceOption = BalanceOption(),
+        override val fallbackConfig: FallbackConfig = FallbackConfig(),
+        override val multiKeyEnabled: Boolean = false,
+        override val apiKeys: List<ProviderApiKey> = emptyList(),
+        override val keyStrategy: ProviderKeyStrategy = ProviderKeyStrategy.ROUND_ROBIN,
+        override val proxy: ProviderProxy = ProviderProxy.None,
+        @Transient override val builtIn: Boolean = false,
+        @Transient override val description: @Composable (() -> Unit) = {},
+        @Transient override val shortDescription: @Composable (() -> Unit) = {},
+        var apiKey: String = "",
+        var baseUrl: String = "https://api.anthropic.com/v1",
+        var promptCaching: Boolean = true,
+        var promptCacheTtl: ClaudePromptCacheTtl = ClaudePromptCacheTtl.FIVE_MINUTES,
+    ) : ProviderSetting() {
+        override fun addModel(model: Model): ProviderSetting = copy(models = models + model)
+        override fun editModel(model: Model): ProviderSetting = copy(models = models.map { if (it.id == model.id) model.copy() else it })
+        override fun delModel(model: Model): ProviderSetting = copy(models = models.filter { it.id != model.id })
+        override fun moveMove(from: Int, to: Int): ProviderSetting = copy(models = models.toMutableList().apply { add(to, removeAt(from)) })
+        override fun copyProvider(
+            id: Uuid, enabled: Boolean, name: String, models: List<Model>,
+            balanceOption: BalanceOption, fallbackConfig: FallbackConfig,
+            multiKeyEnabled: Boolean, apiKeys: List<ProviderApiKey>, keyStrategy: ProviderKeyStrategy,
+            proxy: ProviderProxy, builtIn: Boolean,
+            description: @Composable (() -> Unit), shortDescription: @Composable (() -> Unit),
+        ): ProviderSetting = copy(
+            id = id, enabled = enabled, name = name, models = models,
+            balanceOption = balanceOption, fallbackConfig = fallbackConfig,
+            multiKeyEnabled = multiKeyEnabled, apiKeys = apiKeys, keyStrategy = keyStrategy,
+            proxy = proxy, builtIn = builtIn, description = description, shortDescription = shortDescription,
+        )
+    }
+
+
         override val quotaQuery: QuotaQuery = QuotaQuery(headers = listOf(CustomHeader("x-api-key", "{{apiKey}}"))),
         override val customHeaders: List<CustomHeader> = emptyList(),
         @Transient override val builtIn: Boolean = false,
@@ -298,7 +414,39 @@ sealed class ProviderSetting {
     ) : Account() {
         override fun withCredential(credential: OAuthCredential?): Account = copy(credential = credential)
 
+    @Serializable
+    @SerialName("codex")
+    data class Codex(
+        override var id: Uuid = Uuid.random(),
+        override var enabled: Boolean = false,
+        override var name: String = "Codex",
+        override var models: List<Model> = emptyList(),
+        override val balanceOption: BalanceOption = BalanceOption(),
+        override val fallbackConfig: FallbackConfig = FallbackConfig(),
+        override val multiKeyEnabled: Boolean = false,
+        override val apiKeys: List<ProviderApiKey> = emptyList(),
+        override val keyStrategy: ProviderKeyStrategy = ProviderKeyStrategy.ROUND_ROBIN,
+        override val proxy: ProviderProxy = ProviderProxy.None,
+        @Transient override val builtIn: Boolean = true,
+        @Transient override val description: @Composable (() -> Unit) = {},
+        @Transient override val shortDescription: @Composable (() -> Unit) = {},
+    ) : ProviderSetting() {
+        override fun addModel(model: Model): ProviderSetting = copy(models = models + model)
+        override fun editModel(model: Model): ProviderSetting = copy(models = models.map { if (it.id == model.id) model.copy() else it })
+        override fun delModel(model: Model): ProviderSetting = copy(models = models.filter { it.id != model.id })
+        override fun moveMove(from: Int, to: Int): ProviderSetting = copy(models = models.toMutableList().apply { add(to, removeAt(from)) })
         override fun copyProvider(
+            id: Uuid, enabled: Boolean, name: String, models: List<Model>,
+            balanceOption: BalanceOption, fallbackConfig: FallbackConfig,
+            multiKeyEnabled: Boolean, apiKeys: List<ProviderApiKey>, keyStrategy: ProviderKeyStrategy,
+            proxy: ProviderProxy, builtIn: Boolean,
+            description: @Composable (() -> Unit), shortDescription: @Composable (() -> Unit),
+        ): ProviderSetting = copy(
+            id = id, enabled = enabled, name = name, models = models,
+            balanceOption = balanceOption, fallbackConfig = fallbackConfig,
+            multiKeyEnabled = multiKeyEnabled, apiKeys = apiKeys, keyStrategy = keyStrategy,
+            proxy = proxy, builtIn = builtIn, description = description, shortDescription = shortDescription,
+        )
             id: Uuid,
             enabled: Boolean,
             name: String,
@@ -331,3 +479,5 @@ sealed class ProviderSetting {
         }
     }
 }
+
+
