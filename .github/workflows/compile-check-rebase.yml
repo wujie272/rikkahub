@@ -82,12 +82,13 @@ jobs:
         run: |
           chmod +x gradlew
           set -o pipefail
+          # app 有 github / play 两个 flavor，任务名必须带 flavor
           ./gradlew \
             :highlight:compileDebugKotlin \
             :ai:compileDebugKotlin \
             :ui:compileDebugKotlin \
             :search:compileDebugKotlin \
-            :app:compileDebugKotlin \
+            :app:compileGithubDebugKotlin \
             --continue --no-configuration-cache --stacktrace 2>&1 | tee build-log.txt
 
       - name: Summarize errors
